@@ -469,18 +469,15 @@ namespace SystemeCaisse.UI.ViewModels
             IsActive = false;
             _cts?.Cancel();
 
-            // v29: Clear collections IMMEDIATELY and SYNCHRONOUSLY.
-            // This ensures LiveCharts has nothing to render the moment we leave the tab.
-            RevenueSeries.Clear();
-            SalesCountSeries.Clear();
-            ProductAnalysis.Clear();
-            CategoryAnalysis.Clear();
-            TimeAnalysis.Clear();
+            // v30: PASSIVE CLEANUP
+            // We no longer clear collections immediately. Clearing triggers collection changed events,
+            // which forces WPF to recalculate layouts exactly when the tab is hiding.
+            // This was a primary cause of transition deadlocks. We leave the data for the GC to handle later.
 
-            // v27: Defer the silent log to absolutely avoid blocking the main cleanup signal
+            // v27: Defer the silent log
             _ = Application.Current.Dispatcher.BeginInvoke(new Action(() => 
             {
-                System.Diagnostics.Debug.WriteLine("SILENT STABILITY: Analysis View Unbound & Cleaned.");
+                System.Diagnostics.Debug.WriteLine("SILENT STABILITY: Analysis View Unbound.");
             }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         }
         

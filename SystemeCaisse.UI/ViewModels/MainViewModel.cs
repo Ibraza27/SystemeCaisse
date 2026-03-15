@@ -282,32 +282,24 @@ namespace SystemeCaisse.UI.ViewModels
             {
                 _lastIndex = value;
 
-                // v29: Use Background priority to allow the tab switch to complete BEFORE we do cleanup/loading.
-                Application.Current.Dispatcher.BeginInvoke(new Action(() => 
+                // v30: PASSIVE TRANSITION
+                // We signal the viewmodels but avoid any immediate UI-thread-blocking work.
+                if (previousIndex == 5)
                 {
-                    try 
-                    {
-                        // 1. If leaving Analysis tab
-                        if (previousIndex == 5)
-                        {
-                            AnalysisVM.Cleanup();
-                        }
+                    AnalysisVM.Cleanup();
+                }
 
-                        // 2. If switching to Analysis tab
-                        if (value == 5)
-                        {
-                            _ = AnalysisVM.LoadAnalysis();
-                        }
+                if (value == 5)
+                {
+                    _ = AnalysisVM.LoadAnalysis();
+                }
 
-                        if (value == 1)
-                        {
-                            LoadPromotions();
-                            ApplyAutomaticPromotions();
-                            UpdateTotal();
-                        }
-                    }
-                    catch { /* Silent protection */ }
-                }), System.Windows.Threading.DispatcherPriority.Background);
+                if (value == 1)
+                {
+                    LoadPromotions();
+                    ApplyAutomaticPromotions();
+                    UpdateTotal();
+                }
             }
         }
 

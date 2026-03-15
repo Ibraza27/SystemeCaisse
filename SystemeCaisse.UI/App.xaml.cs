@@ -7,6 +7,8 @@ using SystemeCaisse.UI.ViewModels;
 using SystemeCaisse.UI.Services;
 using SystemeCaisse.Core.Interfaces;
 using SystemeCaisse.Infrastructure.Services;
+using System.Windows.Interop;
+using System.Windows.Media;
 
 namespace SystemeCaisse.UI
 {
@@ -33,6 +35,11 @@ namespace SystemeCaisse.UI
 
         public App()
         {
+            // v30: GLOBAL SOFTWARE RENDERING
+            // This is the NUCLEAR OPTION for stability. By forcing software rendering globally at startup,
+            // we eliminate all GPU deadlocks, driver crashes, and "switching shocks" that freeze the UI.
+            RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
+
             _host = Host.CreateDefaultBuilder()
                 .ConfigureServices((context, services) =>
                 {

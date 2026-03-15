@@ -16,19 +16,9 @@ namespace SystemeCaisse.UI.Views
         {
             if (DataContext is ViewModels.AnalysisViewModel vm)
             {
-                bool isVisible = (bool)e.NewValue;
-                vm.IsActive = isVisible;
-
-                if (isVisible)
-                {
-                    // v29: Force Software Rendering globally when Analysis is active to prevent GPU deadlocks.
-                    RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
-                }
-                else
-                {
-                    // Restore to Default when leaving the tab
-                    RenderOptions.ProcessRenderMode = RenderMode.Default;
-                }
+                // v30: Simple status update. Global Software Rendering is now 
+                // handle by App.xaml.cs to avoid transition deadlocks.
+                vm.IsActive = (bool)e.NewValue;
             }
         }
 
