@@ -130,7 +130,8 @@ namespace SystemeCaisse.UI.ViewModels
 
             // CLEAR DATA HERE (At the start of loading)
             // This is safer than clearing during exit, as it avoids race conditions with LVC
-            Application.Current.Dispatcher.Invoke(() => 
+            // v25: Clear existing data asynchronously to avoid blocking the transition
+            _ = Application.Current.Dispatcher.BeginInvoke(new Action(() => 
             {
                 ProductAnalysis.Clear();
                 CategoryAnalysis.Clear();
@@ -147,7 +148,7 @@ namespace SystemeCaisse.UI.ViewModels
                 OnPropertyChanged(nameof(SalesCountSeries));
                 OnPropertyChanged(nameof(XAxes));
                 OnPropertyChanged(nameof(YAxes));
-            });
+            }), System.Windows.Threading.DispatcherPriority.Background);
             try
             {
                 using var context = await _contextFactory.CreateDbContextAsync(token);
@@ -229,9 +230,11 @@ namespace SystemeCaisse.UI.ViewModels
 
                 if (!IsActive) return;
 
-                Application.Current.Dispatcher.Invoke(() => 
+                // v25: Load new data asynchronously at background priority
+                Application.Current.Dispatcher.BeginInvoke(new Action(() => 
                 {
-                    if (!IsActive) return;
+                    if (!IsActive || token.IsCancellationRequested) return;
+                    
                     ProductAnalysis.Clear();
                     foreach (var item in productGroups) ProductAnalysis.Add(item);
 
@@ -242,7 +245,7 @@ namespace SystemeCaisse.UI.ViewModels
                     foreach (var item in timeGroups) TimeAnalysis.Add(item);
 
                     PrepareCharts(catGroups, timeGroups, lines);
-                }, System.Windows.Threading.DispatcherPriority.Render);
+                }), System.Windows.Threading.DispatcherPriority.Background);
             }
 
             catch (Exception ex)
@@ -460,16 +463,14 @@ namespace SystemeCaisse.UI.ViewModels
         {
             IsActive = false;
             _cts?.Cancel();
+            _cts?.Dispose(); // v25: Immediate disposal
+            _cts = null;
 
-            // v20: Delayed Safety Cleanup
-            // We give the UI some time to process the "IsActive=false" (Visibility=Collapsed)
-            // BEFORE we even think about touching collections that might be being rendered.
+            // v25: Ensure cleanup is scheduled safely but without blocking current transition
             Application.Current.Dispatcher.BeginInvoke(new Action(() => 
             {
-                // We don't clear here because Plan v18 moved clearing to LoadAnalysis.
-                // But we ensure any pending rendering is finalized while IsActive is false.
-                System.Diagnostics.Debug.WriteLine("Analysis Cleanup: Interface masked.");
-            }), System.Windows.Threading.DispatcherPriority.Background);
+                System.Diagnostics.Debug.WriteLine("Analysis Cleanup: Background task cancelled and UI decoupled.");
+            }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         }
         
         [Obsolete("Use Cleanup instead")]

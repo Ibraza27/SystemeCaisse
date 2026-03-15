@@ -273,10 +273,13 @@ namespace SystemeCaisse.UI.ViewModels
 
                     try 
                     {
-                        // 1. If leaving Analysis tab, notify VM immediately
+                        // 1. If leaving Analysis tab, notify VM immediately (Asynchronously to avoid blocking UI)
                         if (previousIndex == 5 && _selectedTabIndex != 5)
                         {
-                            AnalysisVM.Cleanup();
+                            Application.Current.Dispatcher.BeginInvoke(new Action(() => 
+                            {
+                                AnalysisVM.Cleanup();
+                            }), System.Windows.Threading.DispatcherPriority.Background);
                         }
 
                         // 2. If switching to Analysis tab (5), refresh data
