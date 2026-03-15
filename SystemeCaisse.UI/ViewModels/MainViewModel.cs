@@ -92,7 +92,7 @@ namespace SystemeCaisse.UI.ViewModels
                     .ToList();
 
                 foreach (var m in matches) SearchSuggestions.Add(m);
-            });
+            }), System.Windows.Threading.DispatcherPriority.Background);
         }
 
         private decimal _total;
@@ -308,7 +308,6 @@ namespace SystemeCaisse.UI.ViewModels
                     catch { /* Silent protection */ }
                 }), System.Windows.Threading.DispatcherPriority.Background);
             }
-        }
         }
 
         public MainViewModel(IDbContextFactory<AppDbContext> contextFactory, PrintService printService, IDataMigrationService migrationService)
