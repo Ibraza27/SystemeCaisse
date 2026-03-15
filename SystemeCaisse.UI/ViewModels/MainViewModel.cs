@@ -270,23 +270,31 @@ namespace SystemeCaisse.UI.ViewModels
                     _selectedTabIndex = value;
                     OnPropertyChanged();
 
-                    // If switching back to Caisse tab (1), refresh promotions
-                    if (_selectedTabIndex == 1)
+                    try 
                     {
-                        LoadPromotions();
-                        ApplyAutomaticPromotions();
-                        UpdateTotal();
-                    }
+                        // If switching back to Caisse tab (1), refresh promotions
+                        if (_selectedTabIndex == 1)
+                        {
+                            LoadPromotions();
+                            ApplyAutomaticPromotions();
+                            UpdateTotal();
+                        }
 
-                    // If switching to Analysis tab (5), refresh data
-                    if (_selectedTabIndex == 5)
-                    {
-                        _ = AnalysisVM.LoadAnalysis();
+                        // If switching to Analysis tab (5), refresh data
+                        if (_selectedTabIndex == 5)
+                        {
+                            _ = AnalysisVM.LoadAnalysis();
+                        }
+                        // If leaving Analysis tab, clear charts to prevent LVC crashes
+                        else
+                        {
+                            AnalysisVM.Cleanup();
+                        }
                     }
-                    // If leaving Analysis tab, clear charts to prevent LVC crashes
-                    else
+                    catch (Exception ex)
                     {
-                        AnalysisVM.Cleanup();
+                        System.Diagnostics.Debug.WriteLine($"TabSwitch Error: {ex.Message}");
+                        // We don't rethrow here to prevent crashing the app during a UI transition
                     }
                 }
             }

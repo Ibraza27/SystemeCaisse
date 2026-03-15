@@ -147,47 +147,41 @@
 
             <!-- Chart View (Scrollable like screenshots) -->
             <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding IsChartViewActive, Converter={StaticResource BoolToVis}}">
-                        <ContentControl x:Name="ChartDisplayControl" Grid.Row="2">
-                            <ContentControl.Style>
-                                <Style TargetType="ContentControl">
-                                    <Setter Property="Content" Value="{x:Null}"/>
+                <!-- 
+                    CRITICAL STABILITY FIX (Plan v19):
+                    We no longer nulify the Content of this control when leaving the tab.
+                    Instead, we use Visibility to hide the charts. This keeps the LiveCharts
+                    components "alive" but inactive in the visual tree, preventing SkiaSharp
+                    rendering head-on crashes during win32 handle disposal.
+                -->
+                <ContentControl x:Name="ChartDisplayControl" Grid.Row="2"
+                                Visibility="{Binding IsActive, Converter={StaticResource BoolToVis}}">
+                    <StackPanel Margin="0,0,10,20">
+                        <Border Background="White" CornerRadius="10" BorderBrush="#CCC" BorderThickness="1" Margin="0,0,0,15" Padding="15">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="MinHeight" Value="420"/>
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsActive}" Value="True">
-                                            <Setter Property="Content">
-                                                <Setter.Value>
-                                                    <!-- On réinjecte le layout ici car le DataTemplate global est plus propre -->
-                                                    <StackPanel Margin="0,0,10,20">
-                                                        <Border Background="White" CornerRadius="10" BorderBrush="#CCC" BorderThickness="1" Margin="0,0,0,15" Padding="15">
-                                                            <Border.Style>
-                                                                <Style TargetType="Border">
-                                                                    <Setter Property="MinHeight" Value="420"/>
-                                                                    <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding IsBottomChartVisible}" Value="False">
-                                                                            <Setter Property="MinHeight" Value="800"/>
-                                                                        </DataTrigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </Border.Style>
-                                                            <DockPanel>
-                                                                <TextBlock Text="{Binding TopChartTitle}" HorizontalAlignment="Center" Margin="0,0,0,10" DockPanel.Dock="Top" FontSize="16" FontWeight="Bold" Foreground="#333"/>
-                                                                <lvc:CartesianChart Series="{Binding RevenueSeries}" XAxes="{Binding XAxes}" YAxes="{Binding YAxes}" LegendPosition="Bottom" ZoomMode="X"/>
-                                                            </DockPanel>
-                                                        </Border>
-                                                        <Border Background="White" CornerRadius="10" BorderBrush="#CCC" BorderThickness="1" MinHeight="420" Padding="15"
-                                                                Visibility="{Binding IsBottomChartVisible, Converter={StaticResource BoolToVis}}">
-                                                            <DockPanel>
-                                                                <TextBlock Text="{Binding BottomChartTitle}" HorizontalAlignment="Center" Margin="0,0,0,10" DockPanel.Dock="Top" FontSize="16" FontWeight="Bold" Foreground="#333"/>
-                                                                <lvc:CartesianChart Series="{Binding SalesCountSeries}" XAxes="{Binding XAxes}" YAxes="{Binding YAxes}" LegendPosition="Bottom" ZoomMode="X"/>
-                                                            </DockPanel>
-                                                        </Border>
-                                                    </StackPanel>
-                                                </Setter.Value>
-                                            </Setter>
+                                        <DataTrigger Binding="{Binding IsBottomChartVisible}" Value="False">
+                                            <Setter Property="MinHeight" Value="800"/>
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </ContentControl.Style>
-                        </ContentControl>
+                            </Border.Style>
+                            <DockPanel>
+                                <TextBlock Text="{Binding TopChartTitle}" HorizontalAlignment="Center" Margin="0,0,0,10" DockPanel.Dock="Top" FontSize="16" FontWeight="Bold" Foreground="#333"/>
+                                <lvc:CartesianChart Series="{Binding RevenueSeries}" XAxes="{Binding XAxes}" YAxes="{Binding YAxes}" LegendPosition="Bottom" ZoomMode="X"/>
+                            </DockPanel>
+                        </Border>
+                        <Border Background="White" CornerRadius="10" BorderBrush="#CCC" BorderThickness="1" MinHeight="420" Padding="15"
+                                Visibility="{Binding IsBottomChartVisible, Converter={StaticResource BoolToVis}}">
+                            <DockPanel>
+                                <TextBlock Text="{Binding BottomChartTitle}" HorizontalAlignment="Center" Margin="0,0,0,10" DockPanel.Dock="Top" FontSize="16" FontWeight="Bold" Foreground="#333"/>
+                                <lvc:CartesianChart Series="{Binding SalesCountSeries}" XAxes="{Binding XAxes}" YAxes="{Binding YAxes}" LegendPosition="Bottom" ZoomMode="X"/>
+                            </DockPanel>
+                        </Border>
+                    </StackPanel>
+                </ContentControl>
             </ScrollViewer>
 
             <!-- Loading Overlay -->

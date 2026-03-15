@@ -66,9 +66,18 @@ namespace SystemeCaisse.UI
             DispatcherUnhandledException += (s, e) => 
             { 
                 LogException(e.Exception, "Dispatcher"); 
-                // We no longer set Handled = true because it causes an infinite freeze loop.
-                // Instead, we will destroy the charts when inactive to prevent the errors at source.
-                e.Handled = false;
+                
+                // CRITICAL: We now force Handled = true to prevent the app from closing.
+                // This allows the user to continue using other tabs even if an error occurred in Analysis.
+                e.Handled = true;
+
+                // Show a non-blocking error message
+                MessageBox.Show(
+                    "Une erreur mineure est survenue lors de l'affichage des graphiques. " +
+                    "Vous pouvez continuer à utiliser l'application.\n\nDétails de l'erreur : " + e.Exception.Message,
+                    "Information de Stabilité", 
+                    MessageBoxButton.OK, 
+                    MessageBoxImage.Information);
             };
             TaskScheduler.UnobservedTaskException += (s, e) => { LogException(e.Exception, "TaskScheduler"); e.SetObserved(); };
         }
