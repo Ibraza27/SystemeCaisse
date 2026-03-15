@@ -119,6 +119,10 @@ namespace SystemeCaisse.UI.ViewModels
         {
             if (IsLoading) return;
             IsActive = true;
+            // v28: PARANOID GUARD - Ensure we only load if the tab is REALLY active.
+            // This prevents triggers that might have been queued before a rapid tab switch.
+            if (!IsActive) return;
+
             _isDisposed = false;
 
             // Cancel any previous task

@@ -271,20 +271,12 @@ namespace SystemeCaisse.UI.ViewModels
                     _selectedTabIndex = value;
                     OnPropertyChanged(nameof(SelectedTabIndex));
 
+                    // v28: AnalysisVM logic moved to MainWindow.xaml.cs (TabControl_SelectionChanged)
+                    // to be deferred until ApplicationIdle priority.
+                    // This ensures the UI is 100% stable before loading/cleaning.
+
                     try 
                     {
-                        // 1. If leaving Analysis tab, notify VM immediately (Synchronous signal is CRITICAL to avoid deadlocks)
-                        if (previousIndex == 5 && _selectedTabIndex != 5)
-                        {
-                            AnalysisVM.Cleanup();
-                        }
-
-                        // 2. If switching to Analysis tab (5), refresh data
-                        if (_selectedTabIndex == 5)
-                        {
-                            _ = AnalysisVM.LoadAnalysis();
-                        }
-
                         // 3. If switching back to Caisse tab (1), refresh promotions
                         if (_selectedTabIndex == 1)
                         {
