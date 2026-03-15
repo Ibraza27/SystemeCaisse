@@ -267,61 +267,48 @@ namespace SystemeCaisse.UI.ViewModels
             {
                 if (_selectedTabIndex != value)
                 {
-                    var previousIndex = _selectedTabIndex;
-        private int _lastIndex = 1; // Start at Caisse
-        partial void OnSelectedTabIndexChanged(int value)
-        {
-            if (_selectedTabIndex != -1)
-            {
-                int previousIndex = _lastIndex;
-                if (previousIndex != _selectedTabIndex)
-                {
-                    _lastIndex = _selectedTabIndex;
-
-                    // v29: Use Background priority to allow the tab switch to complete BEFORE we do cleanup/loading.
-                    // This is safer than Idle priority as it won't wait for "everything" to be quiet,
-                    // but it STILL lets the UI finish its current frame.
-                    Application.Current.Dispatcher.BeginInvoke(new Action(() => 
-                    {
-                        try 
-                        {
-                            // 1. If leaving Analysis tab
-                            if (previousIndex == 5)
-                            {
-                                AnalysisVM.Cleanup();
-                            }
-
-                            // 2. If switching to Analysis tab
-                            if (_selectedTabIndex == 5)
-                            {
-                                _ = AnalysisVM.LoadAnalysis();
-                            }
-
-                            // 3. If switching back to Caisse tab (1), refresh promotions
-                            if (_selectedTabIndex == 1)
-                            {
-                                RefreshPromotions();
-                            }
-                        }
-                        catch { /* Silent protection */ }
-                    }), System.Windows.Threading.DispatcherPriority.Background);
+                    _selectedTabIndex = value;
+                    OnPropertyChanged(nameof(SelectedTabIndex));
+                    OnSelectedTabIndexChanged(value);
                 }
             }
         }
-                        // 3. If switching back to Caisse tab (1), refresh promotions
-                        if (_selectedTabIndex == 1)
+
+        private int _lastIndex = 1; // Start at Caisse
+        private void OnSelectedTabIndexChanged(int value)
+        {
+            int previousIndex = _lastIndex;
+            if (previousIndex != value)
+            {
+                _lastIndex = value;
+
+                // v29: Use Background priority to allow the tab switch to complete BEFORE we do cleanup/loading.
+                Application.Current.Dispatcher.BeginInvoke(new Action(() => 
+                {
+                    try 
+                    {
+                        // 1. If leaving Analysis tab
+                        if (previousIndex == 5)
                         {
-                            LoadPromotions();
-                            ApplyAutomaticPromotions();
-                            UpdateTotal();
+                            AnalysisVM.Cleanup();
+                        }
+
+                        // 2. If switching to Analysis tab
+                        if (value == 5)
+                        {
+                            _ = AnalysisVM.LoadAnalysis();
+                        }
+
+                        // 3. If switching back to Caisse tab (1), refresh promotions
+                        if (value == 1)
+                        {
+                            RefreshPromotions();
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"TabSwitch Error: {ex.Message}");
-                    }
-                }
+                    catch { /* Silent protection */ }
+                }), System.Windows.Threading.DispatcherPriority.Background);
             }
+        }
         }
 
         public MainViewModel(IDbContextFactory<AppDbContext> contextFactory, PrintService printService, IDataMigrationService migrationService)
