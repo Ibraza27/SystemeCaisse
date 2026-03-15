@@ -1,0 +1,202 @@
+<UserControl x:Class="SystemeCaisse.UI.Views.AnalysisView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
+             xmlns:conv="clr-namespace:SystemeCaisse.UI.Converters"
+             mc:Ignorable="d" 
+             Unloaded="UserControl_Unloaded"
+             d:DesignHeight="800" d:DesignWidth="1100">
+    <UserControl.Resources>
+        <Style x:Key="AnalysisTypeButtonStyle" TargetType="RadioButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Margin" Value="0,0,15,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Name="Dot" Width="8" Height="8" Fill="#BBB" Margin="0,0,5,0"/>
+                            <ContentPresenter Name="Content" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Dot" Property="Fill" Value="Black"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Background="#EEE" IsVisibleChanged="UserControl_IsVisibleChanged">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/> <!-- Global Header -->
+            <RowDefinition Height="Auto"/> <!-- Sub-Header (Analysis Type) -->
+            <RowDefinition Height="*"/>    <!-- Content -->
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="#F8F9FA" BorderBrush="#DDD" BorderThickness="0,0,0,1" Padding="20,10">
+            <DockPanel>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                    <TextBlock Text="📅 Période :" VerticalAlignment="Center" FontWeight="Bold" Margin="0,0,10,0" Foreground="#2E7D32"/>
+                    <DatePicker SelectedDate="{Binding StartDate}" Width="110" Margin="0,0,5,0"/>
+                    <TextBlock Text="au" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <DatePicker SelectedDate="{Binding EndDate}" Width="110" Margin="0,0,10,0"/>
+                    
+                    <Button Command="{Binding LoadAnalysisCommand}" Background="#2E7D32" Foreground="White" Padding="15,4" BorderThickness="0" Cursor="Hand" Margin="0,0,10,0">
+                        <TextBlock Text="Actualiser" FontWeight="Bold"/>
+                    </Button>
+
+                    <TextBlock Text="{Binding CurrentPeriodLabel}" FontStyle="Italic" Foreground="#666" VerticalAlignment="Center" Margin="0,0,15,0"/>
+
+                    <Button Content="Aujourd'hui" Command="{Binding SetPeriodCommand}" CommandParameter="Today" Background="#F0F0F0" BorderBrush="#BBB" BorderThickness="1" Padding="8,4" Margin="0,0,5,0" Cursor="Hand"/>
+                    <Button Content="Ce Mois" Command="{Binding SetPeriodCommand}" CommandParameter="Month" Background="#F0F0F0" BorderBrush="#BBB" BorderThickness="1" Padding="8,4" Margin="0,0,5,0" Cursor="Hand"/>
+                    <Button Content="Année" Command="{Binding SetPeriodCommand}" CommandParameter="Year" Background="#F0F0F0" BorderBrush="#BBB" BorderThickness="1" Padding="8,4" Margin="0,0,20,0" Cursor="Hand"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <RadioButton Style="{StaticResource ToggleButtonStyle}" Content="Liste" IsChecked="{Binding IsChartViewActive, Converter={StaticResource BoolInverter}}" Width="100"/>
+                    <RadioButton Style="{StaticResource ToggleButtonStyle}" Content="Graphiques" IsChecked="{Binding IsChartViewActive}" Width="120"/>
+                    
+                    <Button Command="{Binding ExportCommand}" Background="#1976D2" Foreground="White" Margin="15,0,0,0" Padding="15,6" BorderThickness="0" Cursor="Hand">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="💾" Margin="0,0,5,0"/>
+                            <TextBlock Text="Exporter Rapport" FontWeight="Bold"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Sub-Header (Analysis Type Selector) - VISIBLE ONLY IF CHART MODE -->
+        <Border Grid.Row="1" Background="#E0E0E0" Padding="20,5" Visibility="{Binding IsChartViewActive, Converter={StaticResource BoolToVis}}">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Analyse par :" VerticalAlignment="Center" Margin="0,0,20,0" FontSize="12"/>
+                <RadioButton Content="Jour" Style="{StaticResource AnalysisTypeButtonStyle}" 
+                             Command="{Binding SetAnalysisTypeCommand}" CommandParameter="Day" IsChecked="True"/>
+                <RadioButton Content="Heure" Style="{StaticResource AnalysisTypeButtonStyle}" 
+                             Command="{Binding SetAnalysisTypeCommand}" CommandParameter="Hour"/>
+                <RadioButton Content="Jour de la semaine" Style="{StaticResource AnalysisTypeButtonStyle}" 
+                             Command="{Binding SetAnalysisTypeCommand}" CommandParameter="Weekday"/>
+                <RadioButton Content="Catégorie" Style="{StaticResource AnalysisTypeButtonStyle}" 
+                             Command="{Binding SetAnalysisTypeCommand}" CommandParameter="Category"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Content Area -->
+        <Grid Grid.Row="2">
+            <!-- List View (TabControl) -->
+            <TabControl Margin="10" Visibility="{Binding IsChartViewActive, Converter={StaticResource InvertedBoolToVis}}">
+                <TabItem Header="Par produit">
+                    <DataGrid ItemsSource="{Binding ProductAnalysis}" AutoGenerateColumns="False" IsReadOnly="True" Margin="5"
+                              GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#F0F0F0" BorderThickness="0" Background="White">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Catégorie" Binding="{Binding Category}" Width="*" />
+                            <DataGridTextColumn Header="Produit" Binding="{Binding ProductName}" Width="3*" />
+                            <DataGridTextColumn Header="Quantité" Binding="{Binding QuantitySold, StringFormat={}{0:N2}}" Width="100" />
+                            <DataGridTextColumn Header="CA Généré" Binding="{Binding TotalRevenue, StringFormat={}{0:N2}€}" Width="120" />
+                            <DataGridTextColumn Header="Prix Moyen" Binding="{Binding AveragePrice, StringFormat={}{0:N2}€}" Width="120" />
+                            <DataGridTextColumn Header="Marge Totale" Binding="{Binding TotalMargin, StringFormat={}{0:N2}€}" Width="120" />
+                            <DataGridTextColumn Header="% Marge" Binding="{Binding MarginPercent, StringFormat={}{0:P1}}" Width="100" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </TabItem>
+                <TabItem Header="Par catégorie">
+                    <DataGrid ItemsSource="{Binding CategoryAnalysis}" AutoGenerateColumns="False" IsReadOnly="True" Margin="5"
+                              GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#F0F0F0" BorderThickness="0" Background="White">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Catégorie" Binding="{Binding CategoryName}" Width="*" />
+                            <DataGridTextColumn Header="Articles" Binding="{Binding ItemsCount}" Width="100" />
+                            <DataGridTextColumn Header="Qté Totale" Binding="{Binding TotalQuantity, StringFormat={}{0:N2}}" Width="120" />
+                            <DataGridTextColumn Header="CA Global" Binding="{Binding TotalRevenue, StringFormat={}{0:N2}€}" Width="150" />
+                            <DataGridTextColumn Header="Marge Globale" Binding="{Binding TotalMargin, StringFormat={}{0:N2}€}" Width="150" />
+                            <DataGridTextColumn Header="% Marge" Binding="{Binding MarginPercent, StringFormat={}{0:P1}}" Width="100" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </TabItem>
+                <TabItem Header="Temporelle">
+                    <DataGrid ItemsSource="{Binding TimeAnalysis}" AutoGenerateColumns="False" IsReadOnly="True" Margin="5"
+                              GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#F0F0F0" BorderThickness="0" Background="White">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Date" Binding="{Binding Date, StringFormat=dd/MM/yyyy}" Width="*" />
+                            <DataGridTextColumn Header="Tickets" Binding="{Binding TicketsCount}" Width="120" />
+                            <DataGridTextColumn Header="CA Journée" Binding="{Binding TotalRevenue, StringFormat={}{0:N2}€}" Width="150" />
+                            <DataGridTextColumn Header="Panier Moyen" Binding="{Binding AverageTicket, StringFormat={}{0:N2}€}" Width="150" />
+                            <DataGridTextColumn Header="Marge Journée" Binding="{Binding TotalMargin, StringFormat={}{0:N2}€}" Width="150" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </TabItem>
+                <TabItem Header="Rentabilité">
+                    <DataGrid ItemsSource="{Binding ProductAnalysis}" AutoGenerateColumns="False" IsReadOnly="True" Margin="5"
+                              GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#F0F0F0" BorderThickness="0" Background="White">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Produit" Binding="{Binding ProductName}" Width="*" />
+                            <DataGridTextColumn Header="Prix Vente (Moy)" Binding="{Binding AveragePrice, StringFormat={}{0:N2}€}" Width="150" />
+                            <DataGridTextColumn Header="CA" Binding="{Binding TotalRevenue, StringFormat={}{0:N2}€}" Width="150" />
+                            <DataGridTextColumn Header="Marge HT" Binding="{Binding TotalMargin, StringFormat={}{0:N2}€}" Width="150" />
+                            <DataGridTextColumn Header="Taux Marge" Binding="{Binding MarginPercent, StringFormat={}{0:P1}}" Width="120" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </TabItem>
+            </TabControl>
+
+            <!-- Chart View (Scrollable like screenshots) -->
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding IsChartViewActive, Converter={StaticResource BoolToVis}}">
+                        <ContentControl x:Name="ChartDisplayControl" Grid.Row="2">
+                            <ContentControl.Style>
+                                <Style TargetType="ContentControl">
+                                    <Setter Property="Content" Value="{x:Null}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                            <Setter Property="Content">
+                                                <Setter.Value>
+                                                    <!-- On réinjecte le layout ici car le DataTemplate global est plus propre -->
+                                                    <StackPanel Margin="0,0,10,20">
+                                                        <Border Background="White" CornerRadius="10" BorderBrush="#CCC" BorderThickness="1" Margin="0,0,0,15" Padding="15">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Setter Property="MinHeight" Value="420"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsBottomChartVisible}" Value="False">
+                                                                            <Setter Property="MinHeight" Value="800"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                            <DockPanel>
+                                                                <TextBlock Text="{Binding TopChartTitle}" HorizontalAlignment="Center" Margin="0,0,0,10" DockPanel.Dock="Top" FontSize="16" FontWeight="Bold" Foreground="#333"/>
+                                                                <lvc:CartesianChart Series="{Binding RevenueSeries}" XAxes="{Binding XAxes}" YAxes="{Binding YAxes}" LegendPosition="Bottom" ZoomMode="X"/>
+                                                            </DockPanel>
+                                                        </Border>
+                                                        <Border Background="White" CornerRadius="10" BorderBrush="#CCC" BorderThickness="1" MinHeight="420" Padding="15"
+                                                                Visibility="{Binding IsBottomChartVisible, Converter={StaticResource BoolToVis}}">
+                                                            <DockPanel>
+                                                                <TextBlock Text="{Binding BottomChartTitle}" HorizontalAlignment="Center" Margin="0,0,0,10" DockPanel.Dock="Top" FontSize="16" FontWeight="Bold" Foreground="#333"/>
+                                                                <lvc:CartesianChart Series="{Binding SalesCountSeries}" XAxes="{Binding XAxes}" YAxes="{Binding YAxes}" LegendPosition="Bottom" ZoomMode="X"/>
+                                                            </DockPanel>
+                                                        </Border>
+                                                    </StackPanel>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ContentControl.Style>
+                        </ContentControl>
+            </ScrollViewer>
+
+            <!-- Loading Overlay -->
+            <Border Background="#80FFFFFF" Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <ProgressBar IsIndeterminate="True" Width="200" Height="10"/>
+                    <TextBlock Text="Chargement..." Margin="0,10,0,0" Foreground="#666"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

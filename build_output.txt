@@ -1,0 +1,17 @@
+  Identification des projets ├á restaurer...
+  Restauration effectu├®e de s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\SystemeCaisse.Infrastructure.csproj (en 2,01 sec).
+  Restauration effectu├®e de S:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\SystemeCaisse.UI.csproj (en 2,01 sec).
+  Sur l'ensemble des projets, 1 sur 3 sont ├á jour pour la restauration.
+  SystemeCaisse.Core -> s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Core\bin\Debug\net8.0\SystemeCaisse.Core.dll
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\Services\DataMigrationService.cs(78,36): warning CS8600: Conversion de litt├®ral ayant une valeur null ou d'une ├®ventuelle valeur null en type non-nullable. [s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\SystemeCaisse.Infrastructure.csproj]
+  SystemeCaisse.Infrastructure -> s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\bin\Debug\net8.0\SystemeCaisse.Infrastructure.dll
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\ViewModels\MainViewModel.cs(915,1): error CS1022: D├®finition de type ou d'espace de noms, ou fin de fichier attendue [s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\SystemeCaisse.UI_kkpypzgw_wpftmp.csproj]
+
+├ëCHEC de la build.
+
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\Services\DataMigrationService.cs(78,36): warning CS8600: Conversion de litt├®ral ayant une valeur null ou d'une ├®ventuelle valeur null en type non-nullable. [s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\SystemeCaisse.Infrastructure.csproj]
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\ViewModels\MainViewModel.cs(915,1): error CS1022: D├®finition de type ou d'espace de noms, ou fin de fichier attendue [s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\SystemeCaisse.UI_kkpypzgw_wpftmp.csproj]
+    1 Avertissement(s)
+    1 Erreur(s)
+
+Temps ├®coul├® 00:00:11.29

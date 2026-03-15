@@ -1,0 +1,31 @@
+using System.Windows;
+
+namespace SystemeCaisse.UI.Views
+{
+    public partial class QuantityInputWindow : Window
+    {
+        public decimal Quantity { get; private set; }
+
+        public QuantityInputWindow(decimal currentQty)
+        {
+            InitializeComponent();
+            QtyInput.Text = currentQty.ToString("0.###");
+            QtyInput.SelectAll();
+            QtyInput.Focus();
+        }
+
+        private void BtnOK_Click(object sender, RoutedEventArgs e)
+        {
+            if (decimal.TryParse(QtyInput.Text.Replace('.', ','), out decimal qty))
+            {
+                Quantity = qty;
+                DialogResult = true;
+                Close();
+            }
+            else
+            {
+                MessageBox.Show("Quantité invalide");
+            }
+        }
+    }
+}

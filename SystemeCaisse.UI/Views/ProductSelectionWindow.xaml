@@ -1,0 +1,30 @@
+<Window x:Class="SystemeCaisse.UI.Views.ProductSelectionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Sélection Produit" Height="500" Width="600"
+        WindowStartupLocation="CenterScreen" Background="#F5F5F5">
+    <Grid Margin="15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Text="Sélectionnez un produit" FontSize="20" FontWeight="Bold" Margin="0,0,0,15"/>
+
+        <DataGrid x:Name="ProductGrid" Grid.Row="1" AutoGenerateColumns="False" 
+                  IsReadOnly="True" SelectionMode="Single"
+                  Background="White" BorderThickness="0" RowHeight="40"
+                  MouseDoubleClick="ProductGrid_MouseDoubleClick">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Produit" Binding="{Binding Nom}" Width="*"/>
+                <DataGridTextColumn Header="Prix/kg" Binding="{Binding PrixVente, StringFormat=C}" Width="100"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
+            <Button Content="Annuler" IsCancel="True" Width="100" Height="40" Margin="0,0,10,0"/>
+            <Button Content="Valider" IsDefault="True" Click="BtnValider_Click" Width="100" Height="40" Background="#2E7D32" Foreground="White"/>
+        </StackPanel>
+    </Grid>
+</Window>

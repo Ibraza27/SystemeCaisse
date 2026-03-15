@@ -1,0 +1,145 @@
+<UserControl x:Class="SystemeCaisse.UI.Views.InventoryView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             mc:Ignorable="d" 
+             d:DesignHeight="600" d:DesignWidth="1000">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <Style x:Key="BaseButtonStyle" TargetType="Button">
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                         <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                         </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="10">
+        <TabControl BorderThickness="0" Background="Transparent">
+            <!-- New Inventory Tab -->
+            <TabItem Header="📋 Nouvel Inventaire / En Cours">
+                <Grid Background="White" Margin="0,10,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Header / Actions -->
+                    <Border Grid.Row="0" Padding="15" BorderBrush="#EEE" BorderThickness="0,0,0,1">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <StackPanel Orientation="Horizontal">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
+                                        <Setter Property="Visibility" Value="Collapsed"/> 
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsInventoryActive}" Value="False">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </StackPanel.Style>
+                                <Button Content="➕ Démarrer un inventaire" Command="{Binding StartNewInventoryCommand}" 
+                                        Background="#2E7D32" Foreground="White" Style="{StaticResource BaseButtonStyle}"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsInventoryActive}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </StackPanel.Style>
+                                <TextBlock Text="📝 Inventaire en cours..." VerticalAlignment="Center" Margin="0,0,15,0" FontWeight="Bold" Foreground="#F57F17"/>
+                                <Button Content="❌ Annuler" Command="{Binding CancelInventoryCommand}" 
+                                        Background="#C62828" Foreground="White" Margin="0,0,10,0" Style="{StaticResource BaseButtonStyle}"/>
+                                <Button Content="✅ Valider et Appliquer Stock" Command="{Binding ValidateInventoryCommand}" 
+                                        Background="#1976D2" Foreground="White" Style="{StaticResource BaseButtonStyle}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Content (Active Inventory) -->
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding ActiveInventory.Lignes}" AutoGenerateColumns="False" CanUserAddRows="False"
+                              Visibility="{Binding IsInventoryActive, Converter={StaticResource BoolToVis}}"
+                              GridLinesVisibility="Horizontal" RowHeight="35" Background="White" BorderThickness="0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Produit" Binding="{Binding Produit.Nom}" Width="*" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Stock Système" Binding="{Binding QuantiteSysteme}" Width="120" IsReadOnly="True" Foreground="#666"/>
+                            
+                            <!-- Editable Column -->
+                            <DataGridTextColumn Header="Stock Réel (Compté)" Binding="{Binding QuantiteReelle, UpdateSourceTrigger=PropertyChanged}" Width="150" FontWeight="Bold">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Background" Value="#E3F2FD"/>
+                                        <Setter Property="Padding" Value="5"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                                <DataGridTextColumn.EditingElementStyle>
+                                     <Style TargetType="TextBox">
+                                         <Setter Property="Padding" Value="5"/>
+                                     </Style>
+                                </DataGridTextColumn.EditingElementStyle>
+                            </DataGridTextColumn>
+
+                            <DataGridTextColumn Header="Écart" Binding="{Binding Ecart}" Width="100" IsReadOnly="True" FontWeight="Bold">
+                                <DataGridTextColumn.CellStyle>
+                                    <Style TargetType="DataGridCell">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Ecart}" Value="0">
+                                                <Setter Property="Foreground" Value="#2E7D32"/> <!-- Green -->
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </DataGridTextColumn.CellStyle>
+                            </DataGridTextColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <!-- Empty State -->
+                     <Grid Grid.Row="1">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsInventoryActive}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
+                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                            <TextBlock Text="Aucun inventaire en cours" FontSize="18" Foreground="#BBB" HorizontalAlignment="Center"/>
+                            <TextBlock Text="Cliquez sur 'Démarrer' pour commencer le comptage." FontSize="14" Foreground="#999" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <!-- History Tab -->
+            <TabItem Header="🕒 Historique">
+                <DataGrid ItemsSource="{Binding History}" AutoGenerateColumns="False" IsReadOnly="True"
+                          GridLinesVisibility="Horizontal" RowHeight="35" Background="White" BorderThickness="0">
+                     <DataGrid.Columns>
+                        <DataGridTextColumn Header="Date" Binding="{Binding DateCreation, StringFormat=dd/MM/yyyy HH:mm}" Width="150"/>
+                        <DataGridTextColumn Header="Statut" Binding="{Binding Statut}" Width="100"/>
+                        <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="*"/>
+                        <DataGridTextColumn Header="Lignes" Binding="{Binding Lignes.Count}" Width="80"/>
+                     </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</UserControl>

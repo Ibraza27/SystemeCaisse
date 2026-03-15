@@ -1,0 +1,11 @@
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Core\bin\Debug\net8.0\SystemeCaisse.Core.deps.json
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Core\bin\Debug\net8.0\SystemeCaisse.Core.dll
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Core\bin\Debug\net8.0\SystemeCaisse.Core.pdb
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Core\obj\Debug\net8.0\SystemeCaisse.Core.GeneratedMSBuildEditorConfig.editorconfig
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Core\obj\Debug\net8.0\SystemeCaisse.Core.AssemblyInfoInputs.cache
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Core\obj\Debug\net8.0\SystemeCaisse.Core.AssemblyInfo.cs
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Core\obj\Debug\net8.0\SystemeCaisse.Core.csproj.CoreCompileInputs.cache
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Core\obj\Debug\net8.0\SystemeCaisse.Core.dll
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Core\obj\Debug\net8.0\refint\SystemeCaisse.Core.dll
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Core\obj\Debug\net8.0\SystemeCaisse.Core.pdb
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Core\obj\Debug\net8.0\ref\SystemeCaisse.Core.dll

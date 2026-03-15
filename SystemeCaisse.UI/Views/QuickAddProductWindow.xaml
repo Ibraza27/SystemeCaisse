@@ -1,0 +1,45 @@
+<Window x:Class="SystemeCaisse.UI.Views.QuickAddProductWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Ajout Rapide de Produit" Height="500" Width="400"
+        WindowStartupLocation="CenterScreen" ResizeMode="NoResize" Background="#F5F5F5">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Text="Nouveau Produit" FontSize="20" FontWeight="Bold" Margin="0,0,0,15" HorizontalAlignment="Center" Foreground="#2E7D32"/>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <Label Content="Code-barres :"/>
+                <TextBox x:Name="TxtBarcode" IsReadOnly="True" Padding="5" Margin="0,0,0,10" Background="#EEE"/>
+
+                <Label Content="Nom du produit * :"/>
+                <TextBox x:Name="TxtNom" Padding="5" Margin="0,0,0,10"/>
+
+                <Label Content="Type de vente * :"/>
+                <ComboBox x:Name="CbType" Padding="5" Margin="0,0,0,10" SelectedIndex="0">
+                    <ComboBoxItem Content="À l'unité" Tag="unite"/>
+                    <ComboBoxItem Content="Au poids (kg)" Tag="poids"/>
+                </ComboBox>
+
+                <Label Content="Prix de vente (€) * :"/>
+                <TextBox x:Name="TxtPrix" Padding="5" Margin="0,0,0,10"/>
+
+                <Label Content="Catégorie :"/>
+                <ComboBox x:Name="CbCategory" IsEditable="True" Padding="5" Margin="0,0,0,10"/>
+
+                <Label Content="Stock Initial :"/>
+                <TextBox x:Name="TxtStock" Text="0" Padding="5" Margin="0,0,0,10"/>
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
+            <Button Content="Annuler" IsCancel="True" Width="100" Height="35" Margin="0,0,10,0"/>
+            <Button Content="✅ ENREGISTRER" Click="BtnSave_Click" Width="130" Height="35" Background="#2E7D32" Foreground="White" FontWeight="Bold"/>
+        </StackPanel>
+    </Grid>
+</Window>

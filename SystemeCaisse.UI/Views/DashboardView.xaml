@@ -1,0 +1,225 @@
+<UserControl x:Class="SystemeCaisse.UI.Views.DashboardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:vm="clr-namespace:SystemeCaisse.UI.ViewModels"
+             xmlns:ctrl="clr-namespace:SystemeCaisse.UI.Controls"
+             mc:Ignorable="d" 
+             d:DataContext="{d:DesignInstance Type=vm:DashboardViewModel}"
+             d:DesignHeight="800" d:DesignWidth="1100">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        
+        <Style x:Key="PeriodButtonStyle" TargetType="RadioButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="#DDD"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="15,6"/>
+            <Setter Property="Margin" Value="0,0,5,0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="{TemplateBinding BorderThickness}" 
+                                CornerRadius="4" 
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="Background" Value="#007AFF"/>
+                                <Setter Property="BorderBrush" Value="#007AFF"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Background="#F4F6F9"> <!-- Light Grey Professional Background -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="30">
+                <!-- Header Section -->
+                <Grid Margin="0,0,0,30">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <StackPanel>
+                        <TextBlock Text="Tableau de Bord Stratégique" FontSize="26" FontWeight="Bold" Foreground="#2C3E50"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                            <TextBlock Text="{Binding CurrentPeriodLabel}" FontSize="14" Foreground="#7F8C8D"/>
+                            <TextBlock Text=" • Dernière mise à jour: à l'instant" FontSize="14" Foreground="#BDC3C7" Margin="10,0,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Period Filters -->
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,10">
+                            <RadioButton GroupName="Period" Content="Aujourd'hui" Command="{Binding SetPeriodCommand}" CommandParameter="Today" Style="{StaticResource PeriodButtonStyle}"/>
+                            <RadioButton GroupName="Period" Content="Hier" Command="{Binding SetPeriodCommand}" CommandParameter="Yesterday" Style="{StaticResource PeriodButtonStyle}"/>
+                            <RadioButton GroupName="Period" Content="7 Jours" Command="{Binding SetPeriodCommand}" CommandParameter="Week" Style="{StaticResource PeriodButtonStyle}"/>
+                            <RadioButton GroupName="Period" Content="Ce Mois" Command="{Binding SetPeriodCommand}" CommandParameter="Month" IsChecked="True" Style="{StaticResource PeriodButtonStyle}"/>
+                            <RadioButton GroupName="Period" Content="Cette Année" Command="{Binding SetPeriodCommand}" CommandParameter="Year" Style="{StaticResource PeriodButtonStyle}"/>
+                        </StackPanel>
+
+                        <!-- Custom Date Range -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <TextBlock Text="Période : " VerticalAlignment="Center" Margin="0,0,5,0" Foreground="#7F8C8D"/>
+                            <DatePicker SelectedDate="{Binding StartDate}" Width="110" VerticalContentAlignment="Center" Background="White"/>
+                            <TextBlock Text=" au " VerticalAlignment="Center" Margin="10,0,5,0" Foreground="#7F8C8D"/>
+                            <DatePicker SelectedDate="{Binding EndDate}" Width="110" VerticalContentAlignment="Center" Background="White"/>
+                            <Button Command="{Binding LoadDashboardDataCommand}" Content="🔄" Background="Transparent" BorderThickness="0" Margin="10,0,0,0" ToolTip="Rafraîchir les données"  Cursor="Hand" FontSize="16"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+
+                <!-- KPI Cards Row -->
+                <Grid Margin="0,0,0,30">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <ctrl:KpiCard Grid.Column="0" Margin="0,0,20,0"
+                                  Title="Chiffre d'Affaires" 
+                                  Value="{Binding SalesTotal}"
+                                  Trend="{Binding SalesTrend}"
+                                  IsPositiveTrend="{Binding SalesTrendPositive}"
+                                  Icon="💰" IconBackground="#2ECC71"/>
+
+                    <ctrl:KpiCard Grid.Column="1" Margin="0,0,20,0"
+                                  Title="Panier Moyen" 
+                                  Value="{Binding AvgBasket}"
+                                  Trend="{Binding AvgBasketTrend}"
+                                  IsPositiveTrend="{Binding AvgBasketTrendPositive}"
+                                  Icon="🛒" IconBackground="#3498DB"/>
+
+                    <ctrl:KpiCard Grid.Column="2" Margin="0,0,20,0"
+                                  Title="Transactions" 
+                                  Value="{Binding TxCount}"
+                                  Trend="{Binding TxTrend}"
+                                  IsPositiveTrend="{Binding TxTrendPositive}"
+                                  Icon="🧾" IconBackground="#9B59B6"/>
+
+                    <!-- Using Sales Trend for 4th card as placeholder for Margin or other metric -->
+                    <ctrl:KpiCard Grid.Column="3" 
+                                  Title="Tendance Ventes" 
+                                  Value="{Binding SalesTrend}"
+                                  Trend="" 
+                                  TrendLabel="vs période préc."
+                                  IsPositiveTrend="{Binding SalesTrendPositive}"
+                                  Icon="📈" IconBackground="#F1C40F"/>
+                </Grid>
+
+                <!-- Charts Section with Empty State Overlay -->
+                <Grid>
+                    <StackPanel Visibility="{Binding HasData, Converter={StaticResource BoolToVis}}">
+                        <!-- Charts Row 1: Evolution Curve -->
+                        <Border Background="White" CornerRadius="12" Padding="25" Margin="0,0,0,30">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="15" ShadowDepth="2" Opacity="0.05" Color="#000"/>
+                            </Border.Effect>
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="300"/>
+                                </Grid.RowDefinitions>
+                                
+                                <StackPanel Margin="0,0,0,20">
+                                    <TextBlock Text="Évolution du Chiffre d'Affaires" FontSize="18" FontWeight="Bold" Foreground="#34495E"/>
+                                    <TextBlock Text="Analyse temporelle des performances" FontSize="13" Foreground="#95A5A6"/>
+                                </StackPanel>
+
+                                <ctrl:SimpleLineChart Grid.Row="1" 
+                                                      DataPoints="{Binding SalesEvolution}" 
+                                                      LineColor="#3498DB"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- Charts Row 2: Distribution + Top Products -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="4*"/> <!-- Pie -->
+                                <ColumnDefinition Width="6*"/> <!-- Top List -->
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Pie Chart -->
+                            <Border Grid.Column="0" Background="White" CornerRadius="12" Padding="25" Margin="0,0,20,0">
+                                <Border.Effect>
+                                     <DropShadowEffect BlurRadius="15" ShadowDepth="2" Opacity="0.05" Color="#000"/>
+                                </Border.Effect>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+                                    
+                                    <TextBlock Text="Répartition par Catégorie" FontSize="16" FontWeight="Bold" Foreground="#34495E" Margin="0,0,0,20"/>
+                                    
+                                    <ctrl:SimplePieChart Grid.Row="1" DataPoints="{Binding CategoryDistribution}" Height="250"/>
+                                </Grid>
+                            </Border>
+
+                            <!-- Top Products List -->
+                            <Border Grid.Column="1" Background="White" CornerRadius="12" Padding="25">
+                                 <Border.Effect>
+                                     <DropShadowEffect BlurRadius="15" ShadowDepth="2" Opacity="0.05" Color="#000"/>
+                                </Border.Effect>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Text="Top Produits performants" FontSize="16" FontWeight="Bold" Foreground="#34495E" Margin="0,0,0,15"/>
+
+                                    <DataGrid Grid.Row="1" ItemsSource="{Binding TopProducts}" AutoGenerateColumns="False" IsReadOnly="True"
+                                              HeadersVisibility="Column" GridLinesVisibility="Horizontal" Background="White" BorderThickness="0">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Produit" Binding="{Binding ProductName}" Width="*">
+                                                <DataGridTextColumn.ElementStyle>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                                        <Setter Property="VerticalAlignment" Value="Center"/>
+                                                        <Setter Property="Margin" Value="5"/>
+                                                    </Style>
+                                                </DataGridTextColumn.ElementStyle>
+                                            </DataGridTextColumn>
+                                            <DataGridTextColumn Header="Qté Vendue" Binding="{Binding Quantity}" Width="100"/>
+                                            <DataGridTextColumn Header="Revenue Total" Binding="{Binding TotalRevenue, StringFormat=C2}" Width="120" FontWeight="Bold" Foreground="#27AE60"/>
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- Empty State Message -->
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,50,0,0">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasData}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <TextBlock Text="📊 Aucune donnée pour cette période" FontSize="20" FontWeight="Bold" Foreground="#BDC3C7" HorizontalAlignment="Center"/>
+                        <TextBlock Text="Effectuez des ventes pour voir apparaître les statistiques." FontSize="14" Foreground="#95A5A6" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
