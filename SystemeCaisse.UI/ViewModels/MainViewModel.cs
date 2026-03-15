@@ -299,10 +299,11 @@ namespace SystemeCaisse.UI.ViewModels
                             _ = AnalysisVM.LoadAnalysis();
                         }
 
-                        // 3. If switching back to Caisse tab (1), refresh promotions
                         if (value == 1)
                         {
-                            RefreshPromotions();
+                            LoadPromotions();
+                            ApplyAutomaticPromotions();
+                            UpdateTotal();
                         }
                     }
                     catch { /* Silent protection */ }
