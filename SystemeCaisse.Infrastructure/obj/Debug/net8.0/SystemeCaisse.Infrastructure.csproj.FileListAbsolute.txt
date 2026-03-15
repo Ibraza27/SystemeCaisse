@@ -9,10 +9,10 @@ s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\obj\Debug\net8.0\Syst
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\obj\Debug\net8.0\SystemeCaisse.Infrastructure.AssemblyInfoInputs.cache
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\obj\Debug\net8.0\SystemeCaisse.Infrastructure.AssemblyInfo.cs
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\obj\Debug\net8.0\SystemeCaisse.Infrastructure.csproj.CoreCompileInputs.cache
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\obj\Debug\net8.0\SystemeCaisse.Infrastructure.sourcelink.json
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\obj\Debug\net8.0\SystemeC.A12EA9C1.Up2Date
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\obj\Debug\net8.0\SystemeCaisse.Infrastructure.dll
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\obj\Debug\net8.0\refint\SystemeCaisse.Infrastructure.dll
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\obj\Debug\net8.0\SystemeCaisse.Infrastructure.pdb
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\obj\Debug\net8.0\SystemeCaisse.Infrastructure.genruntimeconfig.cache
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\obj\Debug\net8.0\ref\SystemeCaisse.Infrastructure.dll
-s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\obj\Debug\net8.0\SystemeCaisse.Infrastructure.sourcelink.json

@@ -247,7 +247,12 @@ namespace SystemeCaisse.UI.ViewModels
 
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur Analyse : {ex.Message}");
+                // v23: Silent Stability. We log instead of showing a MessageBox to avoid modal loops.
+                System.Diagnostics.Debug.WriteLine($"SILENT STABILITY: Analysis Error: {ex.Message}");
+                Application.Current.Dispatcher.Invoke(() => 
+                {
+                    IsLoading = false;
+                });
             }
             finally
             {
