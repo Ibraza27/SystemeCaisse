@@ -252,3 +252,12 @@ s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\obj\Debug\net8.0-windows10.0.1904
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\obj\Debug\net8.0-windows10.0.19041\SystemeCaisse.UI.dll
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\obj\Debug\net8.0-windows10.0.19041\refint\SystemeCaisse.UI.dll
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\obj\Debug\net8.0-windows10.0.19041\SystemeCaisse.UI.pdb
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\bin\Debug\net8.0-windows10.0.19041\Images\logo.png
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\bin\Debug\net8.0-windows10.0.19041\SystemeCaisse.UI.exe
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\bin\Debug\net8.0-windows10.0.19041\SystemeCaisse.UI.deps.json
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\bin\Debug\net8.0-windows10.0.19041\SystemeCaisse.UI.runtimeconfig.json
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\bin\Debug\net8.0-windows10.0.19041\SystemeCaisse.UI.dll
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\bin\Debug\net8.0-windows10.0.19041\SystemeCaisse.UI.pdb
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\obj\Debug\net8.0-windows10.0.19041\SystemeC.1FB7154F.Up2Date
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\obj\Debug\net8.0-windows10.0.19041\SystemeCaisse.UI.genruntimeconfig.cache
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\obj\Debug\net8.0-windows10.0.19041\ref\SystemeCaisse.UI.dll

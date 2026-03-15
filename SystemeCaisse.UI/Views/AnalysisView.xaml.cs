@@ -16,6 +16,7 @@ namespace SystemeCaisse.UI.Views
             {
                 if ((bool)e.NewValue == true)
                 {
+                    RootGrid.Visibility = Visibility.Visible;
                     vm.IsActive = true;
                     
                     // On ajoute un petit délai pour assurer le rendu complet avant le chargement
@@ -29,6 +30,8 @@ namespace SystemeCaisse.UI.Views
                 else
                 {
                     vm.IsActive = false;
+                    // Nuclear Stability Fix (Plan v24): Collapse the root grid to stop all rendering
+                    RootGrid.Visibility = Visibility.Collapsed;
                 }
             }
         }

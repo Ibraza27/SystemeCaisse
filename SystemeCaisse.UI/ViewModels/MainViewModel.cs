@@ -461,7 +461,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
             catch (Exception ex) 
             { 
-                 MessageBox.Show($"Sort Error: {ex.Message}");
+                 System.Diagnostics.Debug.WriteLine($"SILENT STABILITY: Sort Error: {ex.Message}");
             }
         }
 
