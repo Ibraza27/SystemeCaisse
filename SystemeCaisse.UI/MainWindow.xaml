@@ -124,22 +124,7 @@
             </TabItem>
 
             <TabItem Header="📈 Analyses">
-                 <ContentControl>
-                     <ContentControl.Style>
-                         <Style TargetType="ContentControl">
-                             <Setter Property="Content" Value="{x:Null}"/>
-                             <Style.Triggers>
-                                 <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=IsSelected}" Value="True">
-                                     <Setter Property="Content">
-                                         <Setter.Value>
-                                             <views:AnalysisView DataContext="{Binding AnalysisVM}"/>
-                                         </Setter.Value>
-                                     </Setter>
-                                 </DataTrigger>
-                             </Style.Triggers>
-                         </Style>
-                     </ContentControl.Style>
-                 </ContentControl>
+                 <views:AnalysisView DataContext="{Binding AnalysisVM}"/>
             </TabItem>
             
             <TabItem Header="⚙️ Configuration">

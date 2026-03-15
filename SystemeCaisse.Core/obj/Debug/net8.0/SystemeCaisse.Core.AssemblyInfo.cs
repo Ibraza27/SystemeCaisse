@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SystemeCaisse.Core")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+00975c181a545a24fc9876814bca0076fbbeb3be")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+875029d9fdab46186596c4045fd836e882d75d5a")]
 [assembly: System.Reflection.AssemblyProductAttribute("SystemeCaisse.Core")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SystemeCaisse.Core")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

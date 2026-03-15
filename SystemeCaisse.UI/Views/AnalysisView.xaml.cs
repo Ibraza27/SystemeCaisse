@@ -10,12 +10,11 @@ namespace SystemeCaisse.UI.Views
             InitializeComponent();
         }
 
-        private async void UserControl_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+        private void UserControl_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
             if (DataContext is ViewModels.AnalysisViewModel vm)
             {
-                // v27: View is destroyed/recreated by MainWindow via DataTrigger.
-                // We just need to update IsActive to signal the VM.
+                // v29: Simple activity signal. Software rendering prevents GPU deadlocks.
                 vm.IsActive = (bool)e.NewValue;
             }
         }

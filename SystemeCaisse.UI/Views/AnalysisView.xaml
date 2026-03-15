@@ -32,7 +32,8 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid x:Name="RootGrid" Background="#EEE" IsVisibleChanged="UserControl_IsVisibleChanged">
+    <Grid x:Name="RootGrid" Background="#EEE" IsVisibleChanged="UserControl_IsVisibleChanged"
+          RenderOptions.ProcessRenderMode="SoftwareOnly">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/> <!-- Global Header -->
             <RowDefinition Height="Auto"/> <!-- Sub-Header (Analysis Type) -->

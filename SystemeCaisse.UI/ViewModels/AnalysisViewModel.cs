@@ -468,13 +468,19 @@ namespace SystemeCaisse.UI.ViewModels
         {
             IsActive = false;
             _cts?.Cancel();
-            _cts?.Dispose(); // v25: Immediate disposal
-            _cts = null;
 
-            // v25: Ensure cleanup is scheduled safely but without blocking current transition
-            Application.Current.Dispatcher.BeginInvoke(new Action(() => 
+            // v29: Clear collections IMMEDIATELY and SYNCHRONOUSLY.
+            // This ensures LiveCharts has nothing to render the moment we leave the tab.
+            RevenueSeries.Clear();
+            SalesCountSeries.Clear();
+            ProductAnalysis.Clear();
+            CategoryAnalysis.Clear();
+            TimeAnalysis.Clear();
+
+            // v27: Defer the silent log to absolutely avoid blocking the main cleanup signal
+            _ = Application.Current.Dispatcher.BeginInvoke(new Action(() => 
             {
-                System.Diagnostics.Debug.WriteLine("Analysis Cleanup: Background task cancelled and UI decoupled.");
+                System.Diagnostics.Debug.WriteLine("SILENT STABILITY: Analysis View Unbound & Cleaned.");
             }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         }
         

@@ -8,6 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
+using LiveChartsCore.SkiaSharpView.WPF;
 using System;
 using System.Diagnostics;
 using System.Windows;
@@ -29,6 +30,7 @@ using System.Windows.Media.TextFormatting;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using System.Windows.Shell;
+using SystemeCaisse.UI.Converters;
 
 
 namespace SystemeCaisse.UI.Views {

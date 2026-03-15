@@ -268,15 +268,46 @@ namespace SystemeCaisse.UI.ViewModels
                 if (_selectedTabIndex != value)
                 {
                     var previousIndex = _selectedTabIndex;
-                    _selectedTabIndex = value;
-                    OnPropertyChanged(nameof(SelectedTabIndex));
+        private int _lastIndex = 1; // Start at Caisse
+        partial void OnSelectedTabIndexChanged(int value)
+        {
+            if (_selectedTabIndex != -1)
+            {
+                int previousIndex = _lastIndex;
+                if (previousIndex != _selectedTabIndex)
+                {
+                    _lastIndex = _selectedTabIndex;
 
-                    // v28: AnalysisVM logic moved to MainWindow.xaml.cs (TabControl_SelectionChanged)
-                    // to be deferred until ApplicationIdle priority.
-                    // This ensures the UI is 100% stable before loading/cleaning.
-
-                    try 
+                    // v29: Use Background priority to allow the tab switch to complete BEFORE we do cleanup/loading.
+                    // This is safer than Idle priority as it won't wait for "everything" to be quiet,
+                    // but it STILL lets the UI finish its current frame.
+                    Application.Current.Dispatcher.BeginInvoke(new Action(() => 
                     {
+                        try 
+                        {
+                            // 1. If leaving Analysis tab
+                            if (previousIndex == 5)
+                            {
+                                AnalysisVM.Cleanup();
+                            }
+
+                            // 2. If switching to Analysis tab
+                            if (_selectedTabIndex == 5)
+                            {
+                                _ = AnalysisVM.LoadAnalysis();
+                            }
+
+                            // 3. If switching back to Caisse tab (1), refresh promotions
+                            if (_selectedTabIndex == 1)
+                            {
+                                RefreshPromotions();
+                            }
+                        }
+                        catch { /* Silent protection */ }
+                    }), System.Windows.Threading.DispatcherPriority.Background);
+                }
+            }
+        }
                         // 3. If switching back to Caisse tab (1), refresh promotions
                         if (_selectedTabIndex == 1)
                         {
