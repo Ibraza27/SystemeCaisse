@@ -30,8 +30,12 @@ namespace SystemeCaisse.UI.Views
                 else
                 {
                     vm.IsActive = false;
-                    // Nuclear Stability Fix (Plan v24): Collapse the root grid to stop all rendering
-                    RootGrid.Visibility = Visibility.Collapsed;
+                    // Plan v26: Defer the collapse to ensure the tab transition finishes first.
+                    // This prevents WPF and SkiaSharp from fighting for layout priority during the view swap.
+                    Dispatcher.BeginInvoke(new Action(() => 
+                    {
+                        RootGrid.Visibility = Visibility.Collapsed;
+                    }), System.Windows.Threading.DispatcherPriority.Background);
                 }
             }
         }

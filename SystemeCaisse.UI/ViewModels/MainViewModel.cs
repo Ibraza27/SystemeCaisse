@@ -273,13 +273,10 @@ namespace SystemeCaisse.UI.ViewModels
 
                     try 
                     {
-                        // 1. If leaving Analysis tab, notify VM immediately (Asynchronously to avoid blocking UI)
+                        // 1. If leaving Analysis tab, notify VM immediately (Synchronous signal is CRITICAL to avoid deadlocks)
                         if (previousIndex == 5 && _selectedTabIndex != 5)
                         {
-                            Application.Current.Dispatcher.BeginInvoke(new Action(() => 
-                            {
-                                AnalysisVM.Cleanup();
-                            }), System.Windows.Threading.DispatcherPriority.Background);
+                            AnalysisVM.Cleanup();
                         }
 
                         // 2. If switching to Analysis tab (5), refresh data
@@ -456,11 +453,11 @@ namespace SystemeCaisse.UI.ViewModels
                     .Take(20)
                     .ToList();
 
-                Application.Current.Dispatcher.Invoke(() => 
+                Application.Current.Dispatcher.BeginInvoke(new Action(() => 
                 {
                     TopProducts.Clear();
                     foreach (var p in top20) TopProducts.Add(p!);
-                });
+                }), System.Windows.Threading.DispatcherPriority.Background);
             }
             catch (Exception ex) 
             { 
