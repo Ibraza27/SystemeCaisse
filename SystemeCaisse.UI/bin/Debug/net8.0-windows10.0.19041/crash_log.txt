@@ -728,3 +728,17 @@ Stack:    at LiveChartsCore.SkiaSharpView.WPF.Rendering.CompositionTargetTicker.
    at System.Windows.Threading.ExceptionWrapper.InternalRealCall(Delegate callback, Object args, Int32 numArgs)
    at System.Windows.Threading.ExceptionWrapper.TryCatchWhen(Object source, Delegate callback, Object args, Int32 numArgs, Delegate catchHandler)
 
+[15/03/2026 19:09:18] Source: Dispatcher
+Exception: System.NullReferenceException: Object reference not set to an instance of an object.
+   at LiveChartsCore.SkiaSharpView.WPF.Rendering.CompositionTargetTicker.OnCompositonTargetRendering(Object sender, EventArgs e)
+   at System.Windows.Media.MediaContext.RenderMessageHandlerCore(Object resizedCompositionTarget)
+   at System.Windows.Media.MediaContext.RenderMessageHandler(Object resizedCompositionTarget)
+   at System.Windows.Threading.ExceptionWrapper.InternalRealCall(Delegate callback, Object args, Int32 numArgs)
+   at System.Windows.Threading.ExceptionWrapper.TryCatchWhen(Object source, Delegate callback, Object args, Int32 numArgs, Delegate catchHandler)
+Inner: 
+Stack:    at LiveChartsCore.SkiaSharpView.WPF.Rendering.CompositionTargetTicker.OnCompositonTargetRendering(Object sender, EventArgs e)
+   at System.Windows.Media.MediaContext.RenderMessageHandlerCore(Object resizedCompositionTarget)
+   at System.Windows.Media.MediaContext.RenderMessageHandler(Object resizedCompositionTarget)
+   at System.Windows.Threading.ExceptionWrapper.InternalRealCall(Delegate callback, Object args, Int32 numArgs)
+   at System.Windows.Threading.ExceptionWrapper.TryCatchWhen(Object source, Delegate callback, Object args, Int32 numArgs, Delegate catchHandler)
+

@@ -1,5 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Interop;
 
 namespace SystemeCaisse.UI.Views
 {
@@ -14,8 +16,19 @@ namespace SystemeCaisse.UI.Views
         {
             if (DataContext is ViewModels.AnalysisViewModel vm)
             {
-                // v29: Simple activity signal. Software rendering prevents GPU deadlocks.
-                vm.IsActive = (bool)e.NewValue;
+                bool isVisible = (bool)e.NewValue;
+                vm.IsActive = isVisible;
+
+                if (isVisible)
+                {
+                    // v29: Force Software Rendering globally when Analysis is active to prevent GPU deadlocks.
+                    RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
+                }
+                else
+                {
+                    // Restore to Default when leaving the tab
+                    RenderOptions.ProcessRenderMode = RenderMode.Default;
+                }
             }
         }
 
