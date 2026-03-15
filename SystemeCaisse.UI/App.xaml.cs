@@ -73,17 +73,10 @@ namespace SystemeCaisse.UI
                 // This allows the user to continue using other tabs even if an error occurred in Analysis.
                 e.Handled = true;
 
-                // Throttle UI message to prevent the "popup storm" (v20)
-                if ((DateTime.Now - _lastErrorTime).TotalSeconds < 60) return;
-                _lastErrorTime = DateTime.Now;
-
-                // Show a non-blocking error message
-                MessageBox.Show(
-                    "Une erreur mineure est survenue lors de l'affichage des graphiques. " +
-                    "Vous pouvez continuer à utiliser l'application.\n\nDétails de l'erreur : " + e.Exception.Message,
-                    "Information de Stabilité", 
-                    MessageBoxButton.OK, 
-                    MessageBoxImage.Information);
+                // v22: Silent Stability. We removed the MessageBox.Show here because it causes
+                // a "Modal Loop" (the popup refresh triggers another error) which freezes the UI.
+                // The error is still logged to crash_log.txt for developer diagnosis.
+                System.Diagnostics.Debug.WriteLine($"SILENT STABILITY: Handled background error: {e.Exception.Message}");
             };
             TaskScheduler.UnobservedTaskException += (s, e) => { LogException(e.Exception, "TaskScheduler"); e.SetObserved(); };
         }

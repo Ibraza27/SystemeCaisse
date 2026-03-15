@@ -148,12 +148,10 @@ namespace SystemeCaisse.UI.ViewModels
                 OnPropertyChanged(nameof(XAxes));
                 OnPropertyChanged(nameof(YAxes));
             });
-
             try
             {
                 using var context = await _contextFactory.CreateDbContextAsync(token);
-
-                if (token.IsCancellationRequested) return;
+                if (!IsActive || token.IsCancellationRequested) return;
 
                 // 1. Fetch Sales Lines in Period (Include Vente for Date/Time grouping)
                 var lines = await context.LignesVente.AsNoTracking()
@@ -161,10 +159,11 @@ namespace SystemeCaisse.UI.ViewModels
                     .Where(l => l.Vente != null && l.Vente.CreatedAt >= StartDate && l.Vente.CreatedAt <= EndDate)
                     .ToListAsync(token);
                 
-                if (token.IsCancellationRequested) return;
+                if (!IsActive || token.IsCancellationRequested) return;
                     
-               // 2. Fetch all products to get Categories and Cost Prices
-               var products = await context.Produits.AsNoTracking().ToDictionaryAsync(p => p.Id);
+                // 2. Fetch all products to get Categories and Cost Prices
+                var products = await context.Produits.AsNoTracking().ToDictionaryAsync(p => p.Id, token);
+                if (!IsActive || token.IsCancellationRequested) return;
 
                 // 3. Group and Calculate (Products)
                 var productGroups = lines
@@ -191,6 +190,8 @@ namespace SystemeCaisse.UI.ViewModels
                     .OrderByDescending(x => x.TotalRevenue)
                     .ToList();
 
+                if (!IsActive) return;
+
                 // 4. Group and Calculate (Categories)
                 var catGroups = lines
                     .GroupBy(l => products.ContainsKey(l.ProduitId ?? 0) ? products[l.ProduitId ?? 0].Categorie ?? "Divers" : "Divers")
@@ -211,6 +212,8 @@ namespace SystemeCaisse.UI.ViewModels
                     .OrderByDescending(x => x.TotalRevenue)
                     .ToList();
 
+                if (!IsActive) return;
+
                 // 5. Group and Calculate (Temporal)
                 var timeGroups = lines
                     .GroupBy(l => l.Vente?.CreatedAt.Date ?? DateTime.MinValue)
@@ -224,8 +227,11 @@ namespace SystemeCaisse.UI.ViewModels
                     .OrderBy(x => x.Date)
                     .ToList();
 
+                if (!IsActive) return;
+
                 Application.Current.Dispatcher.Invoke(() => 
                 {
+                    if (!IsActive) return;
                     ProductAnalysis.Clear();
                     foreach (var item in productGroups) ProductAnalysis.Add(item);
 
@@ -236,8 +242,9 @@ namespace SystemeCaisse.UI.ViewModels
                     foreach (var item in timeGroups) TimeAnalysis.Add(item);
 
                     PrepareCharts(catGroups, timeGroups, lines);
-                });
+                }, System.Windows.Threading.DispatcherPriority.Render);
             }
+
             catch (Exception ex)
             {
                 MessageBox.Show($"Erreur Analyse : {ex.Message}");
