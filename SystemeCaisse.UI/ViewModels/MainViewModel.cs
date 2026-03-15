@@ -78,7 +78,7 @@ namespace SystemeCaisse.UI.ViewModels
 
         private void UpdateSearchSuggestions()
         {
-            Application.Current.Dispatcher.Invoke(() => 
+            Application.Current.Dispatcher.BeginInvoke(new Action(() => 
             {
                 SearchSuggestions.Clear();
                 if (string.IsNullOrWhiteSpace(SearchText) || SearchText.Length < 1) return;
@@ -316,7 +316,7 @@ namespace SystemeCaisse.UI.ViewModels
             Task.Run(async () => 
             {
                 await CalculateProductPopularity();
-                Application.Current.Dispatcher.Invoke(() => ProductsView.Refresh());
+                Application.Current.Dispatcher.BeginInvoke(new Action(() => ProductsView.Refresh()), System.Windows.Threading.DispatcherPriority.Background);
             });
 
             ProductsView = CollectionViewSource.GetDefaultView(Produits);
@@ -697,12 +697,12 @@ namespace SystemeCaisse.UI.ViewModels
                     using var context = _contextFactory.CreateDbContext();
                     await CalculateProductPopularity(); 
                     
-                    Application.Current.Dispatcher.Invoke(() => 
+                    Application.Current.Dispatcher.BeginInvoke(new Action(() => 
                     {
                         DashboardVM.LoadDashboardDataAsync().ConfigureAwait(false);
                         ProductsView.Refresh();
                         StocksVM.LoadData();
-                    });
+                    }), System.Windows.Threading.DispatcherPriority.Background);
                 });
             }
             catch (Exception ex)

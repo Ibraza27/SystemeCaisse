@@ -252,14 +252,15 @@ namespace SystemeCaisse.UI.ViewModels
             {
                 // v23: Silent Stability. We log instead of showing a MessageBox to avoid modal loops.
                 System.Diagnostics.Debug.WriteLine($"SILENT STABILITY: Analysis Error: {ex.Message}");
-                Application.Current.Dispatcher.Invoke(() => 
+                Application.Current.Dispatcher.BeginInvoke(new Action(() => 
                 {
                     IsLoading = false;
-                });
+                }), System.Windows.Threading.DispatcherPriority.Background);
             }
             finally
             {
-                IsLoading = false;
+                // v27: Ensure IsLoading is reset asynchronously
+                _ = Application.Current.Dispatcher.BeginInvoke(new Action(() => IsLoading = false), System.Windows.Threading.DispatcherPriority.Background);
             }
         }
 
@@ -269,8 +270,8 @@ namespace SystemeCaisse.UI.ViewModels
             _lastTemporal = temporal;
             _lastLines = lines;
             
-            // Run on UI thread to ensure collections are updated safely
-            Application.Current.Dispatcher.Invoke(() => UpdateCharts());
+            // Run on UI thread to ensure collections are updated safely (v27: Non-blocking)
+            Application.Current.Dispatcher.BeginInvoke(new Action(() => UpdateCharts()), System.Windows.Threading.DispatcherPriority.Background);
         }
 
         private void UpdateCharts()
@@ -280,7 +281,7 @@ namespace SystemeCaisse.UI.ViewModels
             // Run on UI thread to avoid cross-thread exceptions with ObservableCollection
             if (!Application.Current.Dispatcher.CheckAccess())
             {
-                Application.Current.Dispatcher.Invoke(() => UpdateCharts());
+                Application.Current.Dispatcher.BeginInvoke(new Action(() => UpdateCharts()), System.Windows.Threading.DispatcherPriority.Background);
                 return;
             }
 

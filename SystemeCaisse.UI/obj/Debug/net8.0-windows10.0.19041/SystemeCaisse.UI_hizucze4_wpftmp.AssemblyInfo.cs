@@ -10,13 +10,15 @@
 using System;
 using System.Reflection;
 
-[assembly: System.Reflection.AssemblyCompanyAttribute("SystemeCaisse.Infrastructure")]
+[assembly: System.Reflection.AssemblyCompanyAttribute("SystemeCaisse.UI")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
 [assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a4c5f732e8ca7ddd57ff9a94689a46f642da7905")]
-[assembly: System.Reflection.AssemblyProductAttribute("SystemeCaisse.Infrastructure")]
-[assembly: System.Reflection.AssemblyTitleAttribute("SystemeCaisse.Infrastructure")]
+[assembly: System.Reflection.AssemblyProductAttribute("SystemeCaisse.UI")]
+[assembly: System.Reflection.AssemblyTitleAttribute("SystemeCaisse.UI")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+[assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows10.0.19041.0")]
+[assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows10.0.19041.0")]
 
 // Généré par la classe MSBuild WriteCodeFragment.
 

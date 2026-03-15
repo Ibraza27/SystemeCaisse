@@ -16,5 +16,5 @@ s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\App.xaml
 2641966281216
 Controls\KpiCard.xaml;Controls\SimpleLineChart.xaml;Controls\SimplePieChart.xaml;MainWindow.xaml;Views\AnalysisView.xaml;Views\CartItemSelectionWindow.xaml;Views\DashboardView.xaml;Views\DiscountValueInputWindow.xaml;Views\DiscountWindow.xaml;Views\HistoryView.xaml;Views\InventoryView.xaml;Views\ManualDiscountSelectionWindow.xaml;Views\ProductNotFoundWindow.xaml;Views\ProductSelectionWindow.xaml;Views\ProductsView.xaml;Views\PromotionsView.xaml;Views\QuantityInputWindow.xaml;Views\QuickAddProductWindow.xaml;Views\ReceiptSummaryWindow.xaml;Views\SalesView.xaml;Views\SettingsView.xaml;Views\SplashScreen.xaml;Views\StockOverviewView.xaml;Views\StocksView.xaml;Views\TicketView.xaml;Views\WeightInputWindow.xaml;
 
-False
+True
 
