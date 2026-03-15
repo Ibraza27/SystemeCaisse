@@ -15,3 +15,4 @@ s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\obj\Debug\net8.0\refi
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\obj\Debug\net8.0\SystemeCaisse.Infrastructure.pdb
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\obj\Debug\net8.0\SystemeCaisse.Infrastructure.genruntimeconfig.cache
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\obj\Debug\net8.0\ref\SystemeCaisse.Infrastructure.dll
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\obj\Debug\net8.0\SystemeCaisse.Infrastructure.sourcelink.json

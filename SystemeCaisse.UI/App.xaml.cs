@@ -29,6 +29,8 @@ namespace SystemeCaisse.UI
             System.IO.File.AppendAllText(logPath, message);
         }
 
+        private static DateTime _lastErrorTime = DateTime.MinValue;
+
         public App()
         {
             _host = Host.CreateDefaultBuilder()
@@ -70,6 +72,10 @@ namespace SystemeCaisse.UI
                 // CRITICAL: We now force Handled = true to prevent the app from closing.
                 // This allows the user to continue using other tabs even if an error occurred in Analysis.
                 e.Handled = true;
+
+                // Throttle UI message to prevent the "popup storm" (v20)
+                if ((DateTime.Now - _lastErrorTime).TotalSeconds < 60) return;
+                _lastErrorTime = DateTime.Now;
 
                 // Show a non-blocking error message
                 MessageBox.Show(

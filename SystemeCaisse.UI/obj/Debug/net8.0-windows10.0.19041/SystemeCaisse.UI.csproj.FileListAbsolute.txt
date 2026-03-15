@@ -260,3 +260,4 @@ s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\obj\Debug\net8.0-windows10.0.1904
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\obj\Debug\net8.0-windows10.0.19041\SystemeCaisse.UI.pdb
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\obj\Debug\net8.0-windows10.0.19041\SystemeCaisse.UI.genruntimeconfig.cache
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\obj\Debug\net8.0-windows10.0.19041\ref\SystemeCaisse.UI.dll
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\obj\Debug\net8.0-windows10.0.19041\SystemeCaisse.UI.sourcelink.json

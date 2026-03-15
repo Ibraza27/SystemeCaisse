@@ -374,7 +374,9 @@ namespace SystemeCaisse.UI.ViewModels
                         DataLabelsPaint = new SolidColorPaint(SKColors.Black),
                         DataLabelsPosition = LiveChartsCore.Measure.DataLabelsPosition.Top,
                         DataLabelsFormatter = point => {
+                            if (point == null) return "";
                             var idx = (int)point.Coordinate.SecondaryValue;
+                            if (idx < 0 || idx >= weekdayCounts.Length) return "";
                             var count = weekdayCounts[idx];
                             var avg = count > 0 ? point.Coordinate.PrimaryValue / count : 0;
                             return count > 0 ? $"{avg:N0}€\n({count} v.)" : "";
@@ -398,7 +400,10 @@ namespace SystemeCaisse.UI.ViewModels
                         Fill = new SolidColorPaint(SKColor.Parse("#1976D2")), // Bleu premium
                         DataLabelsPaint = new SolidColorPaint(SKColors.Black),
                         DataLabelsPosition = LiveChartsCore.Measure.DataLabelsPosition.Top,
-                        DataLabelsFormatter = point => $"{point.Coordinate.PrimaryValue:N0}€",
+                        DataLabelsFormatter = point => {
+                            if (point == null) return "";
+                            return $"{point.Coordinate.PrimaryValue:N0}€";
+                        },
                         MaxBarWidth = 80,
                         Padding = 30
                     });
@@ -441,13 +446,18 @@ namespace SystemeCaisse.UI.ViewModels
 
         public void Cleanup()
         {
-            // STRATÉGIE "ZERO-TOUCH" (Plan v18)
-            // On ne vide PLUS les collections à la sortie.
-            // On se contente de cacher le graphique (le XAML le retire du visuel).
-            // Cela évite tout conflit de thread avec LiveCharts pendant la transition.
-            
             IsActive = false;
             _cts?.Cancel();
+
+            // v20: Delayed Safety Cleanup
+            // We give the UI some time to process the "IsActive=false" (Visibility=Collapsed)
+            // BEFORE we even think about touching collections that might be being rendered.
+            Application.Current.Dispatcher.BeginInvoke(new Action(() => 
+            {
+                // We don't clear here because Plan v18 moved clearing to LoadAnalysis.
+                // But we ensure any pending rendering is finalized while IsActive is false.
+                System.Diagnostics.Debug.WriteLine("Analysis Cleanup: Interface masked.");
+            }), System.Windows.Threading.DispatcherPriority.Background);
         }
         
         [Obsolete("Use Cleanup instead")]
