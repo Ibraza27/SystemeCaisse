@@ -22,6 +22,8 @@ namespace SystemeCaisse.UI.Models
     {
         public string Label { get; set; }
         public double Value { get; set; }
+        public Brush? ColorBrush { get; set; }
+        public string? SecondaryLabel { get; set; }
     }
 
     public class PieDataPoint

@@ -10,11 +10,11 @@ none
 false
 TRACE;DEBUG;NET;NET8_0;NETCOREAPP;WINDOWS;WINDOWS10_0_19041_0;NET5_0_OR_GREATER;NET6_0_OR_GREATER;NET7_0_OR_GREATER;NET8_0_OR_GREATER;NETCOREAPP3_0_OR_GREATER;NETCOREAPP3_1_OR_GREATER;WINDOWS10_0_19041_0_OR_GREATER;WINDOWS10_0_18362_0_OR_GREATER;WINDOWS10_0_17763_0_OR_GREATER;WINDOWS8_0_OR_GREATER;WINDOWS7_0_OR_GREATER
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\App.xaml
-26-2035583939
+27-340419799
 
-472070224766
+48643321834
 2641966281216
-Controls\KpiCard.xaml;Controls\SimpleLineChart.xaml;Controls\SimplePieChart.xaml;MainWindow.xaml;Views\AnalysisView.xaml;Views\CartItemSelectionWindow.xaml;Views\DashboardView.xaml;Views\DiscountValueInputWindow.xaml;Views\DiscountWindow.xaml;Views\HistoryView.xaml;Views\InventoryView.xaml;Views\ManualDiscountSelectionWindow.xaml;Views\ProductNotFoundWindow.xaml;Views\ProductSelectionWindow.xaml;Views\ProductsView.xaml;Views\PromotionsView.xaml;Views\QuantityInputWindow.xaml;Views\QuickAddProductWindow.xaml;Views\ReceiptSummaryWindow.xaml;Views\SalesView.xaml;Views\SettingsView.xaml;Views\SplashScreen.xaml;Views\StockOverviewView.xaml;Views\StocksView.xaml;Views\TicketView.xaml;Views\WeightInputWindow.xaml;
+Controls\KpiCard.xaml;Controls\SimpleBarChart.xaml;Controls\SimpleLineChart.xaml;Controls\SimplePieChart.xaml;MainWindow.xaml;Views\AnalysisView.xaml;Views\CartItemSelectionWindow.xaml;Views\DashboardView.xaml;Views\DiscountValueInputWindow.xaml;Views\DiscountWindow.xaml;Views\HistoryView.xaml;Views\InventoryView.xaml;Views\ManualDiscountSelectionWindow.xaml;Views\ProductNotFoundWindow.xaml;Views\ProductSelectionWindow.xaml;Views\ProductsView.xaml;Views\PromotionsView.xaml;Views\QuantityInputWindow.xaml;Views\QuickAddProductWindow.xaml;Views\ReceiptSummaryWindow.xaml;Views\SalesView.xaml;Views\SettingsView.xaml;Views\SplashScreen.xaml;Views\StockOverviewView.xaml;Views\StocksView.xaml;Views\TicketView.xaml;Views\WeightInputWindow.xaml;
 
-True
+False
 

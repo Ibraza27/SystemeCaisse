@@ -3,12 +3,15 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
-             xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
+             xmlns:ctrl="clr-namespace:SystemeCaisse.UI.Controls"
              xmlns:conv="clr-namespace:SystemeCaisse.UI.Converters"
              mc:Ignorable="d" 
-             Unloaded="UserControl_Unloaded"
              d:DesignHeight="800" d:DesignWidth="1100">
     <UserControl.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVis" Invert="False"/>
+        <conv:BoolToVisibilityConverter x:Key="InvertedBoolToVis" Invert="True"/>
+        <conv:StringToVisibilityConverter x:Key="StringToVis"/>
+        
         <Style x:Key="AnalysisTypeButtonStyle" TargetType="RadioButton">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Margin" Value="0,0,15,0"/>
@@ -88,7 +91,6 @@
             </StackPanel>
         </Border>
 
-        <!-- Content Area -->
         <Grid Grid.Row="2">
             <!-- List View (TabControl) -->
             <TabControl Margin="10" Visibility="{Binding IsChartViewActive, Converter={StaticResource InvertedBoolToVis}}">
@@ -149,43 +151,62 @@
                 </TabItem>
             </TabControl>
 
-            <!-- Chart View (Scrollable like screenshots) -->
+            <!-- Chart View (Scrollable mirroring Dashboard style) -->
             <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding IsChartViewActive, Converter={StaticResource BoolToVis}}">
-                <!-- 
-                    CRITICAL STABILITY FIX (Plan v19):
-                    We no longer nulify the Content of this control when leaving the tab.
-                    Instead, we use Visibility to hide the charts. This keeps the LiveCharts
-                    components "alive" but inactive in the visual tree, preventing SkiaSharp
-                    rendering head-on crashes during win32 handle disposal.
-                -->
-                <ContentControl x:Name="ChartDisplayControl" Grid.Row="2"
-                                Visibility="{Binding IsActive, Converter={StaticResource BoolToVis}}">
-                    <StackPanel Margin="0,0,10,20">
-                        <Border Background="White" CornerRadius="10" BorderBrush="#CCC" BorderThickness="1" Margin="0,0,0,15" Padding="15">
-                            <Border.Style>
-                                <Style TargetType="Border">
-                                    <Setter Property="MinHeight" Value="420"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsBottomChartVisible}" Value="False">
-                                            <Setter Property="MinHeight" Value="800"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Border.Style>
-                            <DockPanel>
-                                <TextBlock Text="{Binding TopChartTitle}" HorizontalAlignment="Center" Margin="0,0,0,10" DockPanel.Dock="Top" FontSize="16" FontWeight="Bold" Foreground="#333"/>
-                                <lvc:CartesianChart Series="{Binding RevenueSeries}" XAxes="{Binding XAxes}" YAxes="{Binding YAxes}" LegendPosition="Bottom" ZoomMode="X"/>
-                            </DockPanel>
-                        </Border>
-                        <Border Background="White" CornerRadius="10" BorderBrush="#CCC" BorderThickness="1" MinHeight="420" Padding="15"
-                                Visibility="{Binding IsBottomChartVisible, Converter={StaticResource BoolToVis}}">
-                            <DockPanel>
-                                <TextBlock Text="{Binding BottomChartTitle}" HorizontalAlignment="Center" Margin="0,0,0,10" DockPanel.Dock="Top" FontSize="16" FontWeight="Bold" Foreground="#333"/>
-                                <lvc:CartesianChart Series="{Binding SalesCountSeries}" XAxes="{Binding XAxes}" YAxes="{Binding YAxes}" LegendPosition="Bottom" ZoomMode="X"/>
-                            </DockPanel>
-                        </Border>
-                    </StackPanel>
-                </ContentControl>
+                <StackPanel Margin="15">
+                    <!-- Top Chart -->
+                    <Border Background="White" CornerRadius="12" Padding="25" Margin="0,0,0,20">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="15" ShadowDepth="2" Opacity="0.05" Color="#000"/>
+                        </Border.Effect>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="550"/>
+                            </Grid.RowDefinitions>
+                            
+                            <StackPanel Margin="0,0,0,20">
+                                <TextBlock Text="{Binding TopChartTitle}" FontSize="18" FontWeight="Bold" Foreground="#34495E"/>
+                                <TextBlock Text="Données monétaires de la période" FontSize="13" Foreground="#95A5A6"/>
+                            </StackPanel>
+
+                            <ctrl:SimpleLineChart Grid.Row="1" 
+                                                  DataPoints="{Binding RevenuePoints}" 
+                                                  LineColor="#2E7D32"
+                                                  AreaBrush="#2E7D32"
+                                                  PointBrush="White"
+                                                  Visibility="{Binding CurrentType, Converter={StaticResource StringToVis}, ConverterParameter='Day'}"/>
+
+                            <ctrl:SimpleBarChart Grid.Row="1" 
+                                                 DataPoints="{Binding RevenuePoints}" 
+                                                 BarColor="#2E7D32"
+                                                 Visibility="{Binding CurrentType, Converter={StaticResource StringToVis}, ConverterParameter='Hour,Weekday,Category'}"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Bottom Chart -->
+                    <Border Background="White" CornerRadius="12" Padding="25"
+                            Visibility="{Binding IsBottomChartVisible, Converter={StaticResource BoolToVis}}">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="15" ShadowDepth="2" Opacity="0.05" Color="#000"/>
+                        </Border.Effect>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="550"/>
+                            </Grid.RowDefinitions>
+                            
+                            <StackPanel Margin="0,0,0,20">
+                                <TextBlock Text="{Binding BottomChartTitle}" FontSize="18" FontWeight="Bold" Foreground="#34495E"/>
+                                <TextBlock Text="Fréquentation et volume de ventes" FontSize="13" Foreground="#95A5A6"/>
+                            </StackPanel>
+
+                            <ctrl:SimpleBarChart Grid.Row="1" 
+                                                 DataPoints="{Binding SalesCountPoints}" 
+                                                 BarColor="#6464FF"/> 
+                        </Grid>
+                    </Border>
+                </StackPanel>
             </ScrollViewer>
 
             <!-- Loading Overlay -->

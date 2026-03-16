@@ -21,6 +21,12 @@ namespace SystemeCaisse.UI.Controls
         public static readonly DependencyProperty LineColorProperty =
             DependencyProperty.Register("LineColor", typeof(Brush), typeof(SimpleLineChart), new PropertyMetadata(Brushes.Blue));
 
+        public static readonly DependencyProperty AreaBrushProperty =
+            DependencyProperty.Register("AreaBrush", typeof(Brush), typeof(SimpleLineChart), new PropertyMetadata(null));
+
+        public static readonly DependencyProperty PointBrushProperty =
+            DependencyProperty.Register("PointBrush", typeof(Brush), typeof(SimpleLineChart), new PropertyMetadata(Brushes.White));
+
         public IEnumerable<LineDataPoint> DataPoints
         {
             get { return (IEnumerable<LineDataPoint>)GetValue(DataPointsProperty); }
@@ -31,6 +37,18 @@ namespace SystemeCaisse.UI.Controls
         {
             get { return (Brush)GetValue(LineColorProperty); }
             set { SetValue(LineColorProperty, value); }
+        }
+
+        public Brush AreaBrush
+        {
+            get { return (Brush)GetValue(AreaBrushProperty); }
+            set { SetValue(AreaBrushProperty, value); }
+        }
+
+        public Brush PointBrush
+        {
+            get { return (Brush)GetValue(PointBrushProperty); }
+            set { SetValue(PointBrushProperty, value); }
         }
 
         public SimpleLineChart()
@@ -59,75 +77,89 @@ namespace SystemeCaisse.UI.Controls
 
             var points = DataPoints.ToList();
             double maxVal = points.Max(p => p.Value);
-            double minVal = 0; // Always start Y at 0
-            if (maxVal == 0) maxVal = 100; // Avoid divide by zero
+            double minVal = 0; 
+            if (maxVal == 0) maxVal = 100; 
 
             double width = ChartCanvas.ActualWidth;
-            double height = ChartCanvas.ActualHeight;
+            double height = ChartCanvas.ActualHeight - 20; // 20px padding at top
             double stepX = width / (points.Count - 1 > 0 ? points.Count - 1 : 1);
 
             var polyline = new Polyline
             {
                 Stroke = LineColor,
-                StrokeThickness = 3,
+                StrokeThickness = 2.5,
                 Points = new PointCollection()
             };
 
-            // Draw Grid Lines & X Labels
+            // Grid lines (Thinner and more subtle)
+            for (int j = 0; j <= 4; j++)
+            {
+                double yLine = (height + 20) - (j * (height / 4));
+                var line = new Line 
+                { 
+                    X1 = 0, Y1 = yLine, X2 = width, Y2 = yLine, 
+                    Stroke = new SolidColorBrush(Color.FromRgb(240, 240, 240)), 
+                    StrokeThickness = 1
+                };
+                ChartCanvas.Children.Add(line);
+            }
+
+            // Draw Area fill FIRST
+            if (AreaBrush != null)
+            {
+                var areaPolygon = new Polygon
+                {
+                    Fill = AreaBrush,
+                    Opacity = 0.3,
+                    Points = new PointCollection()
+                };
+                areaPolygon.Points.Add(new Point(0, height + 20));
+                for (int i = 0; i < points.Count; i++)
+                {
+                    double x = i * stepX;
+                    double y = (height + 20) - ((points[i].Value / maxVal) * height);
+                    areaPolygon.Points.Add(new Point(x, y));
+                }
+                areaPolygon.Points.Add(new Point(width, height + 20));
+                ChartCanvas.Children.Add(areaPolygon);
+            }
+
+            // Draw X Labels & Points
             for (int i = 0; i < points.Count; i++)
             {
                 double x = i * stepX;
                 double val = points[i].Value;
-                // Invert Y axis (0 is top)
-                double y = height - ((val / maxVal) * height);
+                double y = (height + 20) - ((val / maxVal) * height);
                 
                 polyline.Points.Add(new Point(x, y));
 
-                // Dot at point
-                var dot = new Ellipse { Width = 8, Height = 8, Fill = Brushes.White, Stroke = LineColor, StrokeThickness = 2 };
-                Canvas.SetLeft(dot, x - 4);
-                Canvas.SetTop(dot, y - 4);
+                // Professional dot
+                var dotPointBrush = points[i].ColorBrush ?? LineColor;
+                var dot = new Ellipse { Width = 6, Height = 6, Fill = PointBrush, Stroke = dotPointBrush, StrokeThickness = 1.5 };
+                Canvas.SetLeft(dot, x - 3);
+                Canvas.SetTop(dot, y - 3);
                 ChartCanvas.Children.Add(dot);
 
-                // Tooltip trigger
-                dot.ToolTip = $"{points[i].Label}: {val:C2}";
+                // Tooltip
+                dot.ToolTip = $"{points[i].Label}: {val:N2}";
 
-                // X Label (Skip some if too many)
-                if (points.Count <= 12 || i % (points.Count / 6) == 0) 
+                // X Label
+                if (points.Count <= 12 || i % (points.Count / 8) == 0) 
                 {
                     var lbl = new TextBlock { Text = points[i].Label, FontSize = 10, Foreground = Brushes.Gray };
                     lbl.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-                    Canvas.SetLeft(lbl, x - (lbl.DesiredSize.Width / 2) + 30); // Offset for container margin
+                    Canvas.SetLeft(lbl, x - (lbl.DesiredSize.Width / 2));
                     Canvas.SetTop(lbl, 5);
                     AxisXCanvas.Children.Add(lbl);
-                    
-                    // Vertical Grid Line
-                    var line = new Line 
-                    { 
-                        X1 = x, Y1 = 0, X2 = x, Y2 = height, 
-                        Stroke = Brushes.LightGray, StrokeDashArray = new DoubleCollection { 2, 2 } 
-                    };
-                    ChartCanvas.Children.Add(line);
                 }
             }
 
-            // Draw Y Labels (0, 50%, 100%)
+            // Draw Y Labels
             DrawYLabel(0, 0, height);
             DrawYLabel(maxVal / 2, height / 2, height);
             DrawYLabel(maxVal, height, height);
 
             ChartCanvas.Children.Add(polyline);
-            
-            // Fill area under curve
-            var polygon = new Polygon
-            {
-                Fill = LineColor,
-                Opacity = 0.2,
-                Points = polyline.Points.Clone()
-            };
-            polygon.Points.Add(new Point(width, height));
-            polygon.Points.Add(new Point(0, height));
-            ChartCanvas.Children.Insert(0, polygon);
         }
 
         private void DrawYLabel(double val, double yPosFromBottom, double totalHeight)

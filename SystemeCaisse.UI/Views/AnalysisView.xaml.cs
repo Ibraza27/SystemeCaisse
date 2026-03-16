@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Interop;
+using SystemeCaisse.UI;
 
 namespace SystemeCaisse.UI.Views
 {
@@ -20,10 +21,6 @@ namespace SystemeCaisse.UI.Views
                 // handle by App.xaml.cs to avoid transition deadlocks.
                 vm.IsActive = (bool)e.NewValue;
             }
-        }
-
-        private void UserControl_Unloaded(object sender, RoutedEventArgs e)
-        {
         }
     }
 }

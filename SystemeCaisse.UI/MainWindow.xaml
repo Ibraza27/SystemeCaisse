@@ -68,7 +68,7 @@
 
         <!-- Navigation Tabs -->
         <!-- Navigation Tabs (Default to Caisse/Index 1) -->
-        <TabControl x:Name="mainTabs" Grid.Row="1" SelectedIndex="{Binding SelectedTabIndex}" SelectionChanged="TabControl_SelectionChanged" Background="Transparent" BorderThickness="0" Margin="10">
+        <TabControl x:Name="mainTabs" Grid.Row="1" SelectedIndex="{Binding SelectedTabIndex}" Background="Transparent" BorderThickness="0" Margin="10">
             <TabControl.Resources>
                 <Style TargetType="TabItem">
                     <Setter Property="FontSize" Value="14"/>
