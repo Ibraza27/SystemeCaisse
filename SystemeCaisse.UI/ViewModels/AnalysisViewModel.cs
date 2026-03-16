@@ -353,22 +353,19 @@ namespace SystemeCaisse.UI.ViewModels
                         var wsSummary = workbook.Worksheets.Add("Résumé");
                         
                         // Title & Period as per screenshot
-                        var titleCell = wsSummary.Cell(1, 1);
-                        titleCell.Value = "Rapport des ventes";
-                        titleCell.Style.Font.Bold = true;
-                        titleCell.Style.Font.FontSize = 20;
+                        wsSummary.Cell(1, 1).Value = "Rapport des ventes";
+                        wsSummary.Cell(1, 1).Style.Font.Bold = true;
+                        wsSummary.Cell(1, 1).Style.Font.FontSize = 20;
 
-                        var periodCell = wsSummary.Cell(2, 1);
-                        periodCell.Value = $"Du {StartDate:dd/MM/yyyy} au {EndDate:dd/MM/yyyy}";
-                        periodCell.Style.Font.Bold = true;
-                        periodCell.Style.Font.FontSize = 16;
+                        wsSummary.Cell(2, 1).Value = $"Du {StartDate:dd/MM/yyyy} au {EndDate:dd/MM/yyyy}";
+                        wsSummary.Cell(2, 1).Style.Font.Bold = true;
+                        wsSummary.Cell(2, 1).Style.Font.FontSize = 16;
                         
                         wsSummary.Cell(5, 1).Value = "Statistiques générales";
                         wsSummary.Cell(5, 1).Style.Font.Bold = true;
                         wsSummary.Cell(5, 1).Style.Font.FontSize = 14;
 
                         var totalRevenue = ProductAnalysis.Sum(x => x.TotalRevenue);
-                        var totalMargin = ProductAnalysis.Sum(x => x.TotalMargin);
                         var totalSales = _lastTemporal.Sum(x => x.TicketsCount);
                         var totalItems = _lastLines.Sum(x => (double)x.Quantite);
                         var avgTicket = totalSales != 0 ? (double)totalRevenue / totalSales : 0;
@@ -388,15 +385,15 @@ namespace SystemeCaisse.UI.ViewModels
                         wsSummary.Cell(11, 1).Value = "Nombre d'articles vendus";
                         wsSummary.Cell(11, 2).Value = totalItems;
 
-                        // Styling Summary matches capture
-                        var headerRange = wsSummary.Range(7, 1, 7, 2);
-                        headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#4472C4");
-                        headerRange.Style.Font.FontColor = XLColor.White;
-                        headerRange.Style.Font.Bold = true;
-                        
-                        wsSummary.Range(7, 1, 11, 2).Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
-                        wsSummary.Range(7, 1, 11, 2).Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+                        // Styling Summary with BORDERS as requested
+                        var dataRange = wsSummary.Range(7, 1, 11, 2);
+                        dataRange.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+                        dataRange.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
 
+                        wsSummary.Range(7, 1, 7, 2).Style.Fill.BackgroundColor = XLColor.FromHtml("#4472C4");
+                        wsSummary.Range(7, 1, 7, 2).Style.Font.FontColor = XLColor.White;
+                        wsSummary.Range(7, 1, 7, 2).Style.Font.Bold = true;
+                        
                         wsSummary.Cell(9, 2).Style.NumberFormat.Format = "#,##0.00 €";
                         wsSummary.Cell(10, 2).Style.NumberFormat.Format = "#,##0.00 €";
                         wsSummary.Columns().AdjustToContents();
@@ -420,8 +417,7 @@ namespace SystemeCaisse.UI.ViewModels
                             row++;
                         }
                         
-                        var tableDetails = wsDetails.Range(1, 1, Math.Max(1, row - 1), 8).CreateTable();
-                        tableDetails.Theme = XLTableTheme.TableStyleMedium9;
+                        wsDetails.Range(1, 1, Math.Max(1, row - 1), 8).CreateTable().Theme = XLTableTheme.TableStyleMedium9;
                         wsDetails.Columns().AdjustToContents();
 
                         // --- 3. SHEET: TOP PRODUITS ---
@@ -440,13 +436,12 @@ namespace SystemeCaisse.UI.ViewModels
                             wsTop.Cell(row, 5).Value = totalRevenue != 0 ? (double)(p.TotalRevenue / totalRevenue) : 0;
                             row++;
                         }
-                        var tableTop = wsTop.Range(1, 1, Math.Max(1, row - 1), 5).CreateTable();
-                        tableTop.Theme = XLTableTheme.TableStyleMedium9;
+                        wsTop.Range(1, 1, Math.Max(1, row - 1), 5).CreateTable().Theme = XLTableTheme.TableStyleMedium9;
                         wsTop.Column(5).Style.NumberFormat.Format = "0.0%";
                         wsTop.Column(4).Style.NumberFormat.Format = "#,##0.00 €";
                         wsTop.Columns().AdjustToContents();
 
-                        // --- 4. SHEET: GRAPHIQUES (Data Source) ---
+                        // --- 4. SHEET: GRAPHIQUES (Visual Chart) ---
                         var wsGfx = workbook.Worksheets.Add("Graphiques");
                         wsGfx.Cell(1, 1).Value = "Evolution du CA";
                         wsGfx.Cell(1, 1).Style.Font.Bold = true;
@@ -464,6 +459,21 @@ namespace SystemeCaisse.UI.ViewModels
                         }
                         wsGfx.Column(2).Style.NumberFormat.Format = "#,##0.00";
                         wsGfx.Columns().AdjustToContents();
+
+                        // EMBED THE VISUAL CHART
+                        try
+                        {
+                            using (var chartStream = GenerateExcelChartImage(_lastTemporal))
+                            {
+                                if (chartStream != null)
+                                {
+                                    wsGfx.AddPicture(chartStream)
+                                         .WithName("EvolutionChart")
+                                         .MoveTo(wsGfx.Cell(4, 4));
+                                }
+                            }
+                        }
+                        catch {}
 
                         // --- 5. SHEET: ANALYSE TEMPORELLE ---
                         var wsTime = workbook.Worksheets.Add("Analyse temporelle");
@@ -536,8 +546,7 @@ namespace SystemeCaisse.UI.ViewModels
                             wsProfit.Cell(row, 6).Value = cat.TotalRevenue != 0 ? (double)(cat.TotalMargin / cat.TotalRevenue) : 0;
                             row++;
                         }
-                        var tableProfit = wsProfit.Range(3, 1, Math.Max(3, row - 1), 6).CreateTable();
-                        tableProfit.Theme = XLTableTheme.TableStyleMedium9;
+                        wsProfit.Range(3, 1, Math.Max(3, row - 1), 6).CreateTable().Theme = XLTableTheme.TableStyleMedium9;
                         wsProfit.Range(4, 3, row - 1, 5).Style.NumberFormat.Format = "#,##0.00 €";
                         wsProfit.Range(4, 6, row - 1, 6).Style.NumberFormat.Format = "0.0%";
                         wsProfit.Columns().AdjustToContents();
@@ -554,6 +563,65 @@ namespace SystemeCaisse.UI.ViewModels
                 {
                     MessageBox.Show($"Erreur lors de l'export : {ex.Message}", "Erreur d'Export", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
+            }
+        }
+
+        private System.IO.MemoryStream GenerateExcelChartImage(List<TimeAnalysisItem> data)
+        {
+            if (data == null || data.Count == 0) return null;
+
+            int width = 800;
+            int height = 400;
+            int margin = 50;
+
+            using (var bmp = new System.Drawing.Bitmap(width, height))
+            using (var g = System.Drawing.Graphics.FromImage(bmp))
+            {
+                g.Clear(System.Drawing.Color.White);
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+                var points = data.OrderBy(x => x.Date).ToList();
+                double maxCA = (double)points.Max(p => p.TotalRevenue);
+                if (maxCA == 0) maxCA = 1;
+
+                // Draw Grid & Axes
+                var gridPen = new System.Drawing.Pen(System.Drawing.Color.LightGray, 1);
+                var axisPen = new System.Drawing.Pen(System.Drawing.Color.Black, 2);
+                var font = new System.Drawing.Font("Arial", 9);
+                var titleFont = new System.Drawing.Font("Arial", 14, System.Drawing.FontStyle.Bold);
+
+                g.DrawString("Evolution du chiffre d'affaires", titleFont, System.Drawing.Brushes.Black, new System.Drawing.PointF(width / 2 - 150, 10));
+
+                int stepY = 5;
+                for (int i = 0; i <= stepY; i++)
+                {
+                    float y = height - margin - (i * (height - 2 * margin) / stepY);
+                    g.DrawLine(gridPen, margin, y, width - margin, y);
+                    g.DrawString((maxCA * i / stepY).ToString("N0"), font, System.Drawing.Brushes.Gray, 5, y - 7);
+                }
+
+                // Draw Line
+                var linePen = new System.Drawing.Pen(System.Drawing.Color.FromArgb(146, 188, 89), 4);
+                float stepX = (float)(width - 2 * margin) / (points.Count - 1);
+
+                for (int i = 0; i < points.Count - 1; i++)
+                {
+                    float x1 = margin + i * stepX;
+                    float y1 = (float)(height - margin - ((double)points[i].TotalRevenue / maxCA * (height - 2 * margin)));
+                    float x2 = margin + (i + 1) * stepX;
+                    float y2 = (float)(height - margin - ((double)points[i + 1].TotalRevenue / maxCA * (height - 2 * margin)));
+
+                    g.DrawLine(linePen, x1, y1, x2, y2);
+                }
+
+                // Labels
+                g.DrawString("Date", font, System.Drawing.Brushes.Black, width / 2, height - 20);
+                g.DrawString("CA (â‚¬)", font, System.Drawing.Brushes.Black, 10, height / 2, new System.Drawing.StringFormat { FormatFlags = System.Drawing.StringFormatFlags.DirectionVertical });
+
+                var ms = new System.IO.MemoryStream();
+                bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+                ms.Position = 0;
+                return ms;
             }
         }
     }

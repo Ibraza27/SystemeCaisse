@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "WfYZHHn0NO4=",
+  "dgSpecHash": "kQXr28u6OmE=",
   "success": true,
   "projectFilePath": "s:\\PROGRAMATION\\SystemeCaisse\\SystemeCaisse.UI\\SystemeCaisse.UI.csproj",
   "expectedPackageFiles": [
@@ -60,7 +60,7 @@
     "C:\\Users\\Administrateur\\.nuget\\packages\\microsoft.extensions.options\\10.0.1\\microsoft.extensions.options.10.0.1.nupkg.sha512",
     "C:\\Users\\Administrateur\\.nuget\\packages\\microsoft.extensions.options.configurationextensions\\10.0.1\\microsoft.extensions.options.configurationextensions.10.0.1.nupkg.sha512",
     "C:\\Users\\Administrateur\\.nuget\\packages\\microsoft.extensions.primitives\\10.0.1\\microsoft.extensions.primitives.10.0.1.nupkg.sha512",
-    "C:\\Users\\Administrateur\\.nuget\\packages\\microsoft.win32.systemevents\\8.0.0\\microsoft.win32.systemevents.8.0.0.nupkg.sha512",
+    "C:\\Users\\Administrateur\\.nuget\\packages\\microsoft.win32.systemevents\\10.0.5\\microsoft.win32.systemevents.10.0.5.nupkg.sha512",
     "C:\\Users\\Administrateur\\.nuget\\packages\\mono.texttemplating\\2.2.1\\mono.texttemplating.2.2.1.nupkg.sha512",
     "C:\\Users\\Administrateur\\.nuget\\packages\\opentk\\4.3.0\\opentk.4.3.0.nupkg.sha512",
     "C:\\Users\\Administrateur\\.nuget\\packages\\opentk.compute\\4.3.0\\opentk.compute.4.3.0.nupkg.sha512",
@@ -112,7 +112,7 @@
     "C:\\Users\\Administrateur\\.nuget\\packages\\system.composition.typedparts\\6.0.0\\system.composition.typedparts.6.0.0.nupkg.sha512",
     "C:\\Users\\Administrateur\\.nuget\\packages\\system.diagnostics.diagnosticsource\\10.0.1\\system.diagnostics.diagnosticsource.10.0.1.nupkg.sha512",
     "C:\\Users\\Administrateur\\.nuget\\packages\\system.diagnostics.eventlog\\10.0.1\\system.diagnostics.eventlog.10.0.1.nupkg.sha512",
-    "C:\\Users\\Administrateur\\.nuget\\packages\\system.drawing.common\\8.0.0\\system.drawing.common.8.0.0.nupkg.sha512",
+    "C:\\Users\\Administrateur\\.nuget\\packages\\system.drawing.common\\10.0.5\\system.drawing.common.10.0.5.nupkg.sha512",
     "C:\\Users\\Administrateur\\.nuget\\packages\\system.io.packaging\\8.0.1\\system.io.packaging.8.0.1.nupkg.sha512",
     "C:\\Users\\Administrateur\\.nuget\\packages\\system.io.pipelines\\10.0.1\\system.io.pipelines.10.0.1.nupkg.sha512",
     "C:\\Users\\Administrateur\\.nuget\\packages\\system.io.ports\\10.0.1\\system.io.ports.10.0.1.nupkg.sha512",
