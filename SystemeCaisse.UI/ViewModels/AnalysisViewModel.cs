@@ -351,35 +351,54 @@ namespace SystemeCaisse.UI.ViewModels
                     {
                         // --- 1. SHEET: RÉSUMÉ ---
                         var wsSummary = workbook.Worksheets.Add("Résumé");
-                        wsSummary.Cell(1, 1).Value = "Analyse de rentabilité globale";
-                        wsSummary.Cell(1, 1).Style.Font.Bold = true;
-                        wsSummary.Cell(1, 1).Style.Font.FontSize = 16;
                         
+                        // Title & Period as per screenshot
+                        var titleCell = wsSummary.Cell(1, 1);
+                        titleCell.Value = "Rapport des ventes";
+                        titleCell.Style.Font.Bold = true;
+                        titleCell.Style.Font.FontSize = 20;
+
+                        var periodCell = wsSummary.Cell(2, 1);
+                        periodCell.Value = $"Du {StartDate:dd/MM/yyyy} au {EndDate:dd/MM/yyyy}";
+                        periodCell.Style.Font.Bold = true;
+                        periodCell.Style.Font.FontSize = 16;
+                        
+                        wsSummary.Cell(5, 1).Value = "Statistiques générales";
+                        wsSummary.Cell(5, 1).Style.Font.Bold = true;
+                        wsSummary.Cell(5, 1).Style.Font.FontSize = 14;
+
                         var totalRevenue = ProductAnalysis.Sum(x => x.TotalRevenue);
                         var totalMargin = ProductAnalysis.Sum(x => x.TotalMargin);
-                        var totalCost = totalRevenue - totalMargin;
-                        var marginRate = totalRevenue != 0 ? (double)(totalMargin / totalRevenue) : 0;
+                        var totalSales = _lastTemporal.Sum(x => x.TicketsCount);
+                        var totalItems = _lastLines.Sum(x => (double)x.Quantite);
+                        var avgTicket = totalSales != 0 ? (double)totalRevenue / totalSales : 0;
 
-                        var summaryData = wsSummary.Range(3, 1, 7, 2);
-                        wsSummary.Cell(3, 1).Value = "Indicateur";
-                        wsSummary.Cell(3, 2).Value = "Valeur";
-                        wsSummary.Cell(4, 1).Value = "CA total";
-                        wsSummary.Cell(4, 2).Value = totalRevenue;
-                        wsSummary.Cell(5, 1).Value = "Coût des marchandises";
-                        wsSummary.Cell(5, 2).Value = totalCost;
-                        wsSummary.Cell(6, 1).Value = "Marge brute";
-                        wsSummary.Cell(6, 2).Value = totalMargin;
-                        wsSummary.Cell(7, 1).Value = "Taux de marge";
-                        wsSummary.Cell(7, 2).Value = marginRate;
+                        wsSummary.Cell(7, 1).Value = "Indicateur";
+                        wsSummary.Cell(7, 2).Value = "Valeur";
+                        
+                        wsSummary.Cell(8, 1).Value = "Nombre de ventes";
+                        wsSummary.Cell(8, 2).Value = totalSales;
+                        
+                        wsSummary.Cell(9, 1).Value = "Chiffre d'affaires total";
+                        wsSummary.Cell(9, 2).Value = (double)totalRevenue;
+                        
+                        wsSummary.Cell(10, 1).Value = "Ticket moyen";
+                        wsSummary.Cell(10, 2).Value = avgTicket;
 
-                        // Styling Summary
-                        var headerRange = wsSummary.Range(3, 1, 3, 2);
-                        headerRange.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.FromHtml("#4472C4");
-                        headerRange.Style.Font.FontColor = ClosedXML.Excel.XLColor.White;
+                        wsSummary.Cell(11, 1).Value = "Nombre d'articles vendus";
+                        wsSummary.Cell(11, 2).Value = totalItems;
+
+                        // Styling Summary matches capture
+                        var headerRange = wsSummary.Range(7, 1, 7, 2);
+                        headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#4472C4");
+                        headerRange.Style.Font.FontColor = XLColor.White;
                         headerRange.Style.Font.Bold = true;
                         
-                        wsSummary.Range(4, 2, 6, 2).Style.NumberFormat.Format = "#,##0.00 €";
-                        wsSummary.Cell(7, 2).Style.NumberFormat.Format = "0.0%";
+                        wsSummary.Range(7, 1, 11, 2).Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+                        wsSummary.Range(7, 1, 11, 2).Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+
+                        wsSummary.Cell(9, 2).Style.NumberFormat.Format = "#,##0.00 €";
+                        wsSummary.Cell(10, 2).Style.NumberFormat.Format = "#,##0.00 €";
                         wsSummary.Columns().AdjustToContents();
 
                         // --- 2. SHEET: DÉTAIL DES VENTES ---
@@ -401,8 +420,8 @@ namespace SystemeCaisse.UI.ViewModels
                             row++;
                         }
                         
-                        var tableDetails = wsDetails.Range(1, 1, row - 1, 8).CreateTable();
-                        tableDetails.Theme = ClosedXML.Excel.XLTableTheme.TableStyleMedium9;
+                        var tableDetails = wsDetails.Range(1, 1, Math.Max(1, row - 1), 8).CreateTable();
+                        tableDetails.Theme = XLTableTheme.TableStyleMedium9;
                         wsDetails.Columns().AdjustToContents();
 
                         // --- 3. SHEET: TOP PRODUITS ---
@@ -421,13 +440,32 @@ namespace SystemeCaisse.UI.ViewModels
                             wsTop.Cell(row, 5).Value = totalRevenue != 0 ? (double)(p.TotalRevenue / totalRevenue) : 0;
                             row++;
                         }
-                        var tableTop = wsTop.Range(1, 1, row - 1, 5).CreateTable();
-                        tableTop.Theme = ClosedXML.Excel.XLTableTheme.TableStyleMedium9;
+                        var tableTop = wsTop.Range(1, 1, Math.Max(1, row - 1), 5).CreateTable();
+                        tableTop.Theme = XLTableTheme.TableStyleMedium9;
                         wsTop.Column(5).Style.NumberFormat.Format = "0.0%";
                         wsTop.Column(4).Style.NumberFormat.Format = "#,##0.00 €";
                         wsTop.Columns().AdjustToContents();
 
-                        // --- 4. SHEET: ANALYSE TEMPORELLE ---
+                        // --- 4. SHEET: GRAPHIQUES (Data Source) ---
+                        var wsGfx = workbook.Worksheets.Add("Graphiques");
+                        wsGfx.Cell(1, 1).Value = "Evolution du CA";
+                        wsGfx.Cell(1, 1).Style.Font.Bold = true;
+                        
+                        wsGfx.Cell(3, 1).Value = "Date";
+                        wsGfx.Cell(3, 2).Value = "CA (€)";
+                        wsGfx.Range(3, 1, 3, 2).Style.Font.Bold = true;
+
+                        row = 4;
+                        foreach (var t in _lastTemporal.OrderBy(x => x.Date))
+                        {
+                            wsGfx.Cell(row, 1).Value = t.Date.ToString("yyyy-MM-dd");
+                            wsGfx.Cell(row, 2).Value = (double)t.TotalRevenue;
+                            row++;
+                        }
+                        wsGfx.Column(2).Style.NumberFormat.Format = "#,##0.00";
+                        wsGfx.Columns().AdjustToContents();
+
+                        // --- 5. SHEET: ANALYSE TEMPORELLE ---
                         var wsTime = workbook.Worksheets.Add("Analyse temporelle");
                         wsTime.Cell(1, 1).Value = "Analyse par heure";
                         wsTime.Cell(1, 1).Style.Font.Bold = true;
@@ -449,13 +487,10 @@ namespace SystemeCaisse.UI.ViewModels
                             wsTime.Cell(4 + h, 4).Value = cnt != 0 ? ca / cnt : 0;
                         }
 
-                        // Style Hour table manually to match capture
-                        var hourRange = wsTime.Range(3, 1, 27, 4);
-                        wsTime.Range(3, 1, 3, 4).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.FromHtml("#4472C4");
-                        wsTime.Range(3, 1, 3, 4).Style.Font.FontColor = ClosedXML.Excel.XLColor.White;
+                        wsTime.Range(3, 1, 3, 4).Style.Fill.BackgroundColor = XLColor.FromHtml("#4472C4");
+                        wsTime.Range(3, 1, 3, 4).Style.Font.FontColor = XLColor.White;
                         wsTime.Range(4, 3, 27, 4).Style.NumberFormat.Format = "#,##0.00 €";
 
-                        // Weekly table on the same sheet
                         wsTime.Cell(1, 6).Value = "Analyse par jour de la semaine";
                         wsTime.Cell(1, 6).Style.Font.Bold = true;
                         
@@ -476,12 +511,12 @@ namespace SystemeCaisse.UI.ViewModels
                             wsTime.Cell(4 + i, 8).Value = ca;
                             wsTime.Cell(4 + i, 9).Value = cnt != 0 ? ca / cnt : 0;
                         }
-                        wsTime.Range(3, 6, 3, 9).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.FromHtml("#4472C4");
-                        wsTime.Range(3, 6, 3, 9).Style.Font.FontColor = ClosedXML.Excel.XLColor.White;
+                        wsTime.Range(3, 6, 3, 9).Style.Fill.BackgroundColor = XLColor.FromHtml("#4472C4");
+                        wsTime.Range(3, 6, 3, 9).Style.Font.FontColor = XLColor.White;
                         wsTime.Range(4, 8, 10, 9).Style.NumberFormat.Format = "#,##0.00 €";
                         wsTime.Columns().AdjustToContents();
 
-                        // --- 5. SHEET: RENTABILITÉ ---
+                        // --- 6. SHEET: RENTABILITÉ ---
                         var wsProfit = workbook.Worksheets.Add("Rentabilité");
                         wsProfit.Cell(1, 1).Value = "Analyse de rentabilité par catégorie";
                         wsProfit.Cell(1, 1).Style.Font.Bold = true;
@@ -501,15 +536,19 @@ namespace SystemeCaisse.UI.ViewModels
                             wsProfit.Cell(row, 6).Value = cat.TotalRevenue != 0 ? (double)(cat.TotalMargin / cat.TotalRevenue) : 0;
                             row++;
                         }
-                        var tableProfit = wsProfit.Range(3, 1, row - 1, 6).CreateTable();
-                        tableProfit.Theme = ClosedXML.Excel.XLTableTheme.TableStyleMedium9;
+                        var tableProfit = wsProfit.Range(3, 1, Math.Max(3, row - 1), 6).CreateTable();
+                        tableProfit.Theme = XLTableTheme.TableStyleMedium9;
                         wsProfit.Range(4, 3, row - 1, 5).Style.NumberFormat.Format = "#,##0.00 €";
                         wsProfit.Range(4, 6, row - 1, 6).Style.NumberFormat.Format = "0.0%";
                         wsProfit.Columns().AdjustToContents();
 
                         workbook.SaveAs(sfd.FileName);
                     }
-                    MessageBox.Show($"Export réussi vers {sfd.FileName}", "Export Réussi", MessageBoxButton.OK, MessageBoxImage.Information);
+                    
+                    if (MessageBox.Show($"Export réussi vers {sfd.FileName}\n\nSouhaitez-vous ouvrir le fichier ?", "Export Réussi", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+                    {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(sfd.FileName) { UseShellExecute = true });
+                    }
                 }
                 catch (Exception ex)
                 {
