@@ -263,3 +263,11 @@ s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\obj\Debug\net8.0-windows10.0.1904
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\obj\Debug\net8.0-windows10.0.19041\SystemeCaisse.UI.pdb
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\obj\Debug\net8.0-windows10.0.19041\SystemeCaisse.UI.genruntimeconfig.cache
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\obj\Debug\net8.0-windows10.0.19041\ref\SystemeCaisse.UI.dll
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\bin\Debug\net8.0-windows10.0.19041\ClosedXML.dll
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\bin\Debug\net8.0-windows10.0.19041\ClosedXML.Parser.dll
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\bin\Debug\net8.0-windows10.0.19041\DocumentFormat.OpenXml.dll
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\bin\Debug\net8.0-windows10.0.19041\DocumentFormat.OpenXml.Framework.dll
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\bin\Debug\net8.0-windows10.0.19041\ExcelNumberFormat.dll
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\bin\Debug\net8.0-windows10.0.19041\RBush.dll
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\bin\Debug\net8.0-windows10.0.19041\SixLabors.Fonts.dll
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\bin\Debug\net8.0-windows10.0.19041\System.IO.Packaging.dll

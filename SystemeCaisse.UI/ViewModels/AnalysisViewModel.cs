@@ -13,6 +13,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Threading;
 using SystemeCaisse.UI.Models;
+using ClosedXML.Excel;
 
 namespace SystemeCaisse.UI.ViewModels
 {
@@ -337,8 +338,8 @@ namespace SystemeCaisse.UI.ViewModels
 
             var sfd = new Microsoft.Win32.SaveFileDialog
             {
-                Filter = "Fichiers Excel CSV (*.csv)|*.csv",
-                FileName = $"Rapport_Analyse_{StartDate:yyyyMMdd}_{EndDate:yyyyMMdd}.csv",
+                Filter = "Fichiers Excel (*.xlsx)|*.xlsx",
+                FileName = $"Rapport_Analyse_{StartDate:yyyyMMdd}_{EndDate:yyyyMMdd}.xlsx",
                 Title = "Exporter le rapport d'analyse"
             };
 
@@ -346,27 +347,173 @@ namespace SystemeCaisse.UI.ViewModels
             {
                 try
                 {
-                    using (var writer = new System.IO.StreamWriter(sfd.FileName, false, System.Text.Encoding.UTF8))
+                    using (var workbook = new ClosedXML.Excel.XLWorkbook())
                     {
-                        writer.WriteLine("RAPPORT D'ANALYSE DES VENTES");
-                        writer.WriteLine($"Période:;{StartDate:dd/MM/yyyy}; au ;{EndDate:dd/MM/yyyy}");
-                        writer.WriteLine("");
-                        writer.WriteLine("--- ANALYSE PAR PRODUIT ---");
-                        writer.WriteLine("Produit;Catégorie;Quantité;CA Généré;Marge Totale;% Marge");
-                        foreach (var item in ProductAnalysis)
-                            writer.WriteLine($"{item.ProductName};{item.Category};{item.QuantitySold:N2};{item.TotalRevenue:N2};{item.TotalMargin:N2};{item.MarginPercent:P1}");
+                        // --- 1. SHEET: RÉSUMÉ ---
+                        var wsSummary = workbook.Worksheets.Add("Résumé");
+                        wsSummary.Cell(1, 1).Value = "Analyse de rentabilité globale";
+                        wsSummary.Cell(1, 1).Style.Font.Bold = true;
+                        wsSummary.Cell(1, 1).Style.Font.FontSize = 16;
                         
-                        writer.WriteLine("");
-                        writer.WriteLine("--- ANALYSE PAR CATEGORIE ---");
-                        writer.WriteLine("Catégorie;Qté Totale;CA Global;Marge Globale");
-                        foreach (var item in CategoryAnalysis)
-                            writer.WriteLine($"{item.CategoryName};{item.TotalQuantity:N2};{item.TotalRevenue:N2};{item.TotalMargin:N2}");
+                        var totalRevenue = ProductAnalysis.Sum(x => x.TotalRevenue);
+                        var totalMargin = ProductAnalysis.Sum(x => x.TotalMargin);
+                        var totalCost = totalRevenue - totalMargin;
+                        var marginRate = totalRevenue != 0 ? (double)(totalMargin / totalRevenue) : 0;
+
+                        var summaryData = wsSummary.Range(3, 1, 7, 2);
+                        wsSummary.Cell(3, 1).Value = "Indicateur";
+                        wsSummary.Cell(3, 2).Value = "Valeur";
+                        wsSummary.Cell(4, 1).Value = "CA total";
+                        wsSummary.Cell(4, 2).Value = totalRevenue;
+                        wsSummary.Cell(5, 1).Value = "Coût des marchandises";
+                        wsSummary.Cell(5, 2).Value = totalCost;
+                        wsSummary.Cell(6, 1).Value = "Marge brute";
+                        wsSummary.Cell(6, 2).Value = totalMargin;
+                        wsSummary.Cell(7, 1).Value = "Taux de marge";
+                        wsSummary.Cell(7, 2).Value = marginRate;
+
+                        // Styling Summary
+                        var headerRange = wsSummary.Range(3, 1, 3, 2);
+                        headerRange.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.FromHtml("#4472C4");
+                        headerRange.Style.Font.FontColor = ClosedXML.Excel.XLColor.White;
+                        headerRange.Style.Font.Bold = true;
+                        
+                        wsSummary.Range(4, 2, 6, 2).Style.NumberFormat.Format = "#,##0.00 €";
+                        wsSummary.Cell(7, 2).Style.NumberFormat.Format = "0.0%";
+                        wsSummary.Columns().AdjustToContents();
+
+                        // --- 2. SHEET: DÉTAIL DES VENTES ---
+                        var wsDetails = workbook.Worksheets.Add("Détail des ventes");
+                        var headerDetails = new[] { "N° Ticket", "Date/Heure", "Produit", "Quantité", "Prix unitaire", "Remise", "Total", "Mode paiement" };
+                        for (int i = 0; i < headerDetails.Length; i++) wsDetails.Cell(1, i + 1).Value = headerDetails[i];
+
+                        int row = 2;
+                        foreach (var l in _lastLines.OrderByDescending(x => x.Vente?.CreatedAt))
+                        {
+                            wsDetails.Cell(row, 1).Value = l.Vente?.NumeroTicket ?? "";
+                            wsDetails.Cell(row, 2).Value = l.Vente?.CreatedAt;
+                            wsDetails.Cell(row, 3).Value = l.ProduitNom;
+                            wsDetails.Cell(row, 4).Value = (double)l.Quantite;
+                            wsDetails.Cell(row, 5).Value = (double)l.PrixUnitaire;
+                            wsDetails.Cell(row, 6).Value = (double)l.Remise;
+                            wsDetails.Cell(row, 7).Value = (double)l.TotalLigne;
+                            wsDetails.Cell(row, 8).Value = l.Vente?.MoyenPaiement ?? "";
+                            row++;
+                        }
+                        
+                        var tableDetails = wsDetails.Range(1, 1, row - 1, 8).CreateTable();
+                        tableDetails.Theme = ClosedXML.Excel.XLTableTheme.TableStyleMedium9;
+                        wsDetails.Columns().AdjustToContents();
+
+                        // --- 3. SHEET: TOP PRODUITS ---
+                        var wsTop = workbook.Worksheets.Add("Top produits");
+                        var headerTop = new[] { "Rang", "Produit", "Quantité vendue", "CA généré", "% du CA total" };
+                        for (int i = 0; i < headerTop.Length; i++) wsTop.Cell(1, i + 1).Value = headerTop[i];
+
+                        row = 2;
+                        int rank = 1;
+                        foreach (var p in ProductAnalysis.OrderByDescending(x => x.TotalRevenue).Take(50))
+                        {
+                            wsTop.Cell(row, 1).Value = rank++;
+                            wsTop.Cell(row, 2).Value = p.ProductName;
+                            wsTop.Cell(row, 3).Value = (double)p.QuantitySold;
+                            wsTop.Cell(row, 4).Value = (double)p.TotalRevenue;
+                            wsTop.Cell(row, 5).Value = totalRevenue != 0 ? (double)(p.TotalRevenue / totalRevenue) : 0;
+                            row++;
+                        }
+                        var tableTop = wsTop.Range(1, 1, row - 1, 5).CreateTable();
+                        tableTop.Theme = ClosedXML.Excel.XLTableTheme.TableStyleMedium9;
+                        wsTop.Column(5).Style.NumberFormat.Format = "0.0%";
+                        wsTop.Column(4).Style.NumberFormat.Format = "#,##0.00 €";
+                        wsTop.Columns().AdjustToContents();
+
+                        // --- 4. SHEET: ANALYSE TEMPORELLE ---
+                        var wsTime = workbook.Worksheets.Add("Analyse temporelle");
+                        wsTime.Cell(1, 1).Value = "Analyse par heure";
+                        wsTime.Cell(1, 1).Style.Font.Bold = true;
+                        
+                        var headerHour = new[] { "Heure", "Nombre de ventes", "CA total", "Ticket moyen" };
+                        for (int i = 0; i < headerHour.Length; i++) wsTime.Cell(3, i + 1).Value = headerHour[i];
+                        
+                        var hourData = _lastLines
+                            .GroupBy(l => l.Vente?.CreatedAt.Hour ?? 0)
+                            .ToDictionary(g => g.Key, g => new { CA = g.Sum(x => x.TotalLigne), Count = g.Select(x => x.VenteId).Distinct().Count() });
+                        
+                        for (int h = 0; h < 24; h++)
+                        {
+                            double ca = hourData.ContainsKey(h) ? (double)hourData[h].CA : 0;
+                            int cnt = hourData.ContainsKey(h) ? hourData[h].Count : 0;
+                            wsTime.Cell(4 + h, 1).Value = $"{h}h";
+                            wsTime.Cell(4 + h, 2).Value = cnt;
+                            wsTime.Cell(4 + h, 3).Value = ca;
+                            wsTime.Cell(4 + h, 4).Value = cnt != 0 ? ca / cnt : 0;
+                        }
+
+                        // Style Hour table manually to match capture
+                        var hourRange = wsTime.Range(3, 1, 27, 4);
+                        wsTime.Range(3, 1, 3, 4).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.FromHtml("#4472C4");
+                        wsTime.Range(3, 1, 3, 4).Style.Font.FontColor = ClosedXML.Excel.XLColor.White;
+                        wsTime.Range(4, 3, 27, 4).Style.NumberFormat.Format = "#,##0.00 €";
+
+                        // Weekly table on the same sheet
+                        wsTime.Cell(1, 6).Value = "Analyse par jour de la semaine";
+                        wsTime.Cell(1, 6).Style.Font.Bold = true;
+                        
+                        var headerWeek = new[] { "Jour", "Nombre de ventes", "CA total", "CA moyen" };
+                        for (int i = 0; i < headerWeek.Length; i++) wsTime.Cell(3, 6 + i).Value = headerWeek[i];
+                        
+                        var dayNames = new[] { "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche" };
+                        var weekdayGroups = _lastLines
+                            .GroupBy(l => ((int)l.Vente!.CreatedAt.DayOfWeek + 6) % 7)
+                            .ToDictionary(g => g.Key, g => new { CA = g.Sum(x => x.TotalLigne), Count = g.Select(x => x.VenteId).Distinct().Count() });
+                        
+                        for (int i = 0; i < 7; i++)
+                        {
+                            double ca = weekdayGroups.ContainsKey(i) ? (double)weekdayGroups[i].CA : 0;
+                            int cnt = weekdayGroups.ContainsKey(i) ? weekdayGroups[i].Count : 0;
+                            wsTime.Cell(4 + i, 6).Value = dayNames[i];
+                            wsTime.Cell(4 + i, 7).Value = cnt;
+                            wsTime.Cell(4 + i, 8).Value = ca;
+                            wsTime.Cell(4 + i, 9).Value = cnt != 0 ? ca / cnt : 0;
+                        }
+                        wsTime.Range(3, 6, 3, 9).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.FromHtml("#4472C4");
+                        wsTime.Range(3, 6, 3, 9).Style.Font.FontColor = ClosedXML.Excel.XLColor.White;
+                        wsTime.Range(4, 8, 10, 9).Style.NumberFormat.Format = "#,##0.00 €";
+                        wsTime.Columns().AdjustToContents();
+
+                        // --- 5. SHEET: RENTABILITÉ ---
+                        var wsProfit = workbook.Worksheets.Add("Rentabilité");
+                        wsProfit.Cell(1, 1).Value = "Analyse de rentabilité par catégorie";
+                        wsProfit.Cell(1, 1).Style.Font.Bold = true;
+                        
+                        var headerProfit = new[] { "Catégorie", "Qté", "CA", "Coût", "Marge", "Taux" };
+                        for (int i = 0; i < headerProfit.Length; i++) wsProfit.Cell(3, i + 1).Value = headerProfit[i];
+                        
+                        row = 4;
+                        foreach (var cat in CategoryAnalysis)
+                        {
+                            wsProfit.Cell(row, 1).Value = cat.CategoryName;
+                            wsProfit.Cell(row, 2).Value = (double)cat.TotalQuantity;
+                            wsProfit.Cell(row, 3).Value = (double)cat.TotalRevenue;
+                            var cost = cat.TotalRevenue - cat.TotalMargin;
+                            wsProfit.Cell(row, 4).Value = (double)cost;
+                            wsProfit.Cell(row, 5).Value = (double)cat.TotalMargin;
+                            wsProfit.Cell(row, 6).Value = cat.TotalRevenue != 0 ? (double)(cat.TotalMargin / cat.TotalRevenue) : 0;
+                            row++;
+                        }
+                        var tableProfit = wsProfit.Range(3, 1, row - 1, 6).CreateTable();
+                        tableProfit.Theme = ClosedXML.Excel.XLTableTheme.TableStyleMedium9;
+                        wsProfit.Range(4, 3, row - 1, 5).Style.NumberFormat.Format = "#,##0.00 €";
+                        wsProfit.Range(4, 6, row - 1, 6).Style.NumberFormat.Format = "0.0%";
+                        wsProfit.Columns().AdjustToContents();
+
+                        workbook.SaveAs(sfd.FileName);
                     }
-                    MessageBox.Show($"Export réussi vers {sfd.FileName}", "Export", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show($"Export réussi vers {sfd.FileName}", "Export Réussi", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"Erreur lors de l'export : {ex.Message}");
+                    MessageBox.Show($"Erreur lors de l'export : {ex.Message}", "Erreur d'Export", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
         }
