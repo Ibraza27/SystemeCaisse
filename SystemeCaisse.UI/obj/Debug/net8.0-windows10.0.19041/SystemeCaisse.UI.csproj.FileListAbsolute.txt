@@ -271,3 +271,8 @@ s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\bin\Debug\net8.0-windows10.0.1904
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\bin\Debug\net8.0-windows10.0.19041\RBush.dll
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\bin\Debug\net8.0-windows10.0.19041\SixLabors.Fonts.dll
 s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\bin\Debug\net8.0-windows10.0.19041\System.IO.Packaging.dll
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\bin\Debug\net8.0-windows10.0.19041\Microsoft.Win32.SystemEvents.dll
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\bin\Debug\net8.0-windows10.0.19041\System.Drawing.Common.dll
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\bin\Debug\net8.0-windows10.0.19041\System.Private.Windows.Core.dll
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\bin\Debug\net8.0-windows10.0.19041\System.Private.Windows.GdiPlus.dll
+s:\PROGRAMATION\SystemeCaisse\SystemeCaisse.UI\bin\Debug\net8.0-windows10.0.19041\runtimes\win\lib\net8.0\Microsoft.Win32.SystemEvents.dll
