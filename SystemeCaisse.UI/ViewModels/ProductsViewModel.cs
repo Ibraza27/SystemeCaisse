@@ -81,6 +81,15 @@ namespace SystemeCaisse.UI.ViewModels
                 await _context.Produits.Include(p => p.Fournisseur).LoadAsync();
                 Products = _context.Produits.Local.ToObservableCollection();
 
+                // Ensure all products have a category
+                foreach (var p in Products)
+                {
+                    if (string.IsNullOrWhiteSpace(p.Categorie))
+                    {
+                        p.Categorie = "Autre";
+                    }
+                }
+
                 // Calculate Popularity
                 await CalculateProductPopularity();
 
@@ -184,7 +193,7 @@ namespace SystemeCaisse.UI.ViewModels
                 PrixVente = 0,
                 StockActuel = 0,
                 Actif = true,
-                Categorie = "Divers"
+                Categorie = "Autre"
             };
             _context.Produits.Add(newProduct);
             SelectedProduct = newProduct;
@@ -224,6 +233,12 @@ namespace SystemeCaisse.UI.ViewModels
         {
             try
             {
+                // Final safety check
+                foreach (var p in Products)
+                {
+                    if (string.IsNullOrWhiteSpace(p.Categorie)) p.Categorie = "Autre";
+                }
+                
                 _context.SaveChanges();
                 MessageBox.Show("Enregistré avec succès !");
                 _ = LoadCategories(); // Refresh categories in case new ones were added
@@ -248,7 +263,7 @@ namespace SystemeCaisse.UI.ViewModels
         {
             if (SelectedProduct != null)
             {
-                SelectedProduct.Categorie = null;
+                SelectedProduct.Categorie = "Autre";
             }
         }
 

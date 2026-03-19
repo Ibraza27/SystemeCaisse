@@ -227,36 +227,36 @@ namespace SystemeCaisse.UI.ViewModels
                 .OrderBy(x => x.SortKey)
                 .ToList();
 
+            var newSalesEvolution = new ObservableCollection<LineDataPoint>();
             foreach (var item in groupedSales)
             {
-                SalesEvolution.Add(new LineDataPoint { Label = item.Key, Value = (double)item.Value });
+                newSalesEvolution.Add(new LineDataPoint { Label = item.Key, Value = (double)item.Value });
             }
+            SalesEvolution = newSalesEvolution;
 
             // --- 2. Pie Chart (Categories) ---
             var flatLines = sales.SelectMany(v => v.Lignes).ToList();
             
-            // Note: LigneVente has 'ProduitNom' but not 'Categorie'. 
-            // We must fetch Product Categories. This is heavy but necessary.
-            // Optimization: Get distinct ProductIds from lines, fetch their categories, map.
+            // Fetch CURRENT categories from Products table for all sold products
+            // This fixes the "Autre 100%" issue by showing actual categories even for old sales
             var productIds = flatLines.Select(l => l.ProduitId).Distinct().ToList();
             var productCats = await context.Produits
                 .Where(p => productIds.Contains(p.Id))
-                .ToDictionaryAsync(p => p.Id, p => p.Categorie ?? "Divers");
+                .ToDictionaryAsync(p => p.Id, p => !string.IsNullOrWhiteSpace(p.Categorie) ? p.Categorie : "Autre");
 
             var catGroups = flatLines
-                .GroupBy(l => productCats.ContainsKey(l.ProduitId ?? 0) ? productCats[l.ProduitId ?? 0] : "Divers")
+                .GroupBy(l => (l.ProduitId.HasValue && productCats.ContainsKey(l.ProduitId.Value)) 
+                                ? productCats[l.ProduitId.Value] 
+                                : (!string.IsNullOrWhiteSpace(l.CategorieNom) ? l.CategorieNom : "Autre"))
                 .Select(g => new { Cat = g.Key, Total = g.Sum(l => l.TotalLigne) })
                 .OrderByDescending(x => x.Total)
-                .ToList(); // Show all categories
-            
-            // If too many, group small ones? No, user explicitly asked for logic where 'Divers' was missing.
-            // It was missing likely due to mismatch in keys or Take(7).
-            // Let's keep all for now or increase limit.
+                .ToList();
 
+            var newCategoryDistribution = new ObservableCollection<PieDataPoint>();
             int colorIdx = 0;
             foreach (var item in catGroups)
             {
-                CategoryDistribution.Add(new PieDataPoint 
+                newCategoryDistribution.Add(new PieDataPoint 
                 { 
                     Label = item.Cat, 
                     Value = (double)item.Total, 
@@ -264,6 +264,7 @@ namespace SystemeCaisse.UI.ViewModels
                 });
                 colorIdx++;
             }
+            CategoryDistribution = newCategoryDistribution;
 
             // --- 3. Top Products Table ---
             var topItems = flatLines

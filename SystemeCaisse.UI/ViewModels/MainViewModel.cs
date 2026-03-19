@@ -435,30 +435,45 @@ namespace SystemeCaisse.UI.ViewModels
                     .Select(l => new { l.ProduitId, l.Quantite })
                     .ToListAsync();
 
+                // Group by NAME instead of ID to match Dashboard consistency
                 var salesStats = allLines
-                    .GroupBy(l => l.ProduitId)
-                    .Select(g => new { Id = g.Key, Count = g.Sum(x => x.Quantite) })
+                    .GroupBy(l => l.ProduitNom)
+                    .Select(g => new { Name = g.Key, Count = g.Sum(x => x.Quantite) })
+                    .OrderByDescending(x => x.Count)
                     .ToList();
-                
-                // Update local instances
+
+                // Update local instances for sorting in main grid (by name-based popularity)
+                var statsDict = salesStats.ToDictionary(s => s.Name, s => s.Count, StringComparer.OrdinalIgnoreCase);
                 foreach (var p in Produits)
                 {
-                    var stat = salesStats.FirstOrDefault(s => s.Id == p.Id);
-                    p.ValidatedSalesCount = stat?.Count ?? 0;
+                    if (!string.IsNullOrWhiteSpace(p.Nom) && statsDict.TryGetValue(p.Nom, out var count))
+                        p.ValidatedSalesCount = count;
+                    else
+                        p.ValidatedSalesCount = 0;
                 }
 
-                // Update Top 20
-                var top20 = salesStats
-                    .OrderByDescending(s => s.Count)
-                    .Select(s => Produits.FirstOrDefault(p => p.Id == s.Id))
-                    .Where(p => p != null && p.Actif) // Only active products
-                    .Take(20)
-                    .ToList();
+                // Update Top 20 (Active products only)
+                var top20Items = new List<Produit>();
+                foreach (var stat in salesStats.Take(50)) // Take more to find enough active matches
+                {
+                    var matchingActiveProd = Produits.FirstOrDefault(p => p.Actif && string.Equals(p.Nom, stat.Name, StringComparison.OrdinalIgnoreCase));
+                    if (matchingActiveProd != null)
+                    {
+                        top20Items.Add(matchingActiveProd);
+                        if (top20Items.Count >= 20) break;
+                    }
+                }
 
                 Application.Current.Dispatcher.BeginInvoke(new Action(() => 
                 {
                     TopProducts.Clear();
-                    foreach (var p in top20) TopProducts.Add(p!);
+                    foreach (var p in top20Items) 
+                    {
+                        if (p != null) TopProducts.Add(p);
+                    }
+                    
+                    // Also refresh the main view if it depends on ValidatedSalesCount for sorting
+                    ProductsView?.Refresh();
                 }), System.Windows.Threading.DispatcherPriority.Background);
             }
             catch (Exception ex) 
@@ -776,7 +791,7 @@ namespace SystemeCaisse.UI.ViewModels
                     Produit = produit,
                     ProduitId = produit.Id,
                     ProduitNom = produit.Nom,
-                    CategorieNom = produit.Categorie ?? "Divers",
+                    CategorieNom = !string.IsNullOrWhiteSpace(produit.Categorie) ? produit.Categorie : "Autre",
                     PrixUnitaire = produit.PrixVente,
                     Quantite = qty,
                     TotalLigne = qty * produit.PrixVente

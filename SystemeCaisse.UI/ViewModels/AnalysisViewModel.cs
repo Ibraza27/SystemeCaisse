@@ -13,7 +13,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Threading;
 using SystemeCaisse.UI.Models;
-using ClosedXML.Excel;
+using OfficeOpenXml;
 
 namespace SystemeCaisse.UI.ViewModels
 {
@@ -58,6 +58,7 @@ namespace SystemeCaisse.UI.ViewModels
         public AnalysisViewModel(IDbContextFactory<AppDbContext> contextFactory)
         {
             _contextFactory = contextFactory;
+            OfficeOpenXml.ExcelPackage.License.SetNonCommercialOrganization("Individual");
             ProductAnalysis = new ObservableCollection<ProductAnalysisItem>();
             CategoryAnalysis = new ObservableCollection<CategoryAnalysisItem>();
             TimeAnalysis = new ObservableCollection<TimeAnalysisItem>();
@@ -165,7 +166,7 @@ namespace SystemeCaisse.UI.ViewModels
                         return new ProductAnalysisItem
                         {
                             ProductName = prod?.Nom ?? (g.FirstOrDefault()?.ProduitNom ?? "Inconnu"),
-                            Category = prod?.Categorie ?? "Divers",
+                            Category = !string.IsNullOrWhiteSpace(prod?.Categorie) ? prod.Categorie : "Autre",
                             QuantitySold = qty,
                             TotalRevenue = revenue,
                             TotalMargin = revenue - cost
@@ -175,7 +176,7 @@ namespace SystemeCaisse.UI.ViewModels
                     .ToList();
 
                 var catGroups = lines
-                    .GroupBy(l => products.ContainsKey(l.ProduitId ?? 0) ? products[l.ProduitId ?? 0].Categorie ?? "Divers" : "Divers")
+                    .GroupBy(l => products.ContainsKey(l.ProduitId ?? 0) ? (!string.IsNullOrWhiteSpace(products[l.ProduitId ?? 0].Categorie) ? products[l.ProduitId ?? 0].Categorie : "Autre") : "Autre")
                     .Select(g => 
                     {
                         decimal revenue = g.Sum(x => x.TotalLigne);
@@ -356,194 +357,237 @@ namespace SystemeCaisse.UI.ViewModels
                 {
                     await Task.Run(() =>
                     {
-                        using (var workbook = new ClosedXML.Excel.XLWorkbook())
+                        using (var package = new OfficeOpenXml.ExcelPackage())
                         {
                             // --- 1. SHEET: RÉSUMÉ ---
                             ExportProgress = 10;
-                            var wsSummary = workbook.Worksheets.Add("Résumé");
+                            var wsSummary = package.Workbook.Worksheets.Add("Résumé");
                             
-                            wsSummary.Cell(1, 1).Value = "Rapport des ventes";
-                            wsSummary.Cell(1, 1).Style.Font.Bold = true;
-                            wsSummary.Cell(1, 1).Style.Font.FontSize = 20;
+                            wsSummary.Cells[1, 1].Value = "Rapport des ventes";
+                            wsSummary.Cells[1, 1].Style.Font.Bold = true;
+                            wsSummary.Cells[1, 1].Style.Font.Size = 20;
 
-                            wsSummary.Cell(2, 1).Value = $"Du {StartDate:dd/MM/yyyy} au {EndDate:dd/MM/yyyy}";
-                            wsSummary.Cell(2, 1).Style.Font.Bold = true;
-                            wsSummary.Cell(2, 1).Style.Font.FontSize = 16;
+                            wsSummary.Cells[2, 1].Value = $"Du {StartDate:dd/MM/yyyy} au {EndDate:dd/MM/yyyy}";
+                            wsSummary.Cells[2, 1].Style.Font.Bold = true;
+                            wsSummary.Cells[2, 1].Style.Font.Size = 16;
                             
-                            wsSummary.Cell(5, 1).Value = "Statistiques générales";
-                            wsSummary.Cell(5, 1).Style.Font.Bold = true;
-                            wsSummary.Cell(5, 1).Style.Font.FontSize = 14;
+                            wsSummary.Cells[5, 1].Value = "Statistiques générales";
+                            wsSummary.Cells[5, 1].Style.Font.Bold = true;
+                            wsSummary.Cells[5, 1].Style.Font.Size = 14;
 
                             var totalRevenue = ProductAnalysis.Sum(x => x.TotalRevenue);
                             var totalSales = _lastTemporal.Sum(x => x.TicketsCount);
                             var totalItems = _lastLines.Sum(x => (double)x.Quantite);
                             var avgTicket = totalSales != 0 ? (double)totalRevenue / totalSales : 0;
 
-                            wsSummary.Cell(7, 1).Value = "Indicateur";
-                            wsSummary.Cell(7, 2).Value = "Valeur";
-                            wsSummary.Cell(8, 1).Value = "Nombre de ventes";
-                            wsSummary.Cell(8, 2).Value = totalSales;
-                            wsSummary.Cell(9, 1).Value = "Chiffre d'affaires total";
-                            wsSummary.Cell(9, 2).Value = (double)totalRevenue;
-                            wsSummary.Cell(10, 1).Value = "Ticket moyen";
-                            wsSummary.Cell(10, 2).Value = avgTicket;
-                            wsSummary.Cell(11, 1).Value = "Nombre d'articles vendus";
-                            wsSummary.Cell(11, 2).Value = totalItems;
+                            wsSummary.Cells[7, 1].Value = "Indicateur";
+                            wsSummary.Cells[7, 2].Value = "Valeur";
+                            wsSummary.Cells[8, 1].Value = "Nombre de ventes";
+                            wsSummary.Cells[8, 2].Value = totalSales;
+                            wsSummary.Cells[9, 1].Value = "Chiffre d'affaires total";
+                            wsSummary.Cells[9, 2].Value = (double)totalRevenue;
+                            wsSummary.Cells[10, 1].Value = "Ticket moyen";
+                            wsSummary.Cells[10, 2].Value = avgTicket;
+                            wsSummary.Cells[11, 1].Value = "Nombre d'articles vendus";
+                            wsSummary.Cells[11, 2].Value = totalItems;
 
-                            var dataRange = wsSummary.Range(7, 1, 11, 2);
-                            dataRange.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
-                            dataRange.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
-                            wsSummary.Range(7, 1, 7, 2).Style.Fill.BackgroundColor = XLColor.FromHtml("#4472C4");
-                            wsSummary.Range(7, 1, 7, 2).Style.Font.FontColor = XLColor.White;
-                            wsSummary.Range(7, 1, 7, 2).Style.Font.Bold = true;
-                            wsSummary.Cell(9, 2).Style.NumberFormat.Format = "#,##0.00 €";
-                            wsSummary.Cell(10, 2).Style.NumberFormat.Format = "#,##0.00 €";
-                            wsSummary.Columns().AdjustToContents();
+                            using (var range = wsSummary.Cells[7, 1, 11, 2])
+                            {
+                                range.Style.Border.Top.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
+                                range.Style.Border.Bottom.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
+                                range.Style.Border.Left.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
+                                range.Style.Border.Right.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
+                            }
+
+                            using (var headerRange = wsSummary.Cells[7, 1, 7, 2])
+                            {
+                                headerRange.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                                headerRange.Style.Fill.BackgroundColor.SetColor(System.Drawing.ColorTranslator.FromHtml("#4472C4"));
+                                headerRange.Style.Font.Color.SetColor(System.Drawing.Color.White);
+                                headerRange.Style.Font.Bold = true;
+                            }
+                            wsSummary.Cells[9, 2].Style.Numberformat.Format = "#,##0.00 €";
+                            wsSummary.Cells[10, 2].Style.Numberformat.Format = "#,##0.00 €";
+                            wsSummary.Cells.AutoFitColumns();
 
                             // --- 2. SHEET: DÉTAIL DES VENTES ---
                             ExportProgress = 30;
-                            var wsDetails = workbook.Worksheets.Add("Détail des ventes");
+                            var wsDetails = package.Workbook.Worksheets.Add("Détail des ventes");
                             var headerDetails = new[] { "N° Ticket", "Date/Heure", "Produit", "Quantité", "Prix unitaire", "Remise", "Total", "Mode paiement" };
-                            for (int i = 0; i < headerDetails.Length; i++) wsDetails.Cell(1, i + 1).Value = headerDetails[i];
+                            for (int i = 0; i < headerDetails.Length; i++) wsDetails.Cells[1, i + 1].Value = headerDetails[i];
 
                             int row = 2;
                             var sortedLines = _lastLines.OrderByDescending(x => x.Vente?.CreatedAt).ToList();
                             foreach (var l in sortedLines)
                             {
-                                wsDetails.Cell(row, 1).Value = l.Vente?.NumeroTicket ?? "";
-                                wsDetails.Cell(row, 2).Value = l.Vente?.CreatedAt;
-                                wsDetails.Cell(row, 3).Value = l.ProduitNom;
-                                wsDetails.Cell(row, 4).Value = (double)l.Quantite;
-                                wsDetails.Cell(row, 5).Value = (double)l.PrixUnitaire;
-                                wsDetails.Cell(row, 6).Value = (double)l.Remise;
-                                wsDetails.Cell(row, 7).Value = (double)l.TotalLigne;
-                                wsDetails.Cell(row, 8).Value = l.Vente?.MoyenPaiement ?? "";
+                                wsDetails.Cells[row, 1].Value = l.Vente?.NumeroTicket ?? "";
+                                wsDetails.Cells[row, 2].Value = l.Vente?.CreatedAt;
+                                wsDetails.Cells[row, 2].Style.Numberformat.Format = "dd/MM/yyyy HH:mm";
+                                wsDetails.Cells[row, 3].Value = l.ProduitNom;
+                                wsDetails.Cells[row, 4].Value = (double)l.Quantite;
+                                wsDetails.Cells[row, 5].Value = (double)l.PrixUnitaire;
+                                wsDetails.Cells[row, 6].Value = (double)l.Remise;
+                                wsDetails.Cells[row, 7].Value = (double)l.TotalLigne;
+                                wsDetails.Cells[row, 8].Value = l.Vente?.MoyenPaiement ?? "";
                                 row++;
                             }
-                            wsDetails.Range(1, 1, Math.Max(1, row - 1), 8).CreateTable().Theme = XLTableTheme.TableStyleMedium9;
-                            wsDetails.Columns().AdjustToContents();
+                            var tableDetails = wsDetails.Tables.Add(wsDetails.Cells[1, 1, Math.Max(1, row - 1), 8], "TableDetails");
+                            tableDetails.TableStyle = OfficeOpenXml.Table.TableStyles.Medium9;
+                            wsDetails.Cells.AutoFitColumns();
 
                             // --- 3. SHEET: TOP PRODUITS ---
                             ExportProgress = 50;
-                            var wsTop = workbook.Worksheets.Add("Top produits");
+                            var wsTop = package.Workbook.Worksheets.Add("Top produits");
                             var headerTop = new[] { "Rang", "Produit", "Quantité vendue", "CA généré", "% du CA total" };
-                            for (int i = 0; i < headerTop.Length; i++) wsTop.Cell(1, i + 1).Value = headerTop[i];
+                            for (int i = 0; i < headerTop.Length; i++) wsTop.Cells[1, i + 1].Value = headerTop[i];
 
                             row = 2;
                             int rank = 1;
                             foreach (var p in ProductAnalysis.OrderByDescending(x => x.TotalRevenue).Take(50))
                             {
-                                wsTop.Cell(row, 1).Value = rank++;
-                                wsTop.Cell(row, 2).Value = p.ProductName;
-                                wsTop.Cell(row, 3).Value = (double)p.QuantitySold;
-                                wsTop.Cell(row, 4).Value = (double)p.TotalRevenue;
-                                wsTop.Cell(row, 5).Value = totalRevenue != 0 ? (double)(p.TotalRevenue / totalRevenue) : 0;
+                                wsTop.Cells[row, 1].Value = rank++;
+                                wsTop.Cells[row, 2].Value = p.ProductName;
+                                wsTop.Cells[row, 3].Value = (double)p.QuantitySold;
+                                wsTop.Cells[row, 4].Value = (double)p.TotalRevenue;
+                                wsTop.Cells[row, 5].Value = totalRevenue != 0 ? (double)(p.TotalRevenue / totalRevenue) : 0;
                                 row++;
                             }
-                            wsTop.Range(1, 1, Math.Max(1, row - 1), 5).CreateTable().Theme = XLTableTheme.TableStyleMedium9;
-                            wsTop.Column(5).Style.NumberFormat.Format = "0.0%";
-                            wsTop.Column(4).Style.NumberFormat.Format = "#,##0.00 €";
-                            wsTop.Columns().AdjustToContents();
+                            var tableTop = wsTop.Tables.Add(wsTop.Cells[1, 1, Math.Max(1, row - 1), 5], "TableTop");
+                            tableTop.TableStyle = OfficeOpenXml.Table.TableStyles.Medium9;
+                            wsTop.Cells[2, 5, Math.Max(2, row - 1), 5].Style.Numberformat.Format = "0.0%";
+                            wsTop.Cells[2, 4, Math.Max(2, row - 1), 4].Style.Numberformat.Format = "#,##0.00 €";
+                            wsTop.Cells.AutoFitColumns();
 
-                            // --- 4. SHEET: GRAPHIQUES (Visual Chart) ---
+                            // --- 4. SHEET: GRAPHIQUES (Dynamic Chart) ---
                             ExportProgress = 70;
-                            var wsGfx = workbook.Worksheets.Add("Graphiques");
-                            wsGfx.Cell(1, 1).Value = "Evolution du CA";
-                            wsGfx.Cell(1, 1).Style.Font.Bold = true;
-                            wsGfx.Cell(3, 1).Value = "Date";
-                            wsGfx.Cell(3, 2).Value = "CA (€)";
-                            wsGfx.Range(3, 1, 3, 2).Style.Font.Bold = true;
+                            var wsGfx = package.Workbook.Worksheets.Add("Graphiques");
+                            wsGfx.Cells[1, 1].Value = "Evolution du CA";
+                            wsGfx.Cells[1, 1].Style.Font.Bold = true;
+                            wsGfx.Cells[3, 1].Value = "Date";
+                            wsGfx.Cells[3, 2].Value = "CA (€)";
+                            wsGfx.Cells[3, 1, 3, 2].Style.Font.Bold = true;
 
                             row = 4;
-                            foreach (var t in _lastTemporal.OrderBy(x => x.Date))
+                            var temporalData = _lastTemporal.OrderBy(x => x.Date).ToList();
+                            foreach (var t in temporalData)
                             {
-                                wsGfx.Cell(row, 1).Value = t.Date.ToString("yyyy-MM-dd");
-                                wsGfx.Cell(row, 2).Value = (double)t.TotalRevenue;
+                                wsGfx.Cells[row, 1].Value = t.Date;
+                                wsGfx.Cells[row, 1].Style.Numberformat.Format = "dd/MM/yyyy";
+                                wsGfx.Cells[row, 2].Value = (double)t.TotalRevenue;
                                 row++;
                             }
-                            wsGfx.Column(2).Style.NumberFormat.Format = "#,##0.00";
-                            wsGfx.Columns().AdjustToContents();
+                            wsGfx.Cells[4, 2, Math.Max(4, row - 1), 2].Style.Numberformat.Format = "#,##0.00";
+                            wsGfx.Cells.AutoFitColumns();
 
-                            try
+                            if (temporalData.Count >= 2)
                             {
-                                using (var chartStream = GenerateExcelChartImage(_lastTemporal))
-                                {
-                                    if (chartStream != null)
-                                    {
-                                        var picture = wsGfx.AddPicture(chartStream);
-                                        picture.Name = "EvolutionChart";
-                                        picture.MoveTo(wsGfx.Cell(4, 4));
-                                    }
-                                }
+                                var chartLines = wsGfx.Drawings.AddChart("EvolutionChart", OfficeOpenXml.Drawing.Chart.eChartType.Line);
+                                chartLines.SetPosition(3, 0, 4, 0);
+                                chartLines.SetSize(800, 400);
+                                chartLines.Title.Text = "Evolution du chiffre d'affaires";
+                                
+                                var series = chartLines.Series.Add(wsGfx.Cells[4, 2, row - 1, 2], wsGfx.Cells[4, 1, row - 1, 1]);
+                                series.Header = "CA (€)";
                             }
-                            catch (Exception exGfx) { System.Diagnostics.Debug.WriteLine($"GFX Error: {exGfx.Message}"); }
+
+                            // --- 4b. Pie Chart: Répartition par catégorie ---
+                            int pieDataStart = row + 2;
+                            wsGfx.Cells[pieDataStart - 1, 1].Value = "CA par catégorie";
+                            wsGfx.Cells[pieDataStart - 1, 1].Style.Font.Bold = true;
+                            
+                            int pieRow = pieDataStart;
+                            foreach (var cat in CategoryAnalysis.OrderByDescending(x => x.TotalRevenue))
+                            {
+                                wsGfx.Cells[pieRow, 1].Value = cat.CategoryName;
+                                wsGfx.Cells[pieRow, 2].Value = (double)cat.TotalRevenue;
+                                pieRow++;
+                            }
+
+                            if (CategoryAnalysis.Count > 0)
+                            {
+                                var chartPie = wsGfx.Drawings.AddChart("CategoryChart", OfficeOpenXml.Drawing.Chart.eChartType.Pie);
+                                chartPie.SetPosition(3, 0, 15, 0);
+                                chartPie.SetSize(400, 400);
+                                chartPie.Title.Text = "Répartition par catégorie";
+                                
+                                var seriesPie = chartPie.Series.Add(wsGfx.Cells[pieDataStart, 2, pieRow - 1, 2], wsGfx.Cells[pieDataStart, 1, pieRow - 1, 1]);
+                            }
 
                             // --- 5. SHEET: ANALYSE TEMPORELLE ---
                             ExportProgress = 85;
-                            var wsTime = workbook.Worksheets.Add("Analyse temporelle");
-                            wsTime.Cell(1, 1).Value = "Analyse par heure";
-                            wsTime.Cell(1, 1).Style.Font.Bold = true;
+                            var wsTime = package.Workbook.Worksheets.Add("Analyse temporelle");
+                            wsTime.Cells[1, 1].Value = "Analyse par heure";
+                            wsTime.Cells[1, 1].Style.Font.Bold = true;
                             var headerHour = new[] { "Heure", "Nombre de ventes", "CA total", "Ticket moyen" };
-                            for (int i = 0; i < headerHour.Length; i++) wsTime.Cell(3, i + 1).Value = headerHour[i];
+                            for (int i = 0; i < headerHour.Length; i++) wsTime.Cells[3, i + 1].Value = headerHour[i];
                             var hourData = _lastLines.GroupBy(l => l.Vente?.CreatedAt.Hour ?? 0).ToDictionary(g => g.Key, g => new { CA = g.Sum(x => x.TotalLigne), Count = g.Select(x => x.VenteId).Distinct().Count() });
                             for (int h = 0; h < 24; h++)
                             {
                                 double ca = hourData.ContainsKey(h) ? (double)hourData[h].CA : 0;
                                 int cnt = hourData.ContainsKey(h) ? hourData[h].Count : 0;
-                                wsTime.Cell(4 + h, 1).Value = $"{h}h";
-                                wsTime.Cell(4 + h, 2).Value = cnt;
-                                wsTime.Cell(4 + h, 3).Value = ca;
-                                wsTime.Cell(4 + h, 4).Value = cnt != 0 ? ca / cnt : 0;
+                                wsTime.Cells[4 + h, 1].Value = $"{h}h";
+                                wsTime.Cells[4 + h, 2].Value = cnt;
+                                wsTime.Cells[4 + h, 3].Value = ca;
+                                wsTime.Cells[4 + h, 4].Value = cnt != 0 ? ca / cnt : 0;
                             }
-                            wsTime.Range(3, 1, 3, 4).Style.Fill.BackgroundColor = XLColor.FromHtml("#4472C4");
-                            wsTime.Range(3, 1, 3, 4).Style.Font.FontColor = XLColor.White;
-                            wsTime.Range(4, 3, 27, 4).Style.NumberFormat.Format = "#,##0.00 €";
+                            using (var headerRange = wsTime.Cells[3, 1, 3, 4])
+                            {
+                                headerRange.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                                headerRange.Style.Fill.BackgroundColor.SetColor(System.Drawing.ColorTranslator.FromHtml("#4472C4"));
+                                headerRange.Style.Font.Color.SetColor(System.Drawing.Color.White);
+                            }
+                            wsTime.Cells[4, 3, 27, 4].Style.Numberformat.Format = "#,##0.00 €";
 
-                            wsTime.Cell(1, 6).Value = "Analyse par jour de la semaine";
-                            wsTime.Cell(1, 6).Style.Font.Bold = true;
+                            wsTime.Cells[1, 6].Value = "Analyse par jour de la semaine";
+                            wsTime.Cells[1, 6].Style.Font.Bold = true;
                             var headerWeek = new[] { "Jour", "Nombre de ventes", "CA total", "CA moyen" };
-                            for (int i = 0; i < headerWeek.Length; i++) wsTime.Cell(3, 6 + i).Value = headerWeek[i];
+                            for (int i = 0; i < headerWeek.Length; i++) wsTime.Cells[3, 6 + i].Value = headerWeek[i];
                             var dayNames = new[] { "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche" };
                             var weekdayGroups = _lastLines.GroupBy(l => ((int)l.Vente!.CreatedAt.DayOfWeek + 6) % 7).ToDictionary(g => g.Key, g => new { CA = g.Sum(x => x.TotalLigne), Count = g.Select(x => x.VenteId).Distinct().Count() });
                             for (int i = 0; i < 7; i++)
                             {
                                 double ca = weekdayGroups.ContainsKey(i) ? (double)weekdayGroups[i].CA : 0;
                                 int cnt = weekdayGroups.ContainsKey(i) ? weekdayGroups[i].Count : 0;
-                                wsTime.Cell(4 + i, 6).Value = dayNames[i];
-                                wsTime.Cell(4 + i, 7).Value = cnt;
-                                wsTime.Cell(4 + i, 8).Value = ca;
-                                wsTime.Cell(4 + i, 9).Value = cnt != 0 ? ca / cnt : 0;
+                                wsTime.Cells[4 + i, 6].Value = dayNames[i];
+                                wsTime.Cells[4 + i, 7].Value = cnt;
+                                wsTime.Cells[4 + i, 8].Value = ca;
+                                wsTime.Cells[4 + i, 9].Value = cnt != 0 ? ca / cnt : 0;
                             }
-                            wsTime.Range(3, 6, 3, 9).Style.Fill.BackgroundColor = XLColor.FromHtml("#4472C4");
-                            wsTime.Range(3, 6, 3, 9).Style.Font.FontColor = XLColor.White;
-                            wsTime.Range(4, 8, 10, 9).Style.NumberFormat.Format = "#,##0.00 €";
-                            wsTime.Columns().AdjustToContents();
+                            using (var headerRange = wsTime.Cells[3, 6, 3, 9])
+                            {
+                                headerRange.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                                headerRange.Style.Fill.BackgroundColor.SetColor(System.Drawing.ColorTranslator.FromHtml("#4472C4"));
+                                headerRange.Style.Font.Color.SetColor(System.Drawing.Color.White);
+                            }
+                            wsTime.Cells[4, 8, 10, 9].Style.Numberformat.Format = "#,##0.00 €";
+                            wsTime.Cells.AutoFitColumns();
 
                             // --- 6. SHEET: RENTABILITÉ ---
                             ExportProgress = 95;
-                            var wsProfit = workbook.Worksheets.Add("Rentabilité");
-                            wsProfit.Cell(1, 1).Value = "Analyse de rentabilité par catégorie";
-                            wsProfit.Cell(1, 1).Style.Font.Bold = true;
+                            var wsProfit = package.Workbook.Worksheets.Add("Rentabilité");
+                            wsProfit.Cells[1, 1].Value = "Analyse de rentabilité par catégorie";
+                            wsProfit.Cells[1, 1].Style.Font.Bold = true;
                             var headerProfit = new[] { "Catégorie", "Qté", "CA", "Coût", "Marge", "Taux" };
-                            for (int i = 0; i < headerProfit.Length; i++) wsProfit.Cell(3, i + 1).Value = headerProfit[i];
+                            for (int i = 0; i < headerProfit.Length; i++) wsProfit.Cells[3, i + 1].Value = headerProfit[i];
                             row = 4;
                             foreach (var cat in CategoryAnalysis)
                             {
-                                wsProfit.Cell(row, 1).Value = cat.CategoryName;
-                                wsProfit.Cell(row, 2).Value = (double)cat.TotalQuantity;
-                                wsProfit.Cell(row, 3).Value = (double)cat.TotalRevenue;
+                                wsProfit.Cells[row, 1].Value = cat.CategoryName;
+                                wsProfit.Cells[row, 2].Value = (double)cat.TotalQuantity;
+                                wsProfit.Cells[row, 3].Value = (double)cat.TotalRevenue;
                                 var cost = cat.TotalRevenue - cat.TotalMargin;
-                                wsProfit.Cell(row, 4).Value = (double)cost;
-                                wsProfit.Cell(row, 5).Value = (double)cat.TotalMargin;
-                                wsProfit.Cell(row, 6).Value = cat.TotalRevenue != 0 ? (double)(cat.TotalMargin / cat.TotalRevenue) : 0;
+                                wsProfit.Cells[row, 4].Value = (double)cost;
+                                wsProfit.Cells[row, 5].Value = (double)cat.TotalMargin;
+                                wsProfit.Cells[row, 6].Value = cat.TotalRevenue != 0 ? (double)(cat.TotalMargin / cat.TotalRevenue) : 0;
                                 row++;
                             }
-                            wsProfit.Range(3, 1, Math.Max(3, row - 1), 6).CreateTable().Theme = XLTableTheme.TableStyleMedium9;
-                            wsProfit.Range(4, 3, row - 1, 5).Style.NumberFormat.Format = "#,##0.00 €";
-                            wsProfit.Range(4, 6, row - 1, 6).Style.NumberFormat.Format = "0.0%";
-                            wsProfit.Columns().AdjustToContents();
+                            var tableProfit = wsProfit.Tables.Add(wsProfit.Cells[3, 1, Math.Max(3, row - 1), 6], "TableProfit");
+                            tableProfit.TableStyle = OfficeOpenXml.Table.TableStyles.Medium9;
+                            wsProfit.Cells[4, 3, row - 1, 5].Style.Numberformat.Format = "#,##0.00 €";
+                            wsProfit.Cells[4, 6, row - 1, 6].Style.Numberformat.Format = "0.0%";
+                            wsProfit.Cells.AutoFitColumns();
 
-                            workbook.SaveAs(filePath);
+                            package.SaveAs(new System.IO.FileInfo(filePath));
                             ExportProgress = 100;
                         }
                     });
@@ -562,84 +606,6 @@ namespace SystemeCaisse.UI.ViewModels
                     IsExporting = false;
                     ExportProgress = 0;
                 }
-            }
-        }
-
-        private System.IO.MemoryStream GenerateExcelChartImage(List<TimeAnalysisItem> data)
-        {
-            if (data == null || data.Count < 2) return null;
-
-            int width = 800;
-            int height = 400;
-            int margin = 60; // Increased margin for labels
-
-            try
-            {
-                using (var bmp = new System.Drawing.Bitmap(width, height))
-                using (var g = System.Drawing.Graphics.FromImage(bmp))
-                {
-                    g.Clear(System.Drawing.Color.White);
-                    g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-
-                    var points = data.OrderBy(x => x.Date).ToList();
-                    double maxCA = (double)points.Max(p => p.TotalRevenue);
-                    if (maxCA <= 0) maxCA = 1;
-
-                    using (var gridPen = new System.Drawing.Pen(System.Drawing.Color.FromArgb(230, 230, 230), 1))
-                    using (var font = new System.Drawing.Font("Segoe UI", 9))
-                    using (var titleFont = new System.Drawing.Font("Segoe UI", 16, System.Drawing.FontStyle.Bold))
-                    {
-                        // Background & Title
-                        g.DrawString("Evolution du chiffre d'affaires", titleFont, System.Drawing.Brushes.Black, width / 2 - 180, 10);
-
-                        // Grid & Y-Axis Labels
-                        int stepY = 5;
-                        for (int i = 0; i <= stepY; i++)
-                        {
-                            float y = height - margin - (i * (height - 2 * margin) / stepY);
-                            g.DrawLine(gridPen, margin, y, width - margin, y);
-                            g.DrawString((maxCA * i / stepY).ToString("N0") + " €", font, System.Drawing.Brushes.DarkGray, 5, y - 8);
-                        }
-
-                        // X-Axis Date Labels (Start and End only to keep it clean)
-                        g.DrawString(points[0].Date.ToString("dd/MM/yyyy"), font, System.Drawing.Brushes.Gray, margin, height - margin + 5);
-                        var endLabelWidth = g.MeasureString(points.Last().Date.ToString("dd/MM/yyyy"), font).Width;
-                        g.DrawString(points.Last().Date.ToString("dd/MM/yyyy"), font, System.Drawing.Brushes.Gray, width - margin - endLabelWidth, height - margin + 5);
-
-                        // Draw Line
-                        using (var linePen = new System.Drawing.Pen(System.Drawing.Color.FromArgb(146, 188, 89), 4))
-                        {
-                            linePen.LineJoin = System.Drawing.Drawing2D.LineJoin.Round;
-                            float stepX = (float)(width - 2 * margin) / (points.Count - 1);
-
-                            var drawingPoints = new List<System.Drawing.PointF>();
-                            for (int i = 0; i < points.Count; i++)
-                            {
-                                float x = margin + i * stepX;
-                                float y = (float)(height - margin - ((double)points[i].TotalRevenue / maxCA * (height - 2 * margin)));
-                                drawingPoints.Add(new System.Drawing.PointF(x, y));
-                            }
-
-                            if (drawingPoints.Count > 1)
-                            {
-                                g.DrawLines(linePen, drawingPoints.ToArray());
-                            }
-                        }
-
-                        // Axis Titles
-                        g.DrawString("CA (€)", font, System.Drawing.Brushes.Black, 10, height / 2 - 20, new System.Drawing.StringFormat { FormatFlags = System.Drawing.StringFormatFlags.DirectionVertical });
-                    }
-
-                    var ms = new System.IO.MemoryStream();
-                    bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
-                    ms.Position = 0;
-                    return ms;
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Chart Gen Error: {ex.Message}");
-                return null;
             }
         }
     }

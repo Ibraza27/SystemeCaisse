@@ -20,7 +20,7 @@ namespace SystemeCaisse.Core.Entities
         public string ProduitNom { get; set; } = string.Empty; // Snapshot du nom
 
         [MaxLength(50)]
-        public string CategorieNom { get; set; } = "Divers"; // Snapshot de la catégorie
+        public string CategorieNom { get; set; } = "Autre"; // Snapshot de la catégorie
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal PrixUnitaire { get; set; } // Snapshot du prix

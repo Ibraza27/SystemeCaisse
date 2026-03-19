@@ -143,6 +143,32 @@ namespace SystemeCaisse.UI
                             entreprise.Telephone = "06 99 79 16 98 / 06 99 56 93 58";
                             entreprise.LogoPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images", "logo.png");
                             
+                            // Data Migration: Rename "Divers" category to "Autre" for consistency
+                            var diversLines = await context.LignesVente
+                                .Where(l => l.CategorieNom == "Divers" || string.IsNullOrWhiteSpace(l.CategorieNom))
+                                .ToListAsync();
+                            
+                            foreach (var line in diversLines)
+                            {
+                                line.CategorieNom = "Autre";
+                            }
+
+                            var diversProds = await context.Produits
+                                .Where(p => p.Categorie == "Divers" || string.IsNullOrWhiteSpace(p.Categorie))
+                                .ToListAsync();
+                            
+                            foreach (var prod in diversProds)
+                            {
+                                prod.Categorie = "Autre";
+                            }
+
+                            // Specific Fix: Reactivate "Tomates" if it's the top product but inactive
+                            var tomateProd = await context.Produits.FirstOrDefaultAsync(p => p.Nom == "Tomates" && !p.Actif);
+                            if (tomateProd != null)
+                            {
+                                tomateProd.Actif = true;
+                            }
+
                             await context.SaveChangesAsync();
 
                             // Update Splash Logo on UI Thread
