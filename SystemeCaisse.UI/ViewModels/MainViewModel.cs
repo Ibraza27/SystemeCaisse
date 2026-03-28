@@ -554,20 +554,22 @@ namespace SystemeCaisse.UI.ViewModels
                     _customerDisplay = new Views.CustomerDisplayWindow(this);
                     _customerDisplay.WindowStartupLocation = WindowStartupLocation.Manual;
                     
+                    // CRITICAL: Ensure it's in Normal state for positioning
+                    _customerDisplay.WindowState = WindowState.Normal;
+                    _customerDisplay.WindowStyle = WindowStyle.None;
+
                     // Use LOGICAL coordinates for WPF
                     _customerDisplay.Left = targetScreen.LogicalBounds.Left;
                     _customerDisplay.Top = targetScreen.LogicalBounds.Top;
                     _customerDisplay.Width = targetScreen.LogicalBounds.Width;
                     _customerDisplay.Height = targetScreen.LogicalBounds.Height;
                     
-                    _customerDisplay.WindowState = WindowState.Maximized;
-                    _customerDisplay.WindowStyle = WindowStyle.None;
-                    
                     _customerDisplay.Show();
                     
-                    // Re-set after show to ensure it stays on target screen
+                    // Re-set and maximize AFTER show to ensure it respects the monitor
                     _customerDisplay.Left = targetScreen.LogicalBounds.Left;
                     _customerDisplay.Top = targetScreen.LogicalBounds.Top;
+                    _customerDisplay.WindowState = WindowState.Maximized;
                 }
 
                 // Ensure Admin window is moved to the designated admin screen
@@ -609,15 +611,36 @@ namespace SystemeCaisse.UI.ViewModels
         public void SetupWindowOwner(Window win)
         {
             if (win == null) return;
-            var mainWin = Application.Current.MainWindow;
+            var mainWin = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w is SystemeCaisse.UI.MainWindow);
             
-            // Fix: "Impossible de définir la propriété Owner avec elle-même"
             if (mainWin != null && mainWin != win)
             {
                 win.Owner = mainWin;
+                
+                // Instead of relying on CenterOwner (which can be unreliable with DPI),
+                // we manually center the window on the Admin Monitor.
+                win.WindowStartupLocation = WindowStartupLocation.Manual;
+                
+                // Load screens to find where the Admin is
+                var screens = ScreenHelper.GetScreens();
+                var adminScreen = screens.FirstOrDefault(s => 
+                    s.LogicalWorkingArea.Contains(new Point(mainWin.Left + 10, mainWin.Top + 10))) ?? screens[0];
+                
+                // Wait for the window to load its size or use default
+                win.SourceInitialized += (s, e) => 
+                {
+                    // Center calculation
+                    double left = adminScreen.LogicalWorkingArea.Left + (adminScreen.LogicalWorkingArea.Width - win.ActualWidth) / 2;
+                    double top = adminScreen.LogicalWorkingArea.Top + (adminScreen.LogicalWorkingArea.Height - win.ActualHeight) / 2;
+                    
+                    win.Left = left;
+                    win.Top = top;
+                };
             }
-            
-            win.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            else
+            {
+                win.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            }
         }
 
         private void SetPaymentMode(object parameter)
