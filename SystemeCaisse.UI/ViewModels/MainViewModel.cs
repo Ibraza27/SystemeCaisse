@@ -12,6 +12,7 @@ using Views = SystemeCaisse.UI.Views;
 using SystemeCaisse.UI.Services;
 using SystemeCaisse.Core.Interfaces;
 using CommunityToolkit.Mvvm.ComponentModel;
+using System.Linq;
 
 namespace SystemeCaisse.UI.ViewModels
 {
@@ -514,20 +515,24 @@ namespace SystemeCaisse.UI.ViewModels
                 int screenIndex = (screenConfig != null && int.TryParse(screenConfig.Valeur, out int s)) ? s : 1;
                 var screens = ScreenHelper.GetScreens();
                 ScreenHelper.ScreenInfo? targetScreen = null;
+                ScreenHelper.ScreenInfo? adminScreen = null;
 
                 if (screens.Count > 1)
                 {
-                    // If multiple screens, try to find the one matching the index, but avoid primary if possible
+                    // If multiple screens, try to find the one matching the index
                     if (screenIndex < screens.Count)
                     {
                         targetScreen = screens[screenIndex];
                     }
                     
-                    // If the selected screen is primary and there are others, or index is invalid, find first non-primary
-                    if (targetScreen == null || targetScreen.IsPrimary)
+                    // If index is invalid or target is null, find first non-primary for customer by default
+                    if (targetScreen == null)
                     {
                          targetScreen = screens.FirstOrDefault(s => !s.IsPrimary) ?? screens[0];
                     }
+
+                    // Admin screen is the "other" one
+                    adminScreen = screens.FirstOrDefault(s => s != targetScreen) ?? screens[0];
                 }
                 else
                 {
@@ -550,18 +555,18 @@ namespace SystemeCaisse.UI.ViewModels
                     _customerDisplay.WindowState = WindowState.Maximized;
                     _customerDisplay.WindowStyle = WindowStyle.None;
                     
-                    // Ownership removed: WPF restricts cross-screen positioning if Owner is set.
-                    // Lifecycle is instead handled by MainWindow.OnClosed() shutting down the app.
-
                     _customerDisplay.Show();
                     
-                    // Re-set top/left after show to ensure it doesn't snap back to primary
+                    // Re-set top/left after show
                     _customerDisplay.Left = targetScreen.Bounds.Left;
                     _customerDisplay.Top = targetScreen.Bounds.Top;
                 }
 
-                // Ensure Admin window is NOT the customer display screen
-                EnsureAdminOnCorrectScreen();
+                // Ensure Admin window is moved to the designated admin screen
+                if (adminScreen != null)
+                {
+                    MoveAdminToScreen(adminScreen);
+                }
             }
             catch (Exception ex)
             {
@@ -569,24 +574,25 @@ namespace SystemeCaisse.UI.ViewModels
             }
         }
 
-        private void EnsureAdminOnCorrectScreen()
+        private void MoveAdminToScreen(ScreenHelper.ScreenInfo adminScreen)
         {
-            if (_customerDisplay == null) return;
-
-            var screens = ScreenHelper.GetScreens();
-            var mainWin = Application.Current.MainWindow;
+            var mainWin = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w is SystemeCaisse.UI.MainWindow);
             if (mainWin == null) return;
 
-            // Find a screen that is NOT the one used by customer display
-            var adminScreen = screens.FirstOrDefault(s => 
-                s.WorkingArea.Left != _customerDisplay.Left || 
-                s.WorkingArea.Top != _customerDisplay.Top);
+            // Move the admin window to the designated screen
+            mainWin.Left = adminScreen.WorkingArea.Left + 50; // Offset a bit from top-left
+            mainWin.Top = adminScreen.WorkingArea.Top + 50;
 
-            if (adminScreen != null)
+            // If it was maximized, we might need to restore and re-maximize on the new screen
+            // but for POS, it's often better to let it be windowed or handle maximization manually.
+            if (mainWin.WindowState == WindowState.Maximized)
             {
+                mainWin.WindowState = WindowState.Normal;
                 mainWin.Left = adminScreen.WorkingArea.Left;
                 mainWin.Top = adminScreen.WorkingArea.Top;
-                // Don't maximize here to allow user choice, but ensure it's on the right screen
+                mainWin.Width = adminScreen.WorkingArea.Width;
+                mainWin.Height = adminScreen.WorkingArea.Height;
+                mainWin.WindowState = WindowState.Maximized;
             }
         }
 

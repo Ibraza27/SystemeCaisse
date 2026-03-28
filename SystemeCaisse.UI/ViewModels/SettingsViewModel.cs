@@ -70,7 +70,8 @@ namespace SystemeCaisse.UI.ViewModels
                 Title = "Sélectionner la base de données Python (database.db)"
             };
 
-            if (openDlg.ShowDialog() == true)
+            var mainWin = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w is SystemeCaisse.UI.MainWindow);
+            if (openDlg.ShowDialog(mainWin) == true)
             {
                 try 
                 {

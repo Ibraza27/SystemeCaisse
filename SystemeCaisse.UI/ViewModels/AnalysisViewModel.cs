@@ -352,7 +352,8 @@ namespace SystemeCaisse.UI.ViewModels
                 Title = "Exporter le rapport d'analyse"
             };
 
-            if (sfd.ShowDialog() == true)
+            var mainWin = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w is SystemeCaisse.UI.MainWindow);
+            if (sfd.ShowDialog(mainWin) == true)
             {
                 var filePath = sfd.FileName;
                 IsExporting = true;
