@@ -35,11 +35,18 @@ namespace SystemeCaisse.UI.Services
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
 
+        [DllImport("shcore.dll")]
+        private static extern int GetDpiForMonitor(IntPtr hMonitor, int dpiType, out uint dpiX, out uint dpiY);
+
         public class ScreenInfo
         {
             public Rect Bounds { get; set; }
             public Rect WorkingArea { get; set; }
+            public Rect LogicalBounds { get; set; }
+            public Rect LogicalWorkingArea { get; set; }
             public bool IsPrimary { get; set; }
+            public double ScaleX { get; set; }
+            public double ScaleY { get; set; }
         }
 
         public static List<ScreenInfo> GetScreens()
@@ -52,11 +59,29 @@ namespace SystemeCaisse.UI.Services
                 mi.Size = Marshal.SizeOf(mi);
                 if (GetMonitorInfo(hMonitor, ref mi))
                 {
+                    // Get DPI Scaling
+                    uint dpiX = 96, dpiY = 96;
+                    try
+                    {
+                        // 0 = MDT_EFFECTIVE_DPI
+                        GetDpiForMonitor(hMonitor, 0, out dpiX, out dpiY);
+                    }
+                    catch { /* Fallback to 96 */ }
+
+                    double scaleX = dpiX / 96.0;
+                    double scaleY = dpiY / 96.0;
+
                     screens.Add(new ScreenInfo
                     {
                         Bounds = new Rect(mi.Monitor.Left, mi.Monitor.Top, mi.Monitor.Right - mi.Monitor.Left, mi.Monitor.Bottom - mi.Monitor.Top),
                         WorkingArea = new Rect(mi.WorkArea.Left, mi.WorkArea.Top, mi.WorkArea.Right - mi.WorkArea.Left, mi.WorkArea.Bottom - mi.WorkArea.Top),
-                        IsPrimary = (mi.Flags & 1) != 0 // MONITORINFOF_PRIMARY
+                        
+                        LogicalBounds = new Rect(mi.Monitor.Left / scaleX, mi.Monitor.Top / scaleY, (mi.Monitor.Right - mi.Monitor.Left) / scaleX, (mi.Monitor.Bottom - mi.Monitor.Top) / scaleY),
+                        LogicalWorkingArea = new Rect(mi.WorkArea.Left / scaleX, mi.WorkArea.Top / scaleY, (mi.WorkArea.Right - mi.WorkArea.Left) / scaleX, (mi.WorkArea.Bottom - mi.WorkArea.Top) / scaleY),
+                        
+                        IsPrimary = (mi.Flags & 1) != 0, // MONITORINFOF_PRIMARY
+                        ScaleX = scaleX,
+                        ScaleY = scaleY
                     });
                 }
                 return true;

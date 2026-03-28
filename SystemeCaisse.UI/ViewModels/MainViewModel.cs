@@ -519,6 +519,12 @@ namespace SystemeCaisse.UI.ViewModels
 
                 if (screens.Count > 1)
                 {
+                    // For debugging: log detected screens
+                    foreach(var scr in screens)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Found Screen: Primary={scr.IsPrimary}, Logical={scr.LogicalBounds.Width}x{scr.LogicalBounds.Height}, Scale={scr.ScaleX}");
+                    }
+
                     // If multiple screens, try to find the one matching the index
                     if (screenIndex < screens.Count)
                     {
@@ -533,6 +539,8 @@ namespace SystemeCaisse.UI.ViewModels
 
                     // Admin screen is the "other" one
                     adminScreen = screens.FirstOrDefault(s => s != targetScreen) ?? screens[0];
+                    
+                    System.Diagnostics.Debug.WriteLine($"Assigned: Admin={adminScreen.LogicalBounds.Left},{adminScreen.LogicalBounds.Top} | Customer={targetScreen.LogicalBounds.Left},{targetScreen.LogicalBounds.Top}");
                 }
                 else
                 {
@@ -546,20 +554,20 @@ namespace SystemeCaisse.UI.ViewModels
                     _customerDisplay = new Views.CustomerDisplayWindow(this);
                     _customerDisplay.WindowStartupLocation = WindowStartupLocation.Manual;
                     
-                    // Explicitly set coordinates to target screen
-                    _customerDisplay.Left = targetScreen.Bounds.Left;
-                    _customerDisplay.Top = targetScreen.Bounds.Top;
-                    _customerDisplay.Width = targetScreen.Bounds.Width;
-                    _customerDisplay.Height = targetScreen.Bounds.Height;
+                    // Use LOGICAL coordinates for WPF
+                    _customerDisplay.Left = targetScreen.LogicalBounds.Left;
+                    _customerDisplay.Top = targetScreen.LogicalBounds.Top;
+                    _customerDisplay.Width = targetScreen.LogicalBounds.Width;
+                    _customerDisplay.Height = targetScreen.LogicalBounds.Height;
                     
                     _customerDisplay.WindowState = WindowState.Maximized;
                     _customerDisplay.WindowStyle = WindowStyle.None;
                     
                     _customerDisplay.Show();
                     
-                    // Re-set top/left after show
-                    _customerDisplay.Left = targetScreen.Bounds.Left;
-                    _customerDisplay.Top = targetScreen.Bounds.Top;
+                    // Re-set after show to ensure it stays on target screen
+                    _customerDisplay.Left = targetScreen.LogicalBounds.Left;
+                    _customerDisplay.Top = targetScreen.LogicalBounds.Top;
                 }
 
                 // Ensure Admin window is moved to the designated admin screen
@@ -579,19 +587,21 @@ namespace SystemeCaisse.UI.ViewModels
             var mainWin = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w is SystemeCaisse.UI.MainWindow);
             if (mainWin == null) return;
 
-            // Move the admin window to the designated screen
-            mainWin.Left = adminScreen.WorkingArea.Left + 50; // Offset a bit from top-left
-            mainWin.Top = adminScreen.WorkingArea.Top + 50;
+            // CRITICAL: Must set to Normal before moving if maximized
+            bool wasMaximized = mainWin.WindowState == WindowState.Maximized;
+            if (wasMaximized) mainWin.WindowState = WindowState.Normal;
 
-            // If it was maximized, we might need to restore and re-maximize on the new screen
-            // but for POS, it's often better to let it be windowed or handle maximization manually.
-            if (mainWin.WindowState == WindowState.Maximized)
+            // Move the admin window using LOGICAL coordinates
+            mainWin.Left = adminScreen.LogicalWorkingArea.Left + 50; 
+            mainWin.Top = adminScreen.LogicalWorkingArea.Top + 50;
+
+            if (wasMaximized)
             {
-                mainWin.WindowState = WindowState.Normal;
-                mainWin.Left = adminScreen.WorkingArea.Left;
-                mainWin.Top = adminScreen.WorkingArea.Top;
-                mainWin.Width = adminScreen.WorkingArea.Width;
-                mainWin.Height = adminScreen.WorkingArea.Height;
+                // Re-position accurately and re-maximize
+                mainWin.Left = adminScreen.LogicalWorkingArea.Left;
+                mainWin.Top = adminScreen.LogicalWorkingArea.Top;
+                mainWin.Width = adminScreen.LogicalWorkingArea.Width;
+                mainWin.Height = adminScreen.LogicalWorkingArea.Height;
                 mainWin.WindowState = WindowState.Maximized;
             }
         }
