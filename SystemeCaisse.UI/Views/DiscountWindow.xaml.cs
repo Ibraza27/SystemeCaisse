@@ -3,7 +3,7 @@ using SystemeCaisse.UI.ViewModels;
 
 namespace SystemeCaisse.UI.Views
 {
-    public partial class DiscountWindow : Window
+    public partial class DiscountWindow : System.Windows.Window
     {
         public DiscountWindow(DiscountViewModel viewModel)
         {

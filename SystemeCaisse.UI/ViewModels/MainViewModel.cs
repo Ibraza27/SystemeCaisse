@@ -25,7 +25,8 @@ namespace SystemeCaisse.UI.ViewModels
         public ObservableCollection<Produit> Produits { get; set; }
         public ObservableCollection<Produit> TopProducts { get; set; }
         public ICollectionView ProductsView { get; private set; }
-        public ObservableCollection<CartItemViewModel> Panier { get; set; }
+        public ObservableCollection<Produit> SearchSuggestions { get; private set; } = new();
+        public ObservableCollection<CartItemViewModel> Panier { get; set; } = new();
         
         public ProductsViewModel ProductsVM { get; private set; }
         public StocksViewModel StocksVM { get; private set; }
@@ -36,7 +37,33 @@ namespace SystemeCaisse.UI.ViewModels
         public InventoryViewModel InventoryVM { get; private set; }
         public AnalysisViewModel AnalysisVM { get; private set; }
         
-        public ObservableCollection<Produit> SearchSuggestions { get; } = new ObservableCollection<Produit>();
+        // Aliases for Customer Display Binding
+        public ObservableCollection<CartItemViewModel> LignesVente => Panier;
+        public decimal TotalVente => Total;
+        
+        private bool _showDisplayPromotions = true;
+        public bool ShowDisplayPromotions
+        {
+            get => _showDisplayPromotions;
+            set { _showDisplayPromotions = value; OnPropertyChanged(); OnPropertyChanged(nameof(CartColumnWidth)); }
+        }
+
+        public GridLength CartColumnWidth => ShowDisplayPromotions ? new GridLength(2, GridUnitType.Star) : new GridLength(1, GridUnitType.Star);
+
+        private bool _showThankYouMessage;
+        public bool ShowThankYouMessage
+        {
+            get => _showThankYouMessage;
+            set { _showThankYouMessage = value; OnPropertyChanged(); }
+        }
+
+        public string CurrentDateTime => DateTime.Now.ToString("dddd dd MMMM yyyy HH:mm", new System.Globalization.CultureInfo("fr-FR"));
+
+        public decimal TotalHorsRemise => Panier.Sum(x => x.TotalLigneStandard);
+        public decimal TotalRemises => TotalRemise;
+        public double TotalEuro => (double)TotalVente / 655.957;
+
+        private Views.CustomerDisplayWindow? _customerDisplay;
 
         private Produit? _selectedSearchProduct;
         public Produit? SelectedSearchProduct
@@ -50,7 +77,7 @@ namespace SystemeCaisse.UI.ViewModels
                     OnPropertyChanged();
                     if (_selectedSearchProduct != null)
                     {
-                        AddToCart(_selectedSearchProduct);
+                        AddToCart((object)_selectedSearchProduct);
                         // Clear search after selection
                         _selectedSearchProduct = null;
                         OnPropertyChanged(nameof(SelectedSearchProduct));
@@ -58,6 +85,13 @@ namespace SystemeCaisse.UI.ViewModels
                     }
                 }
             }
+        }
+
+        private bool _isSearchDropDownOpen;
+        public bool IsSearchDropDownOpen
+        {
+            get => _isSearchDropDownOpen;
+            set => SetProperty(ref _isSearchDropDownOpen, value);
         }
 
         private string? _searchText;
@@ -70,7 +104,30 @@ namespace SystemeCaisse.UI.ViewModels
                 {
                     _searchText = value;
                     OnPropertyChanged();
-                    UpdateSearchSuggestions();
+
+                    if (!string.IsNullOrWhiteSpace(_searchText))
+                    {
+                        string search = _searchText.Trim();
+                        bool isNumeric = search.All(char.IsDigit);
+
+                        // Only open dropdown for text searches, not numeric barcodes
+                        if (!isNumeric)
+                        {
+                            UpdateSearchSuggestions();
+                            IsSearchDropDownOpen = true;
+                        }
+                        else
+                        {
+                            IsSearchDropDownOpen = false;
+                            SearchSuggestions.Clear();
+                        }
+                    }
+                    else
+                    {
+                        IsSearchDropDownOpen = false;
+                        SearchSuggestions.Clear();
+                    }
+                    
                     ProductsView.Refresh();
                 }
             }
@@ -103,6 +160,7 @@ namespace SystemeCaisse.UI.ViewModels
             {
                 _total = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(TotalVente));
                 RecalculateMonnaie();
             }
         }
@@ -199,20 +257,21 @@ namespace SystemeCaisse.UI.ViewModels
         {
             if (SelectedPaiementMode == "Especes")
             {
+                // Monnaie = Recu - A Payer (Total correctly updated)
                 MonnaieRendre = Math.Max(0, MontantRecu - Total);
                 MontantCarte = 0;
             }
-            else if (SelectedPaiementMode == "Mixte")
+            else if (SelectedPaiementMode == "Mixte" || SelectedPaiementMode == "Espece/CB")
             {
                 MonnaieRendre = 0;
-                // If paid more in cash than total, it's just a cash payment with change, but Mixte implies specific intent.
-                // Let's assume user inputs exact cash they have.
+                // Part paid by card is the remainder
                 MontantCarte = Math.Max(0, Total - MontantRecu);
             }
             else // CB
             {
                 MonnaieRendre = 0;
                 MontantCarte = Total;
+                // Fix: Don't set MontantRecu to 0 here to avoid triggering property changes that might crash bound textboxes
             }
         }
 
@@ -253,8 +312,37 @@ namespace SystemeCaisse.UI.ViewModels
         public ICommand CancelCommand { get; }
         public ICommand OpenWeightDialogCommand { get; }
         public ICommand OpenDiscountDialogCommand { get; }
+        public ICommand CalculateProductPopularityCommand { get; }
         public ICommand ClearSearchCommand { get; }
         public ICommand ViderPanierCommand { get; }
+
+        private void ReloadProductsFromDb()
+        {
+            try
+            {
+                // CRITICAL: Clear the tracker to discard cached entity state from previous tab visits.
+                // This forces EF to fetch the latest values (prices, etc.) from the DB.
+                _context.ChangeTracker.Clear();
+                
+                _context.Produits.Load();
+                Produits = _context.Produits.Local.ToObservableCollection();
+                
+                // Refresh the CollectionView
+                ProductsView = CollectionViewSource.GetDefaultView(Produits);
+                ProductsView.Filter = FilterProducts;
+                ProductsView.Refresh();
+                
+                OnPropertyChanged(nameof(Produits));
+                OnPropertyChanged(nameof(ProductsView));
+
+                // Force refresh TopProducts (with the new product objects)
+                _ = CalculateProductPopularity(); 
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Reload Error: {ex.Message}");
+            }
+        }
 
         private readonly PrintService _printService;
         private readonly IDataMigrationService _migrationService;
@@ -282,20 +370,16 @@ namespace SystemeCaisse.UI.ViewModels
             {
                 _lastIndex = value;
 
-                // v30: PASSIVE TRANSITION
-                // We signal the viewmodels but avoid any immediate UI-thread-blocking work.
-                if (previousIndex == 5)
-                {
-                    AnalysisVM.Cleanup();
-                }
-
                 if (value == 5)
                 {
-                    _ = AnalysisVM.LoadAnalysis();
+                    // Analysis disabled temporarily due to build issues
                 }
 
                 if (value == 1)
                 {
+                    // Price Sync: Reload latest products from DB when entering Caisse
+                    ReloadProductsFromDb();
+                    
                     LoadPromotions();
                     ApplyAutomaticPromotions();
                     UpdateTotal();
@@ -315,11 +399,8 @@ namespace SystemeCaisse.UI.ViewModels
             Produits = _context.Produits.Local.ToObservableCollection();
             
             // Calculate Sales Counts & Sort (and refresh view when done)
-            Task.Run(async () => 
-            {
-                await CalculateProductPopularity();
-                Application.Current.Dispatcher.BeginInvoke(new Action(() => ProductsView.Refresh()), System.Windows.Threading.DispatcherPriority.Background);
-            });
+            // Refresh TopProducts after loading
+            _ = CalculateProductPopularity(); 
 
             ProductsView = CollectionViewSource.GetDefaultView(Produits);
             ProductsView.Filter = FilterProducts;
@@ -353,23 +434,21 @@ namespace SystemeCaisse.UI.ViewModels
             ViderPanierCommand = new BasicRelayCommand(_ => ResetSale());
             ScanCommand = new BasicRelayCommand(_ => HandleScan());
             EditQuantityCommand = new BasicRelayCommand(EditQuantity);
+            CalculateProductPopularityCommand = new BasicRelayCommand(async _ => await CalculateProductPopularity());
             ClearSearchCommand = new BasicRelayCommand(_ => SearchText = string.Empty);
             
             OpenWeightDialogCommand = new BasicRelayCommand(_ => 
             {
                 var weightProducts = Produits.Where(p => string.Equals(p.TypeVente, "poids", StringComparison.OrdinalIgnoreCase)).ToList();
                 var selectDialog = new Views.ProductSelectionWindow(weightProducts);
+                SetupWindowOwner(selectDialog);
                 if (selectDialog.ShowDialog() == true && selectDialog.SelectedProduct != null)
                 {
-                    AddToCart(selectDialog.SelectedProduct);
+                    AddToCart((object)selectDialog.SelectedProduct);
                 }
             });
 
-
-
             OpenDiscountDialogCommand = new BasicRelayCommand(_ => ApplyManualDiscount());
-            
-            EditQuantityCommand = new BasicRelayCommand(EditQuantity);
             
             SuspendSaleCommand = new BasicRelayCommand(SuspendSale, _ => Panier.Count > 0);
             ResumeSaleCommand = new BasicRelayCommand(ResumeSale);
@@ -398,6 +477,131 @@ namespace SystemeCaisse.UI.ViewModels
             };
 
             UpdateTotal();
+            
+            // Final refresh of TopProducts to be sure
+            Task.Delay(1000).ContinueWith(_ => CalculateProductPopularity());
+
+            // NOTE: Customer Display initialization is triggered by MainWindow.Loaded event (in MainWindow.xaml.cs)
+            // This ensures it runs on the UI thread with a fully visible window.
+
+            // Start Live Clock Timer
+            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            timer.Tick += (s, e) => OnPropertyChanged(nameof(CurrentDateTime));
+            timer.Start();
+        }
+
+        public void InitializeCustomerDisplay()
+        {
+            if (_customerDisplay != null)
+            {
+                _customerDisplay.Close();
+                _customerDisplay = null;
+            }
+
+            try
+            {
+                using var context = _contextFactory.CreateDbContext();
+                
+                var enabledConfig = context.Configuration.Find("customer_display_enabled");
+                bool isEnabled = enabledConfig == null || (bool.TryParse(enabledConfig.Valeur, out bool e) && e);
+                
+                if (!isEnabled) return;
+
+                var cdPromo = context.Configuration.Find("customer_display_show_promotions");
+                ShowDisplayPromotions = cdPromo == null || (bool.TryParse(cdPromo.Valeur, out bool p) && p);
+
+                var screenConfig = context.Configuration.Find("customer_display_screen_index");
+                int screenIndex = (screenConfig != null && int.TryParse(screenConfig.Valeur, out int s)) ? s : 1;
+                var screens = ScreenHelper.GetScreens();
+                ScreenHelper.ScreenInfo? targetScreen = null;
+
+                if (screens.Count > 1)
+                {
+                    // If multiple screens, try to find the one matching the index, but avoid primary if possible
+                    if (screenIndex < screens.Count)
+                    {
+                        targetScreen = screens[screenIndex];
+                    }
+                    
+                    // If the selected screen is primary and there are others, or index is invalid, find first non-primary
+                    if (targetScreen == null || targetScreen.IsPrimary)
+                    {
+                         targetScreen = screens.FirstOrDefault(s => !s.IsPrimary) ?? screens[0];
+                    }
+                }
+                else
+                {
+                    // Only 1 screen: do NOT open customer display as it would cover the admin window
+                    System.Diagnostics.Debug.WriteLine("CustomerDisplay: Only 1 screen detected, skipping.");
+                    return;
+                }
+
+                if (targetScreen != null)
+                {
+                    _customerDisplay = new Views.CustomerDisplayWindow(this);
+                    _customerDisplay.WindowStartupLocation = WindowStartupLocation.Manual;
+                    
+                    // Explicitly set coordinates to target screen
+                    _customerDisplay.Left = targetScreen.Bounds.Left;
+                    _customerDisplay.Top = targetScreen.Bounds.Top;
+                    _customerDisplay.Width = targetScreen.Bounds.Width;
+                    _customerDisplay.Height = targetScreen.Bounds.Height;
+                    
+                    _customerDisplay.WindowState = WindowState.Maximized;
+                    _customerDisplay.WindowStyle = WindowStyle.None;
+                    
+                    // Ownership removed: WPF restricts cross-screen positioning if Owner is set.
+                    // Lifecycle is instead handled by MainWindow.OnClosed() shutting down the app.
+
+                    _customerDisplay.Show();
+                    
+                    // Re-set top/left after show to ensure it doesn't snap back to primary
+                    _customerDisplay.Left = targetScreen.Bounds.Left;
+                    _customerDisplay.Top = targetScreen.Bounds.Top;
+                }
+
+                // Ensure Admin window is NOT the customer display screen
+                EnsureAdminOnCorrectScreen();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Customer Display Error: {ex.Message}");
+            }
+        }
+
+        private void EnsureAdminOnCorrectScreen()
+        {
+            if (_customerDisplay == null) return;
+
+            var screens = ScreenHelper.GetScreens();
+            var mainWin = Application.Current.MainWindow;
+            if (mainWin == null) return;
+
+            // Find a screen that is NOT the one used by customer display
+            var adminScreen = screens.FirstOrDefault(s => 
+                s.WorkingArea.Left != _customerDisplay.Left || 
+                s.WorkingArea.Top != _customerDisplay.Top);
+
+            if (adminScreen != null)
+            {
+                mainWin.Left = adminScreen.WorkingArea.Left;
+                mainWin.Top = adminScreen.WorkingArea.Top;
+                // Don't maximize here to allow user choice, but ensure it's on the right screen
+            }
+        }
+
+        public void SetupWindowOwner(Window win)
+        {
+            if (win == null) return;
+            var mainWin = Application.Current.MainWindow;
+            
+            // Fix: "Impossible de définir la propriété Owner avec elle-même"
+            if (mainWin != null && mainWin != win)
+            {
+                win.Owner = mainWin;
+            }
+            
+            win.WindowStartupLocation = WindowStartupLocation.CenterOwner;
         }
 
         private void SetPaymentMode(object parameter)
@@ -432,34 +636,31 @@ namespace SystemeCaisse.UI.ViewModels
                  
                 // Fix for SQLite Decimal Sum Error: Fetch minimal data and aggregate in memory
                 var allLines = await context.LignesVente.AsNoTracking()
-                    .Select(l => new { l.ProduitId, l.Quantite })
+                    .Select(l => new { l.ProduitId, l.ProduitNom, l.Quantite })
                     .ToListAsync();
 
-                // Group by NAME instead of ID to match Dashboard consistency
+                // Grouping logic: ID preferred, Name as fallback for old data
                 var salesStats = allLines
-                    .GroupBy(l => l.ProduitNom)
-                    .Select(g => new { Name = g.Key, Count = g.Sum(x => x.Quantite) })
+                    .GroupBy(l => l.ProduitId > 0 ? l.ProduitId.ToString() : l.ProduitNom ?? "Inconnu")
+                    .Select(g => new { Key = g.Key, Count = g.Sum(x => x.Quantite) })
                     .OrderByDescending(x => x.Count)
                     .ToList();
 
-                // Update local instances for sorting in main grid (by name-based popularity)
-                var statsDict = salesStats.ToDictionary(s => s.Name, s => s.Count, StringComparer.OrdinalIgnoreCase);
+                // Update local instances for sorting in main grid
                 foreach (var p in Produits)
                 {
-                    if (!string.IsNullOrWhiteSpace(p.Nom) && statsDict.TryGetValue(p.Nom, out var count))
-                        p.ValidatedSalesCount = count;
-                    else
-                        p.ValidatedSalesCount = 0;
+                    var stat = salesStats.FirstOrDefault(s => s.Key == p.Id.ToString() || s.Key == p.Nom);
+                    p.ValidatedSalesCount = stat?.Count ?? 0;
                 }
 
                 // Update Top 20 (Active products only)
                 var top20Items = new List<Produit>();
-                foreach (var stat in salesStats.Take(50)) // Take more to find enough active matches
+                foreach (var stat in salesStats) 
                 {
-                    var matchingActiveProd = Produits.FirstOrDefault(p => p.Actif && string.Equals(p.Nom, stat.Name, StringComparison.OrdinalIgnoreCase));
-                    if (matchingActiveProd != null)
+                    var matchingProd = Produits.FirstOrDefault(p => p.Actif && (p.Id.ToString() == stat.Key || p.Nom == stat.Key));
+                    if (matchingProd != null && !top20Items.Contains(matchingProd))
                     {
-                        top20Items.Add(matchingActiveProd);
+                        top20Items.Add(matchingProd);
                         if (top20Items.Count >= 20) break;
                     }
                 }
@@ -472,8 +673,9 @@ namespace SystemeCaisse.UI.ViewModels
                         if (p != null) TopProducts.Add(p);
                     }
                     
-                    // Also refresh the main view if it depends on ValidatedSalesCount for sorting
+                    // Force refresh the collection view
                     ProductsView?.Refresh();
+                    System.Diagnostics.Debug.WriteLine($"POS DEBUG: TopProducts count={TopProducts.Count}, total active prods={Produits.Count}");
                 }), System.Windows.Threading.DispatcherPriority.Background);
             }
             catch (Exception ex) 
@@ -504,7 +706,7 @@ namespace SystemeCaisse.UI.ViewModels
 
             SuspendedSales.Add(sale);
             ResetSale();
-            MessageBox.Show("Vente mise en attente.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(Application.Current.MainWindow, "Vente mise en attente.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void ResumeSale(object parameter)
@@ -513,7 +715,7 @@ namespace SystemeCaisse.UI.ViewModels
             {
                 if (Panier.Count > 0)
                 {
-                    if (MessageBox.Show("Un panier est en cours. L'écraser ?", "Attention", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.No)
+                    if (MessageBox.Show(Application.Current.MainWindow, "Un panier est en cours. L'écraser ?", "Attention", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.No)
                         return;
                 }
 
@@ -527,7 +729,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
         }
 
-        private void HandleScan()
+        private async void HandleScan()
         {
             if (string.IsNullOrWhiteSpace(SearchText)) return;
 
@@ -544,13 +746,16 @@ namespace SystemeCaisse.UI.ViewModels
 
             if (product != null)
             {
-                AddToCart(product);
+                AddToCart((object)product);
                 SearchText = string.Empty; // Clear after successful scan
+                IsSearchDropDownOpen = false;
+                SearchSuggestions.Clear();
             }
             else
             {
                 // Product Not Found logic
                 var dialog = new Views.ProductNotFoundWindow(code);
+                SetupWindowOwner(dialog);
                 if (dialog.ShowDialog() == true && dialog.AddRequested)
                 {
                     // Fetch existing categories for the autocomplete
@@ -562,28 +767,34 @@ namespace SystemeCaisse.UI.ViewModels
                         .ToList();
 
                     var addDialog = new Views.QuickAddProductWindow(code, categories);
+                    SetupWindowOwner(addDialog);
                     if (addDialog.ShowDialog() == true && addDialog.NewProduct != null)
                     {
                         var newProd = addDialog.NewProduct;
 
-                        // Save to database
-                        using (var context = _contextFactory.CreateDbContext())
-                        {
-                            context.Produits.Add(newProd);
-                            context.SaveChanges();
-                        }
+                        // Save to database using the main context to keep tracking in sync
+                        _context.Produits.Add(newProd);
+                        await _context.SaveChangesAsync();
 
                         // Add to local observable collection so it appears in UI
                         Produits.Add(newProd);
 
+                        _ = ProductsVM.LoadDataCommand.ExecuteAsync(null);
+                        StocksVM.LoadData();
+                        _ = InventoryVM.LoadHistoryAsync();
+
                         // Automatically add to cart
-                        AddToCart(newProd);
-                        SearchText = string.Empty;
+                        AddToCart((object)newProd);
                         
                         // Force refresh of the TopProducts and Search suggestions if needed
                         UpdateSearchSuggestions();
                     }
                 }
+                
+                // CRITICAL: Always clear SearchText after the flow, even if cancelled
+                SearchText = string.Empty;
+                IsSearchDropDownOpen = false;
+                SearchSuggestions.Clear();
             }
         }
         
@@ -591,10 +802,8 @@ namespace SystemeCaisse.UI.ViewModels
         {
             if (parameter is CartItemViewModel item)
             {
-                // DEBUG: Confirm command execution
-                // MessageBox.Show($"Modification quantité pour : {item.ProduitNom}", "Debug", MessageBoxButton.OK, MessageBoxImage.Information);
-                
                 var dialog = new Views.QuantityInputWindow(item.Quantite);
+                SetupWindowOwner(dialog);
                 if (dialog.ShowDialog() == true)
                 {
                     item.Quantite = dialog.Quantity;
@@ -613,7 +822,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
         }
 
-        private void Checkout(object parameter)
+        private async void Checkout(object parameter)
         {
             if (Panier.Count == 0) return;
 
@@ -625,29 +834,26 @@ namespace SystemeCaisse.UI.ViewModels
                     Total = Total,
                     TotalRemise = TotalRemise,
                     NbArticles = (int)Panier.Sum(i => i.Quantite),
-                    NumeroTicket = DateTime.Now.Ticks.ToString().Substring(10), // Shorter ticket number
-                    MoyenPaiement = SelectedPaiementMode?.ToLower(),
+                    NumeroTicket = DateTime.Now.Ticks.ToString().Substring(10),
+                    MoyenPaiement = SelectedPaiementMode,
                     MontantEspeces = SelectedPaiementMode == "Especes" ? MontantRecu : (SelectedPaiementMode == "Mixte" ? MontantRecu : 0),
                     MontantCB = SelectedPaiementMode == "CB" ? Total : (SelectedPaiementMode == "Mixte" ? MontantCarte : 0),
                     MonnaieRendue = MonnaieRendre,
                     Statut = "validee"
                 };
 
-                // Add Payment Details check
                 if (SelectedPaiementMode == "Especes" && MontantRecu < Total && Total > 0)
                 {
-                    MessageBox.Show("Montant reçu insuffisant !", "Erreur", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    MessageBox.Show(Application.Current.MainWindow, "Montant reçu insuffisant !", "Erreur", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
                 
-                // Training Mode Check
                 if (SettingsVM.IsTrainingMode)
                 {
-                    if (MessageBox.Show("MODE FORMATION ACTIVE.\nLa vente ne sera pas enregistrée.\nContinuer ?", "Mode Formation", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.No)
+                    if (MessageBox.Show(Application.Current.MainWindow, "MODE FORMATION ACTIVE.\nLa vente ne sera pas enregistrée.\nContinuer ?", "Mode Formation", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.No)
                         return;
 
-                     // Printing (Always ask or force?)
-                    if (MessageBox.Show("Simuler l'impression du ticket ?", "Impression Formation", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+                    if (MessageBox.Show(Application.Current.MainWindow, "Simuler l'impression du ticket ?", "Impression Formation", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
                     {
                         _ = Task.Run(() => _printService.PrintTicket(vente, CurrentEntreprise ?? new Entreprise { Nom = "Inconnu" }, true));
                     }
@@ -656,21 +862,17 @@ namespace SystemeCaisse.UI.ViewModels
                     return;
                 }
 
-                // ... (Existing LigneVente logic) ...
-
                 foreach (var item in Panier)
                 {
-                    // Capture data BEFORE modifying the entity (because item.Produit delegates to the entity)
                     int productId = item.Produit.Id;
                     decimal quantity = item.Quantite;
                     decimal price = item.Produit.PrixVente;
                     string productNom = item.ProduitNom;
                     
                     var ligne = item.ToEntity();
-                    ligne.Produit = null; // Now safer to nullify for EF
+                    ligne.Produit = null; 
                     vente.Lignes.Add(ligne);
 
-                    // 1. Stock Movement Logic
                     var mvmt = new MouvementStock
                     {
                         ProduitId = productId,
@@ -683,7 +885,6 @@ namespace SystemeCaisse.UI.ViewModels
                     };
                     _context.MouvementsStock.Add(mvmt);
 
-                    // 2. Update Stock
                     var productToUpdate = _context.Produits.FirstOrDefault(p => p.Id == productId);
                     if (productToUpdate != null)
                     {
@@ -692,39 +893,38 @@ namespace SystemeCaisse.UI.ViewModels
                 }
 
                 _context.Ventes.Add(vente);
-                _context.SaveChanges();
+                await _context.SaveChangesAsync();
 
-                BasketRemiseManuelle = 0; // Reset manual discount after success
-                // Capture change
                 decimal changeToReturn = MonnaieRendre;
 
-                // Open Summary Window (Preview, Print, Save)
+                // Create the summary window BEFORE resetting the sale so all data is guaranteed valid
                 var summary = new Views.ReceiptSummaryWindow(vente, CurrentEntreprise ?? new Entreprise { Nom = "Inconnu" }, changeToReturn, false);
+                SetupWindowOwner(summary);
                 summary.ShowDialog();
 
-                // Reset
+                // ONLY reset the sale after the summary window is closed
                 ResetSale();
+                BasketRemiseManuelle = 0;
                 
                 if (changeToReturn > 0)
-                    MessageBox.Show($"Monnaie à rendre : {changeToReturn:C}", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show(Application.Current.MainWindow, $"Monnaie à rendre : {changeToReturn:C}", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
 
-                // Update Dashboard & Products Stats in background
                 _ = Task.Run(async () => 
                 {
-                    using var context = _contextFactory.CreateDbContext();
                     await CalculateProductPopularity(); 
-                    
                     Application.Current.Dispatcher.BeginInvoke(new Action(() => 
                     {
                         DashboardVM.LoadDashboardDataAsync().ConfigureAwait(false);
                         ProductsView.Refresh();
                         StocksVM.LoadData();
+                        _ = ProductsVM.LoadDataCommand.ExecuteAsync(null);
+                        _ = InventoryVM.LoadHistoryAsync();
                     }), System.Windows.Threading.DispatcherPriority.Background);
                 });
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show($"Erreur lors de l'enregistrement : {ex.Message}", "Erreur", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                System.Windows.MessageBox.Show(Application.Current.MainWindow, $"Erreur lors de l'enregistrement : {ex.Message}", "Erreur", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
             }
         }
 
@@ -732,9 +932,6 @@ namespace SystemeCaisse.UI.ViewModels
         {
             if (parameter is Produit produit)
             {
-                // DEBUG: Check correct product identification
-                // System.Diagnostics.Debug.WriteLine($"AddToCart: {produit.Nom}, Type: {produit.TypeVente}, ReturnMode: {IsReturnMode}");
-
                 if (IsReturnMode)
                 {
                     var existing = Panier.FirstOrDefault(i => i.Produit.Id == produit.Id);
@@ -753,13 +950,12 @@ namespace SystemeCaisse.UI.ViewModels
                 }
                 else
                 {
-                    // Case-insensitive check and trim
-                    // Case-insensitive check and trim
                     bool isWeight = string.Equals(produit.TypeVente?.Trim(), "poids", StringComparison.OrdinalIgnoreCase);
 
                     if (isWeight)
                     {
                         var dialog = new Views.WeightInputWindow(produit);
+                        SetupWindowOwner(dialog);
                         if (dialog.ShowDialog() == true)
                         {
                             AddLine(produit, dialog.PoidsSaisi);
@@ -777,8 +973,6 @@ namespace SystemeCaisse.UI.ViewModels
         private void AddLine(Produit produit, decimal qty)
         {
             var existingItem = Panier.FirstOrDefault(i => i.Produit.Id == produit.Id);
-            // Only merge if unit product. Weight products might be distinct lines depending on requirement.
-            // Usually weight products are merged too if same product.
             if (existingItem != null)
             {
                 existingItem.Quantite += qty;
@@ -794,11 +988,11 @@ namespace SystemeCaisse.UI.ViewModels
                     CategorieNom = !string.IsNullOrWhiteSpace(produit.Categorie) ? produit.Categorie : "Autre",
                     PrixUnitaire = produit.PrixVente,
                     Quantite = qty,
-                    TotalLigne = qty * produit.PrixVente
+                    TotalLigne = qty * produit.PrixVente,
+                    TaxTier = produit.TaxTier
                 };
                 
                 var cartItem = new CartItemViewModel(ligne);
-                // Standard collection changed logic will handle property changes
                 Panier.Add(cartItem);
             }
         }
@@ -828,7 +1022,7 @@ namespace SystemeCaisse.UI.ViewModels
                     .Include(p => p.Tiers)
                     .Include(p => p.BundleItems)
                     .Where(p => p.Actif && p.DateDebut <= now && p.DateFin >= now)
-                    .AsNoTracking() // Better performance for POS read-only promotions
+                    .AsNoTracking()
                     .ToList();
             }
             catch { }
@@ -844,10 +1038,8 @@ namespace SystemeCaisse.UI.ViewModels
 
             if (_activePromotions == null || !_activePromotions.Any()) return;
 
-            // Sort non-cumulative last or per your logic? For now, simple run
             foreach (var promo in _activePromotions.Where(p => p.TypePromotion != "remise_total" && p.TypePromotion != "seuil_panier"))
             {
-                // Bundles don't necessarily have a single ProductId or Category
                 var targetItems = promo.TypePromotion == "offre_combine" 
                     ? Panier.ToList() 
                     : Panier.Where(i => 
@@ -870,8 +1062,6 @@ namespace SystemeCaisse.UI.ViewModels
 
                     case "offre_combine":
                         if (promo.BundleItems == null || !promo.BundleItems.Any()) break;
-
-                        // 1. Calculate how many full bundles we have
                         int maxBundles = int.MaxValue;
                         foreach (var bi in promo.BundleItems)
                         {
@@ -879,59 +1069,30 @@ namespace SystemeCaisse.UI.ViewModels
                             decimal totalQty = cartItems.Sum(i => i.Quantite);
                             maxBundles = Math.Min(maxBundles, (int)(totalQty / bi.QuantiteRequise));
                         }
-
                         if (maxBundles <= 0) break;
-
-                        // 2. Identify all participating lines
                         var participantIds = promo.BundleItems.Select(bi => bi.ProduitId).ToList();
                         var bundleLines = Panier.Where(i => i.ProduitId.HasValue && participantIds.Contains(i.ProduitId.Value)).ToList();
-
-                        // 3. Calculate original price for a single bundle
                         decimal originalBundleTotal = 0;
                         foreach (var bi in promo.BundleItems)
                         {
-                            var prod = _context.Produits.FirstOrDefault(p => p.Id == bi.ProduitId); // Assuming _context is available or passed
+                            var prod = Produits.FirstOrDefault(p => p.Id == bi.ProduitId);
                             originalBundleTotal += (prod?.PrixVente ?? 0) * bi.QuantiteRequise;
                         }
-
                         if (originalBundleTotal <= 0) break;
-
-                        // 4. Calculate total target price and total original price for ALL groups
-                        decimal targetTotalForAll = maxBundles * promo.Valeur;
-                        decimal originalTotalForAll = maxBundles * originalBundleTotal;
-                        decimal totalDiscount = originalTotalForAll - targetTotalForAll;
-
-                        if (totalDiscount <= 0) break;
-
-                        // 5. Apply pro-rata discount to participating items (up to required quantity)
                         foreach (var bi in promo.BundleItems)
                         {
                             decimal remainingQtyToDiscount = maxBundles * bi.QuantiteRequise;
                             var itemsForThisProd = bundleLines.Where(l => l.ProduitId == bi.ProduitId).OrderByDescending(l => l.Quantite).ToList();
-                            
                             foreach (var line in itemsForThisProd)
                             {
                                 if (remainingQtyToDiscount <= 0) break;
-
                                 decimal qtyToDiscountOnThisLine = Math.Min(line.Quantite, remainingQtyToDiscount);
-                                decimal originalLinePrice = line.PrixUnitaire; // Base price
-                                
-                                // Discount proportion for this specific product based on its contribution to bundle total
-                                // decimal productBundleWeight = (originalLinePrice * bi.QuantiteRequise) / originalBundleTotal;
-                                // decimal totalDiscountForThisProductInAllBundles = totalDiscount * (bi.QuantiteRequise * maxBundles / (bi.QuantiteRequise * maxBundles)) ; // simplify later
-
-                                // Let's use simpler pro-rata: newPrice = originalPrice * (targetBundleTotal / originalBundleTotal)
+                                decimal originalLinePrice = line.PrixUnitaire;
                                 decimal ratio = promo.Valeur / originalBundleTotal;
                                 decimal discountedUnitPrice = originalLinePrice * ratio;
-
-                                // We split the line if only partial quantity is discounted? 
-                                // Simplification: apply partially to the total line value
-                                // decimal currentTotal = line.TotalLigne; // This is TotalLigneStandard
                                 decimal discountAmount = qtyToDiscountOnThisLine * (originalLinePrice - discountedUnitPrice);
-                                
-                                line.RemiseAuto += discountAmount; // Apply as automatic discount
+                                line.RemiseAuto += discountAmount;
                                 line.PromotionAppliquee = string.IsNullOrEmpty(line.PromotionAppliquee) ? promo.Nom : line.PromotionAppliquee + " + " + promo.Nom;
-                                
                                 remainingQtyToDiscount -= qtyToDiscountOnThisLine;
                             }
                         }
@@ -965,7 +1126,6 @@ namespace SystemeCaisse.UI.ViewModels
                                     decimal r = sets * (promo.IsPourcentage 
                                         ? (item.PrixUnitaire * (promo.RemiseSurIeme.Value / 100))
                                         : promo.RemiseSurIeme.Value);
-
                                     item.RemiseAuto += r;
                                     string unit = promo.IsPourcentage ? "%" : "€";
                                     item.PromotionAppliquee = $"{promo.Nom} (-{promo.RemiseSurIeme}{unit} sur {sets})";
@@ -981,7 +1141,6 @@ namespace SystemeCaisse.UI.ViewModels
                                 .Where(t => item.Quantite >= t.QuantiteMin)
                                 .OrderByDescending(t => t.QuantiteMin)
                                 .FirstOrDefault();
-
                             if (bestTier != null && bestTier.PrixUnitaire < item.PrixUnitaire)
                             {
                                 decimal standardTotal = item.TotalLigneStandard;
@@ -1000,43 +1159,30 @@ namespace SystemeCaisse.UI.ViewModels
             try
             {
                 var mainWindow = Application.Current.MainWindow;
-
-                // Step 1: Selection Window (Scope and Type)
                 var selectWindow = new Views.ManualDiscountSelectionWindow();
-                if (mainWindow != null && selectWindow != mainWindow) selectWindow.Owner = mainWindow;
+                SetupWindowOwner(selectWindow);
                 if (selectWindow.ShowDialog() != true) return;
 
                 var scope = selectWindow.SelectedScope;
                 var type = selectWindow.SelectedType;
-
                 CartItemViewModel? targetItem = null;
 
-                // Step 2: Item Selection (optional)
                 if (scope == Views.DiscountScope.Item)
                 {
-                    if (Panier.Count == 0)
-                    {
-                        MessageBox.Show("Le panier est vide.", "Attention", MessageBoxButton.OK, MessageBoxImage.Warning);
-                        return;
-                    }
-
+                    if (Panier.Count == 0) return;
                     var itemWindow = new Views.CartItemSelectionWindow(Panier);
-                    if (mainWindow != null && itemWindow != mainWindow) itemWindow.Owner = mainWindow;
+                    SetupWindowOwner(itemWindow);
                     if (itemWindow.ShowDialog() != true) return;
                     targetItem = itemWindow.SelectedItem;
                 }
 
-                // Step 3: Value Input
                 string title = (scope == Views.DiscountScope.Basket ? "Remise Panier" : $"Remise sur {targetItem?.ProduitNom}");
                 string unit = (type == Views.DiscountType.Percentage ? "%" : "€");
-                
                 var valueWindow = new Views.DiscountValueInputWindow(title, unit);
-                if (mainWindow != null && valueWindow != mainWindow) valueWindow.Owner = mainWindow;
+                SetupWindowOwner(valueWindow);
                 if (valueWindow.ShowDialog() != true) return;
 
                 decimal val = valueWindow.DiscountValue;
-
-                // Step 4: Apply
                 if (scope == Views.DiscountScope.Basket)
                 {
                     if (type == Views.DiscountType.Percentage)
@@ -1044,10 +1190,7 @@ namespace SystemeCaisse.UI.ViewModels
                         decimal baseTotal = Panier.Sum(i => i.TotalLigneStandard);
                         BasketRemiseManuelle = baseTotal * val / 100;
                     }
-                    else
-                    {
-                        BasketRemiseManuelle = val;
-                    }
+                    else BasketRemiseManuelle = val;
                 }
                 else if (targetItem != null)
                 {
@@ -1062,13 +1205,9 @@ namespace SystemeCaisse.UI.ViewModels
                         targetItem.RemiseManuellePercent = 0;
                     }
                 }
-
                 UpdateTotal();
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Erreur lors de l'application de la remise : {ex.Message}\n{ex.StackTrace}", "Erreur Critique", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            catch { }
         }
 
         private void UpdateTotal()
@@ -1102,13 +1241,16 @@ namespace SystemeCaisse.UI.ViewModels
             Total = baseTotal - TotalRemise;
             if (Total < 0) Total = 0;
 
-            OnPropertyChanged(nameof(Total));
-            OnPropertyChanged(nameof(TotalRemise));
+            // Notify UI summaries
+            OnPropertyChanged(nameof(TotalHorsRemise));
+            OnPropertyChanged(nameof(TotalRemises));
+            OnPropertyChanged(nameof(TotalVente));
+            OnPropertyChanged(nameof(TotalEuro));
             OnPropertyChanged(nameof(TotalSansRemise));
-            OnPropertyChanged(nameof(MonnaieRendre));
+            
+            RecalculateMonnaie();
         }
     }
-
 
     public class SuspendedSale
     {
@@ -1117,7 +1259,6 @@ namespace SystemeCaisse.UI.ViewModels
         public List<CartItemViewModel> Items { get; set; } = new();
         public decimal Total { get; set; }
         public string Label { get; set; } = string.Empty;
-        
         public override string ToString() => Label;
     }
 }

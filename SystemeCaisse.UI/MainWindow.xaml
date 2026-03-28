@@ -126,7 +126,7 @@
             <TabItem Header="📈 Analyses">
                  <views:AnalysisView DataContext="{Binding AnalysisVM}"/>
             </TabItem>
-            
+
             <TabItem Header="⚙️ Configuration">
                  <views:SettingsView DataContext="{Binding SettingsVM}"/>
             </TabItem>

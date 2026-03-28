@@ -19,17 +19,17 @@
         <TextBlock Text="⚙️ Paramètres" FontSize="24" FontWeight="Bold" Margin="20,20,0,20" Foreground="#333"/>
         
         <!-- Tabs -->
-        <TabControl Grid.Row="1" Margin="20,0,20,20" Background="White" BorderThickness="0">
-            <TabControl.Resources>
-                <Style TargetType="TabItem">
-                    <Setter Property="FontSize" Value="14"/>
-                    <Setter Property="Padding" Value="15,10"/>
-                </Style>
-            </TabControl.Resources>
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="20,0,20,20">
+            <TabControl Background="White" BorderThickness="0">
+                <TabControl.Resources>
+                    <Style TargetType="TabItem">
+                        <Setter Property="FontSize" Value="14"/>
+                        <Setter Property="Padding" Value="15,10"/>
+                    </Style>
+                </TabControl.Resources>
 
-            <!-- General Tab -->
-            <TabItem Header="🏢 Entreprise">
-                <ScrollViewer>
+                <!-- General Tab -->
+                <TabItem Header="🏢 Entreprise">
                     <StackPanel Margin="20" MaxWidth="600" HorizontalAlignment="Left">
                         <GroupBox Header="Informations De l'Entreprise" Padding="15">
                             <StackPanel>
@@ -54,58 +54,88 @@
                             </StackPanel>
                         </GroupBox>
                     </StackPanel>
-                </ScrollViewer>
-            </TabItem>
+                </TabItem>
 
-            <!-- Peripherals Tab -->
-            <TabItem Header="🖨️ Périphériques">
-                <StackPanel Margin="20" MaxWidth="600" HorizontalAlignment="Left">
-                    <GroupBox Header="Impression Ticket" Padding="15">
-                        <StackPanel>
-                            <Label Content="Imprimante par défaut"/>
-                            <ComboBox ItemsSource="{Binding AvailablePrinters}" SelectedItem="{Binding SelectedPrinter}" Padding="5" Margin="0,0,0,15"/>
+                <!-- Peripherals Tab -->
+                <TabItem Header="🖨️ Périphériques">
+                    <StackPanel Margin="20" MaxWidth="600" HorizontalAlignment="Left">
+                        <GroupBox Header="Impression Ticket" Padding="15">
+                            <StackPanel>
+                                <Label Content="Imprimante par défaut"/>
+                                <ComboBox ItemsSource="{Binding AvailablePrinters}" SelectedItem="{Binding SelectedPrinter}" Padding="5" Margin="0,0,0,15"/>
 
-                            <Label Content="Largeur du Ticket (mm)"/>
-                            <StackPanel Orientation="Horizontal">
-                                <Slider Value="{Binding TicketWidth}" Minimum="58" Maximum="80" Width="200" TickFrequency="1" IsSnapToTickEnabled="True" Margin="0,0,10,0"/>
-                                <TextBlock Text="{Binding TicketWidth}" VerticalAlignment="Center" FontWeight="Bold"/>
-                                <TextBlock Text=" mm" VerticalAlignment="Center"/>
+                                <Label Content="Largeur du Ticket (mm)"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Slider Value="{Binding TicketWidth}" Minimum="58" Maximum="80" Width="200" TickFrequency="1" IsSnapToTickEnabled="True" Margin="0,0,10,0"/>
+                                    <TextBlock Text="{Binding TicketWidth}" VerticalAlignment="Center" FontWeight="Bold"/>
+                                    <TextBlock Text=" mm" VerticalAlignment="Center"/>
+                                </StackPanel>
+
+                                <CheckBox Content="Afficher le Logo sur le ticket" IsChecked="{Binding ShowLogoOnTicket}" Margin="0,15,0,0"/>
                             </StackPanel>
+                        </GroupBox>
 
-                            <CheckBox Content="Afficher le Logo sur le ticket" IsChecked="{Binding ShowLogoOnTicket}" Margin="0,15,0,0"/>
-                        </StackPanel>
-                    </GroupBox>
-                </StackPanel>
-            </TabItem>
+                        <GroupBox Header="📺 Affichage Client (2ème Écran)" Padding="15" Margin="0,20,0,0">
+                            <StackPanel>
+                                <CheckBox Content="Activer l'affichage client" IsChecked="{Binding IsCustomerDisplayEnabled}" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                                
+                                <Label Content="Sélectionner l'écran d'affichage"/>
+                                <ComboBox ItemsSource="{Binding AvailableScreens}" 
+                                          SelectedIndex="{Binding SelectedScreenIndex}" 
+                                          IsEnabled="{Binding IsCustomerDisplayEnabled}"
+                                          Padding="5" Margin="0,0,0,10"/>
 
-            <!-- Promotions Tab -->
-            <TabItem Header="🏷️ Promotions">
-                <views:PromotionsView DataContext="{Binding DataContext.PromotionsVM, RelativeSource={RelativeSource AncestorType=Window}}"/>
-            </TabItem>
+                                <Button Content="Appliquer immédiatement" 
+                                        Command="{Binding ApplyCustomerDisplayCommand}"
+                                        IsEnabled="{Binding IsCustomerDisplayEnabled}"
+                                        Background="#1976D2" Foreground="White" 
+                                        Padding="10,5" HorizontalAlignment="Left" Margin="0,0,0,15"/>
 
-            <!-- System Tab -->
-            <TabItem Header="🔧 Système">
-                <StackPanel Margin="20" MaxWidth="600" HorizontalAlignment="Left">
-                     <!-- Training Mode -->
-                     <GroupBox Header="Mode Formation" Padding="15" Margin="0,0,0,15" BorderBrush="#FF9500">
-                        <StackPanel>
-                            <CheckBox IsChecked="{Binding IsTrainingMode}" Content="Activer le mode formation" FontSize="14" FontWeight="SemiBold"/>
-                            <TextBlock Text="⚠️ Les ventes ne seront PAS enregistrées." Foreground="#FF9500" Margin="24,5,0,0" FontStyle="Italic"/>
-                        </StackPanel>
-                    </GroupBox>
+                                <CheckBox Content="Afficher les promotions et publicités" 
+                                          IsChecked="{Binding ShowCustomerDisplayPromotions}" 
+                                          IsEnabled="{Binding IsCustomerDisplayEnabled}"
+                                          Margin="0,5,0,0"/>
+                                
+                                <TextBlock Text="Note: L'affichage s'ouvrira sur l'écran sélectionné après avoir enregistré." 
+                                           FontSize="11" Foreground="#666" Margin="0,10,0,0" FontStyle="Italic" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </TabItem>
 
-                    <GroupBox Header="Maintenance de la Base de Données" Padding="15">
-                        <StackPanel>
-                            <TextBlock Text="Sauvegardez vos données régulièrement pour éviter toute perte." TextWrapping="Wrap" Margin="0,0,0,15" Foreground="#666"/>
-                            <Button Command="{Binding BackupDatabaseCommand}" Content="📦 Créer une Sauvegarde (Backup)" Width="250" Height="40" HorizontalAlignment="Left" Background="#007AFF" Foreground="White"/>
-                            
-                            <TextBlock Text="Migration depuis l'ancienne version (Python)" FontWeight="SemiBold" Margin="0,15,0,5"/>
-                            <Button Command="{Binding ImportDataCommand}" Content="📥 Importer depuis database.db" Width="250" Height="40" HorizontalAlignment="Left" Background="#5856D6" Foreground="White" Margin="0,5,0,0"/>
-                        </StackPanel>
-                    </GroupBox>
-                </StackPanel>
-            </TabItem>
-        </TabControl>
+                <!-- Promotions Tab -->
+                <TabItem Header="🏷️ Promotions">
+                    <views:PromotionsView DataContext="{Binding DataContext.PromotionsVM, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                </TabItem>
+
+                <!-- System Tab -->
+                <TabItem Header="🔧 Système">
+                    <StackPanel Margin="20" MaxWidth="600" HorizontalAlignment="Left">
+                         <!-- Training Mode -->
+                         <GroupBox Header="Mode Formation" Padding="15" Margin="0,0,0,15" BorderBrush="#FF9500">
+                            <StackPanel>
+                                <CheckBox IsChecked="{Binding IsTrainingMode}" Content="Activer le mode formation" FontSize="14" FontWeight="SemiBold"/>
+                                <TextBlock Text="⚠️ Les ventes ne seront PAS enregistrées." Foreground="#FF9500" Margin="24,5,0,0" FontStyle="Italic"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <GroupBox Header="Maintenance de la Base de Données" Padding="15">
+                            <StackPanel>
+                                <TextBlock Text="Sauvegardez vos données régulièrement pour éviter toute perte." TextWrapping="Wrap" Margin="0,0,0,15" Foreground="#666"/>
+                                <Button Command="{Binding BackupDatabaseCommand}" Content="📦 Créer une Sauvegarde (Backup)" Width="250" Height="40" HorizontalAlignment="Left" Background="#007AFF" Foreground="White"/>
+                                
+                                <TextBlock Text="Migration depuis l'ancienne version (Python)" FontWeight="SemiBold" Margin="0,15,0,5"/>
+                                <Button Command="{Binding ImportDataCommand}" Content="📥 Importer depuis database.db" Width="250" Height="40" HorizontalAlignment="Left" Background="#5856D6" Foreground="White" Margin="0,5,0,0"/>
+
+                                <Separator Margin="0,20"/>
+                                <TextBlock Text="Actions Irréversibles" FontWeight="Bold" Foreground="#FF3B30" Margin="0,0,0,5"/>
+                                <Button Command="{Binding ResetDatabaseCommand}" Content="🗑️ Réinitialiser la Base de Données" Width="250" Height="40" HorizontalAlignment="Left" Background="#FF3B30" Foreground="White"/>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </TabItem>
+            </TabControl>
+        </ScrollViewer>
 
         <!-- Save Button Footer -->
         <Border Grid.Row="2" Background="White" Padding="20" BorderBrush="#E5E5E5" BorderThickness="0,1,0,0">

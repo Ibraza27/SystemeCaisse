@@ -90,17 +90,17 @@ namespace SystemeCaisse.UI
 
         protected override async void OnStartup(StartupEventArgs e)
         {
+            // Set Culture to French for consistent decimal separator handling (, and .)
+            var culture = new System.Globalization.CultureInfo("fr-FR");
+            System.Threading.Thread.CurrentThread.CurrentCulture = culture;
+            System.Threading.Thread.CurrentThread.CurrentUICulture = culture;
+            FrameworkElement.LanguageProperty.OverrideMetadata(
+                typeof(FrameworkElement),
+                new FrameworkPropertyMetadata(
+                    System.Windows.Markup.XmlLanguage.GetLanguage(culture.IetfLanguageTag)));
+
             try
             {
-                // Force French Culture for Currency (€)
-                var cultureInfo = new System.Globalization.CultureInfo("fr-FR");
-                System.Globalization.CultureInfo.DefaultThreadCurrentCulture = cultureInfo;
-                System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = cultureInfo;
-                FrameworkElement.LanguageProperty.OverrideMetadata(
-                    typeof(FrameworkElement),
-                    new FrameworkPropertyMetadata(
-                        System.Windows.Markup.XmlLanguage.GetLanguage(cultureInfo.IetfLanguageTag)));
-
                 await _host.StartAsync();
 
                 // Show Splash Screen
@@ -111,7 +111,14 @@ namespace SystemeCaisse.UI
                 {
                     try 
                     {
-                        // Seed Data if empty
+                        // Ensure Images directory exists for logo and product images
+                string imagesDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images");
+                if (!System.IO.Directory.Exists(imagesDir))
+                {
+                    System.IO.Directory.CreateDirectory(imagesDir);
+                }
+
+                // Seed Data if empty
                         var factory = _host.Services.GetRequiredService<IDbContextFactory<AppDbContext>>();
                         using (var context = factory.CreateDbContext())
                         {

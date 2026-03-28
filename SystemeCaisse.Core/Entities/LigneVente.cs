@@ -36,5 +36,7 @@ namespace SystemeCaisse.Core.Entities
 
         [MaxLength(100)]
         public string? PromotionAppliquee { get; set; }
+
+        public int TaxTier { get; set; } = 1;
     }
 }

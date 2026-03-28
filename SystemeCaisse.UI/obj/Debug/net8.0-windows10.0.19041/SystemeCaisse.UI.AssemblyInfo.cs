@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SystemeCaisse.UI")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7ca657a45679f7190f335366756e184073b80a02")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ec4e1575b2227c98f620c6ce643f5f1aeff50f58")]
 [assembly: System.Reflection.AssemblyProductAttribute("SystemeCaisse.UI")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SystemeCaisse.UI")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

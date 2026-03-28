@@ -3,7 +3,7 @@ using SystemeCaisse.Core.Entities;
 
 namespace SystemeCaisse.UI.Views
 {
-    public partial class WeightInputWindow : Window
+    public partial class WeightInputWindow : System.Windows.Window
     {
         public decimal PoidsSaisi { get; private set; }
 

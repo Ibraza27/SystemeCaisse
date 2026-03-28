@@ -1,0 +1,197 @@
+<Window x:Class="SystemeCaisse.UI.Views.CustomerDisplayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:vm="clr-namespace:SystemeCaisse.UI.ViewModels"
+        xmlns:conv="clr-namespace:SystemeCaisse.UI.Converters"
+        mc:Ignorable="d"
+        Title="Hippocampe - Affichage Client v3.1" Height="1080" Width="1920"
+        WindowStyle="None" WindowState="Maximized" Background="#F2F2F7">
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="{Binding CartColumnWidth}"/>
+            <ColumnDefinition>
+                <ColumnDefinition.Style>
+                    <Style TargetType="ColumnDefinition">
+                        <Setter Property="Width" Value="1.2*"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding ShowDisplayPromotions}" Value="False">
+                                <Setter Property="Width" Value="0"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ColumnDefinition.Style>
+            </ColumnDefinition>
+        </Grid.ColumnDefinitions>
+
+        <!-- Left Column: Cart Info -->
+        <Grid Grid.Column="0" Background="White" Margin="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header Redesign -->
+            <Border Background="White" BorderBrush="#EEE" BorderThickness="0,0,0,1" Padding="20,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <Image Source="pack://application:,,,/Images/logo.png" Width="120" Height="100" Stretch="Uniform"/>
+                    
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="30,0,0,0">
+                        <TextBlock Text="HIPPOCAMPE IMPORT-EXPORT" FontSize="36" FontWeight="Black" Foreground="#2E7D32"/>
+                        <TextBlock Text="5 - 7 Rue Pascal 33370 Tresses, France" FontSize="18" Foreground="#555" Margin="0,5,0,0"/>
+                        <TextBlock Text="LUN - SAM : 9h - 18h | DIMANCHE : 10H - 12H" FontSize="16" FontWeight="SemiBold" Foreground="#777"/>
+                        <TextBlock Text="06 99 79 16 98 / 06 99 56 93 58" FontSize="18" FontWeight="Bold" Foreground="#333"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
+                        <TextBlock Text="{Binding CurrentDateTime}" FontSize="20" FontWeight="SemiBold" Foreground="#2E7D32" HorizontalAlignment="Right"/>
+                        <TextBlock Text="VOTRE PANIER" FontSize="16" Foreground="#999" HorizontalAlignment="Right" FontWeight="Bold" Margin="0,5,0,0"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Items List -->
+            <ListView Grid.Row="1" ItemsSource="{Binding LignesVente}" Margin="0,10" BorderThickness="0" FontFamily="Segoe UI">
+                <ListView.View>
+                    <GridView>
+                        <GridViewColumn Header="Produit" Width="350">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Produit.Nom}" FontSize="22" FontWeight="SemiBold" Margin="5"/>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="Qté" Width="100">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                        <TextBlock Text="{Binding Quantite, StringFormat={}{0:N2}}" FontSize="22" Margin="5"/>
+                                        <TextBlock FontSize="12" Foreground="Gray" VerticalAlignment="Bottom" Margin="0,0,0,8">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Text" Value="u"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Produit.TypeVente}" Value="poids">
+                                                            <Setter Property="Text" Value="kg"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="P.U" Width="140">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding PrixUnitaire, StringFormat='{}{0:N2} €'}" FontSize="20" TextAlignment="Right" Margin="5"/>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="Remise" Width="120">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <TextBlock Text="{Binding RemiseTotale, StringFormat='{}{0:N2} €'}" FontSize="20" Foreground="#D32F2F" FontWeight="Bold" Visibility="{Binding HasPromotion, Converter={StaticResource BoolToVis}}"/>
+                                        <TextBlock Text="-" HorizontalAlignment="Center" FontSize="20" Visibility="{Binding HasPromotion, Converter={StaticResource InvertedBoolToVis}}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="Total" Width="180">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel HorizontalAlignment="Right">
+                                        <TextBlock Text="{Binding TotalLigneStandard, StringFormat='{}{0:N2}'}" FontSize="16" Foreground="#999" TextDecorations="Strikethrough" Visibility="{Binding HasPromotion, Converter={StaticResource BoolToVis}}" HorizontalAlignment="Right"/>
+                                        <TextBlock Text="{Binding TotalLigne, StringFormat='{}{0:N2} €'}" FontSize="24" FontWeight="Bold" Foreground="#2E7D32" TextAlignment="Right"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                    </GridView>
+                </ListView.View>
+            </ListView>
+
+            <!-- Summary Footer -->
+            <Border Grid.Row="2" Background="#F5F5F7" Padding="25" CornerRadius="0,0,10,10" BorderBrush="#DDD" BorderThickness="0,1,0,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <StackPanel VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                            <TextBlock Text="Total Brut:" FontSize="22" Foreground="#666" Width="180"/>
+                            <TextBlock Text="{Binding TotalHorsRemise, StringFormat='{}{0:N2} €'}" FontSize="22" FontWeight="SemiBold"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Total Remises:" FontSize="22" Foreground="#D32F2F" Width="180"/>
+                            <TextBlock Text="{Binding TotalRemises, StringFormat='{}- {0:N2} €'}" FontSize="22" FontWeight="Bold" Foreground="#D32F2F"/>
+                        </StackPanel>
+                        <Border Height="2" Background="#DDD" Margin="0,5"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="TOTAL À PAYER" FontSize="40" FontWeight="Black" Foreground="#333" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Grid Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding TotalVente, StringFormat='{}{0:N2} €'}" 
+                                   FontSize="84" FontWeight="Black" Foreground="#2E7D32" 
+                                   TextAlignment="Right"/>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Right Column: Media / Promotions -->
+        <Grid Grid.Column="1" Margin="0,20,20,20" Visibility="{Binding ShowDisplayPromotions, Converter={StaticResource BoolToVis}}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Ad Carousel / Image -->
+            <Border Grid.Row="0" Background="#222" CornerRadius="10" ClipToBounds="True">
+                <Grid>
+                    <Image x:Name="AdImage" Stretch="UniformToFill" Source="pack://application:,,,/Images/logo.png" Opacity="0.4"/>
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <TextBlock Text="HIPPOCAMPE" FontSize="48" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
+                        <TextBlock Text="IMPORT-EXPORT" FontSize="28" Foreground="#CCC" HorizontalAlignment="Center"/>
+                        <Border Background="#2E7D32" Margin="0,40,0,0" Padding="30,15" CornerRadius="30">
+                            <TextBlock Text="PROMOTIONS EN COURS" FontSize="20" FontWeight="Bold" Foreground="White"/>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Welcome Message -->
+            <Border Grid.Row="1" Background="White" Margin="0,20,0,0" Padding="30" CornerRadius="10">
+                <StackPanel>
+                    <TextBlock Text="Bienvenue chez HIPPOCAMPE" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Foreground="#2E7D32"/>
+                    <TextBlock Text="Nous sommes à votre service !" FontSize="18" Foreground="#666" HorizontalAlignment="Center" Margin="0,10,0,0"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Thank You Overlay -->
+        <Border Grid.ColumnSpan="2" Background="#F2F2F7" Visibility="{Binding ShowThankYouMessage, Converter={StaticResource BoolToVis}}">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <Image Source="pack://application:,,,/Images/logo.png" Width="250" Height="250" Margin="0,0,0,40"/>
+                <TextBlock Text="MERCI DE VOTRE CONFIANCE !" FontSize="64" FontWeight="Black" Foreground="#2E7D32" HorizontalAlignment="Center"/>
+                <TextBlock Text="HIPPOCAMPE IMPORT-EXPORT" FontSize="36" FontWeight="Bold" Foreground="#333" HorizontalAlignment="Center" Margin="0,20,0,0"/>
+                <TextBlock Text="À très bientôt" FontSize="24" Foreground="#666" HorizontalAlignment="Center" Margin="0,10,0,0"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

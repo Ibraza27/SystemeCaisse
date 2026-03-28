@@ -10,6 +10,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Drawing.Imaging;
+using Microsoft.EntityFrameworkCore;
+using SystemeCaisse.Infrastructure.Data;
 using ColorDrawing = System.Drawing.Color;
 using ImageDrawing = System.Drawing.Image;
 using ImageWpf = System.Windows.Controls.Image;
@@ -28,10 +30,11 @@ namespace SystemeCaisse.UI.Services
         {
             try
             {
-                var doc = GenerateTicketDocument(vente, entreprise, isTrainingMode);
+                double width = GetTicketWidth();
+                var doc = GenerateTicketDocument(vente, entreprise, isTrainingMode, width);
                 
                 var pd = new PrintDialog();
-                doc.PageWidth = TicketWidth;
+                doc.PageWidth = width;
                 doc.PageHeight = double.NaN;
                 
                 IDocumentPaginatorSource idp = doc;
@@ -43,11 +46,40 @@ namespace SystemeCaisse.UI.Services
             }
         }
 
-        public FlowDocument GenerateTicketDocument(Vente vente, Entreprise entreprise, bool isTrainingMode)
+        public double GetTicketWidth()
+        {
+            try
+            {
+                // We don't have direct access to the factory here easily without refactoring, 
+                // but we can check if there's a global config or just use a default that matches the settings.
+                // Since this is a service, let's assume 80mm (300px) as default, but we should try to read from DB if possible.
+                // Let's use a simpler approach: the caller can pass it or we can fetch it.
+                // For now, let's look for the config in the database manually.
+                string dbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "caisse.db");
+                if (File.Exists(dbPath))
+                {
+                    var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
+                    optionsBuilder.UseSqlite($"Data Source={dbPath}");
+                    using var context = new AppDbContext(optionsBuilder.Options);
+                    var cfg = context.Configuration.FirstOrDefault(c => c.Cle == "ticket_width");
+                    if (cfg != null && int.TryParse(cfg.Valeur, out int w))
+                    {
+                        // Convert mm to pixels (approx 96 DPI) -> 1mm ~ 3.78px
+                        // 80mm ~ 302px
+                        // 58mm ~ 219px
+                        return w * 3.78;
+                    }
+                }
+            }
+            catch { }
+            return 300; // Default 80mm
+        }
+
+        public FlowDocument GenerateTicketDocument(Vente vente, Entreprise entreprise, bool isTrainingMode, double width)
         {
             var doc = new FlowDocument
             {
-                PageWidth = TicketWidth,
+                PageWidth = width,
                 PagePadding = new Thickness(5),
                 FontFamily = new FontFamily("Consolas, Courier New, Monospace"),
                 FontSize = 11,
@@ -63,12 +95,35 @@ namespace SystemeCaisse.UI.Services
                 headerPara.Inlines.Add(new LineBreak());
             }
             
-            // Logo
-            if (!string.IsNullOrEmpty(entreprise.LogoPath) && File.Exists(entreprise.LogoPath))
+            // Logo Resolution Fix
+            string? finalLogoPath = null;
+            if (!string.IsNullOrEmpty(entreprise.LogoPath))
+            {
+                if (File.Exists(entreprise.LogoPath))
+                {
+                    finalLogoPath = entreprise.LogoPath;
+                }
+                else
+                {
+                    // Check relative to app startup directory
+                    string fileName = Path.GetFileName(entreprise.LogoPath);
+                    string relativePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, fileName);
+                    if (File.Exists(relativePath))
+                    {
+                        finalLogoPath = relativePath;
+                    }
+                }
+            }
+
+            if (finalLogoPath != null)
             {
                 try
                 {
-                    var bitmap = new BitmapImage(new Uri(entreprise.LogoPath));
+                    var bitmap = new BitmapImage();
+                    bitmap.BeginInit();
+                    bitmap.UriSource = new Uri(finalLogoPath);
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                    bitmap.EndInit();
                     var image = new ImageWpf { Source = bitmap, Width = 100, Height = 100, Stretch = Stretch.Uniform };
                     headerPara.Inlines.Add(new InlineUIContainer(image));
                     headerPara.Inlines.Add(new LineBreak());
@@ -248,12 +303,12 @@ namespace SystemeCaisse.UI.Services
             var payPara = new Paragraph { Margin = new Thickness(0, 10, 0, 0) };
             if (vente.MontantEspeces > 0)
             {
-                 payPara.Inlines.Add(new Run($"{ (vente.MoyenPaiement == "Mixte" ? "Espèces" : "Reçu Espèces") } : {vente.MontantEspeces:0.00}€"));
+                 payPara.Inlines.Add(new Run($"{ (vente.MoyenPaiement == "Mixte" || vente.MoyenPaiement == "Espece/CB" ? "Part Espèces" : "Reçu Espèces") } : {vente.MontantEspeces:0.00}€"));
                  payPara.Inlines.Add(new LineBreak());
             }
             if (vente.MontantCB > 0)
             {
-                 payPara.Inlines.Add(new Run($"{ (vente.MoyenPaiement == "Mixte" ? "Carte Bancaire" : "Reçu CB") } : {vente.MontantCB:0.00}€"));
+                 payPara.Inlines.Add(new Run($"{ (vente.MoyenPaiement == "Mixte" || vente.MoyenPaiement == "Espece/CB" ? "Part CB" : "Reçu CB") } : {vente.MontantCB:0.00}€"));
                  payPara.Inlines.Add(new LineBreak());
             }
             if (vente.MonnaieRendue > 0)
@@ -263,9 +318,7 @@ namespace SystemeCaisse.UI.Services
             }
             doc.Blocks.Add(payPara);
 
-            // 6. TVA Breakdown Table (Simplified fixed 20% and 5.5% as examples or real calculation)
-            // Real calculation based on data would be better.
-            // For now, let's assume standard rates if not stored.
+            // 6. TVA Breakdown Table
             doc.Blocks.Add(new Paragraph(new Run(new string('-', 35))) { Margin = new Thickness(0, 10, 0, 5) });
             
             var tvaTable = new Table { CellSpacing = 0, FontSize = 10 };
@@ -274,7 +327,7 @@ namespace SystemeCaisse.UI.Services
             tvaTable.Columns.Add(new TableColumn { Width = new GridLength(60) }); // HT
             tvaTable.Columns.Add(new TableColumn { Width = new GridLength(60) }); // TVA
             tvaTable.Columns.Add(new TableColumn { Width = new GridLength(60) }); // TTC
-
+ 
             var tvaRows = new TableRowGroup();
             var tvaHeader = new TableRow { FontWeight = FontWeights.Bold };
             tvaHeader.Cells.Add(new TableCell(new Paragraph(new Run("Code"))));
@@ -283,21 +336,28 @@ namespace SystemeCaisse.UI.Services
             tvaHeader.Cells.Add(new TableCell(new Paragraph(new Run("TVA"))));
             tvaHeader.Cells.Add(new TableCell(new Paragraph(new Run("TTC"))));
             tvaRows.Rows.Add(tvaHeader);
-
-            // Mock TVA Calculation (since real TVA per product is not yet fully in core entities)
-            // In a real app, this information would be stored in LigneVente.
-            decimal ttc = vente.Total;
-            decimal ht = ttc / 1.20m;
-            decimal tvaValue = ttc - ht;
-
-            var rowTva = new TableRow();
-            rowTva.Cells.Add(new TableCell(new Paragraph(new Run("1"))));
-            rowTva.Cells.Add(new TableCell(new Paragraph(new Run("20%00"))));
-            rowTva.Cells.Add(new TableCell(new Paragraph(new Run($"{ht:0.00}"))));
-            rowTva.Cells.Add(new TableCell(new Paragraph(new Run($"{tvaValue:0.00}"))));
-            rowTva.Cells.Add(new TableCell(new Paragraph(new Run($"{ttc:0.00}"))));
-            tvaRows.Rows.Add(rowTva);
-
+ 
+            // Calculate real TVA groups
+            var tvaGroups = vente.Lignes
+                .GroupBy(l => l.TaxTier)
+                .OrderBy(g => g.Key);
+ 
+            foreach (var group in tvaGroups)
+            {
+                decimal rate = group.Key == 1 ? 5.5m : (group.Key == 2 ? 10.0m : 20.0m);
+                decimal ttcForGroup = group.Sum(l => l.TotalLigne);
+                decimal htForGroup = ttcForGroup / (1 + (rate / 100));
+                decimal tvaForGroup = ttcForGroup - htForGroup;
+ 
+                var rowTva = new TableRow();
+                rowTva.Cells.Add(new TableCell(new Paragraph(new Run(group.Key.ToString()))));
+                rowTva.Cells.Add(new TableCell(new Paragraph(new Run($"{rate:0.0}%"))));
+                rowTva.Cells.Add(new TableCell(new Paragraph(new Run($"{htForGroup:0.00}"))));
+                rowTva.Cells.Add(new TableCell(new Paragraph(new Run($"{tvaForGroup:0.00}"))));
+                rowTva.Cells.Add(new TableCell(new Paragraph(new Run($"{ttcForGroup:0.00}"))));
+                tvaRows.Rows.Add(rowTva);
+            }
+ 
             tvaTable.RowGroups.Add(tvaRows);
             doc.Blocks.Add(tvaTable);
 

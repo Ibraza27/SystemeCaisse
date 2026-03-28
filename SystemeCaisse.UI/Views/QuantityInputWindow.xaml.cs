@@ -2,7 +2,7 @@ using System.Windows;
 
 namespace SystemeCaisse.UI.Views
 {
-    public partial class QuantityInputWindow : Window
+    public partial class QuantityInputWindow : System.Windows.Window
     {
         public decimal Quantity { get; private set; }
 

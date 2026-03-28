@@ -55,6 +55,7 @@
                     <ComboBox x:Name="searchCombo" Grid.Column="1" 
                               IsEditable="True" 
                               IsTextSearchEnabled="False"
+                              IsTextSearchCaseSensitive="False"
                               StaysOpenOnEdit="True"
                               BorderThickness="0" 
                               VerticalAlignment="Center" 
@@ -62,6 +63,8 @@
                               ItemsSource="{Binding SearchSuggestions}"
                               Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                               SelectedItem="{Binding SelectedSearchProduct}"
+                              IsDropDownOpen="{Binding IsSearchDropDownOpen, Mode=TwoWay}"
+                              Loaded="searchCombo_Loaded"
                               Foreground="#333">
                         <ComboBox.InputBindings>
                             <KeyBinding Key="Enter" Command="{Binding ScanCommand}"/>
@@ -120,12 +123,19 @@
  
             <!-- Liste des produits (Top 20 les plus vendus) -->
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                <ItemsControl ItemsSource="{Binding TopProducts}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <WrapPanel HorizontalAlignment="Left" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="10,0,0,10">
+                        <TextBlock Text="Top Produits" FontSize="20" FontWeight="Bold" Foreground="White"/>
+                        <Button Content="" FontFamily="Segoe MDL2 Assets" Background="Transparent" BorderThickness="0" 
+                                Foreground="#AAAAAA" Margin="10,0,0,0" ToolTip="Rafraîchir"
+                                Command="{Binding CalculateProductPopularityCommand}"/>
+                    </StackPanel>
+                    <ItemsControl ItemsSource="{Binding TopProducts}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel HorizontalAlignment="Left" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Border Width="160" Height="180" Margin="8" Style="{StaticResource ProductCardStyle}">
@@ -169,7 +179,8 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-            </ScrollViewer>
-        </Grid>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
     </Grid>
 </UserControl>

@@ -122,7 +122,7 @@ namespace SystemeCaisse.UI.ViewModels
             }, _ => SelectedSale != null);
 
             ClearSearchCommand = new BasicRelayCommand(_ => SearchText = string.Empty);
-            SetPeriodCommand = new BasicRelayCommand(p => SetPeriod(p as string));
+            SetPeriodCommand = new BasicRelayCommand(p => { if (p is string s) SetPeriod(s); });
             
             LoadData();
         }

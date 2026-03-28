@@ -4,7 +4,7 @@ using SystemeCaisse.UI.ViewModels;
 
 namespace SystemeCaisse.UI.Views
 {
-    public partial class CartItemSelectionWindow : Window
+    public partial class CartItemSelectionWindow : System.Windows.Window
     {
         public CartItemViewModel SelectedItem { get; private set; }
 

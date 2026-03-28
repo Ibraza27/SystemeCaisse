@@ -75,6 +75,28 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
                 
+                <DataGridTemplateColumn Header="P.U" Width="80">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding PrixUnitaire, StringFormat={}{0:C}}" FontSize="12"/>
+                                <TextBlock FontSize="10" Foreground="Gray" VerticalAlignment="Bottom" Margin="2,0,0,1">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="/u"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Produit.TypeVente}" Value="poids">
+                                                    <Setter Property="Text" Value="/kg"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
                 <DataGridTemplateColumn Header="Qté" Width="100">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>

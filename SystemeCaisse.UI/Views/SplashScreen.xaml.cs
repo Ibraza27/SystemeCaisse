@@ -2,7 +2,7 @@ using System.Windows;
 
 namespace SystemeCaisse.UI.Views
 {
-    public partial class SplashScreen : Window
+    public partial class SplashScreen : System.Windows.Window
     {
         public SplashScreen()
         {

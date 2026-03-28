@@ -5,7 +5,7 @@ namespace SystemeCaisse.UI.Views
     public enum DiscountScope { Basket, Item }
     public enum DiscountType { Percentage, Fixed }
 
-    public partial class ManualDiscountSelectionWindow : Window
+    public partial class ManualDiscountSelectionWindow : System.Windows.Window
     {
         public DiscountScope SelectedScope { get; private set; }
         public DiscountType SelectedType { get; private set; }

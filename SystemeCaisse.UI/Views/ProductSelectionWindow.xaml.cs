@@ -6,7 +6,7 @@ using SystemeCaisse.Core.Entities;
 
 namespace SystemeCaisse.UI.Views
 {
-    public partial class ProductSelectionWindow : Window
+    public partial class ProductSelectionWindow : System.Windows.Window
     {
         public Produit? SelectedProduct { get; private set; }
 

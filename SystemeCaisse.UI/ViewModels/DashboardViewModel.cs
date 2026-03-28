@@ -46,15 +46,15 @@ namespace SystemeCaisse.UI.ViewModels
         [ObservableProperty] private ObservableCollection<TopProductItem> _topProducts;
 
         // Brushes helper
-        private readonly Brush[] _pieColors = new Brush[] 
+        private readonly System.Windows.Media.Brush[] _pieColors = new System.Windows.Media.Brush[] 
         { 
-            new SolidColorBrush(Color.FromRgb(46, 204, 113)), // Green
-            new SolidColorBrush(Color.FromRgb(52, 152, 219)), // Blue
-            new SolidColorBrush(Color.FromRgb(155, 89, 182)), // Purple
-            new SolidColorBrush(Color.FromRgb(241, 196, 15)), // Yellow
-            new SolidColorBrush(Color.FromRgb(230, 126, 34)), // Orange
-            new SolidColorBrush(Color.FromRgb(231, 76, 60)),  // Red
-            new SolidColorBrush(Color.FromRgb(149, 165, 166)) // Grey
+            new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(46, 204, 113)), // Green
+            new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(52, 152, 219)), // Blue
+            new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(155, 89, 182)), // Purple
+            new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(241, 196, 15)), // Yellow
+            new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(230, 126, 34)), // Orange
+            new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(231, 76, 60)),  // Red
+            new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(149, 165, 166)) // Grey
         };
 
         public DashboardViewModel(IDbContextFactory<AppDbContext> contextFactory)

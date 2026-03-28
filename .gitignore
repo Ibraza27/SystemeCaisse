@@ -7,3 +7,12 @@
 *.userosscache
 *.sln.docstates
 build_errors.txt
+*.exe
+*.dll
+*.pdb
+*.log
+*.txt
+*.db
+publish_pos/
+publish_setup/
+BuildOutput/

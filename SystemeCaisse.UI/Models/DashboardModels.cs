@@ -22,7 +22,7 @@ namespace SystemeCaisse.UI.Models
     {
         public string Label { get; set; }
         public double Value { get; set; }
-        public Brush? ColorBrush { get; set; }
+        public System.Windows.Media.Brush? ColorBrush { get; set; }
         public string? SecondaryLabel { get; set; }
     }
 
@@ -30,7 +30,7 @@ namespace SystemeCaisse.UI.Models
     {
         public string Label { get; set; }
         public double Value { get; set; }
-        public Brush ColorBrush { get; set; }
+        public System.Windows.Media.Brush ColorBrush { get; set; }
         public double Percentage { get; set; }
     }
 }

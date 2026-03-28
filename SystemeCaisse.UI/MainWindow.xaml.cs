@@ -8,6 +8,8 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using Window = System.Windows.Window;
+using UserControl = System.Windows.Controls.UserControl;
 
 namespace SystemeCaisse.UI;
 
@@ -21,5 +23,18 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = viewModel;
         TicketPlaceholder.Content = new Views.TicketView();
+        Loaded += (s, e) => viewModel.InitializeCustomerDisplay();
     }
-}
+
+    public void ReinitializeCustomerDisplay()
+    {
+        if (DataContext is ViewModels.MainViewModel vm)
+            vm.InitializeCustomerDisplay();
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        base.OnClosed(e);
+        Application.Current.Shutdown();
+    }
+}

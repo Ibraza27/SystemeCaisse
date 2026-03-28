@@ -6,7 +6,7 @@ using SystemeCaisse.Core.Entities;
 
 namespace SystemeCaisse.UI.Views
 {
-    public partial class QuickAddProductWindow : Window
+    public partial class QuickAddProductWindow : System.Windows.Window
     {
         public Produit NewProduct { get; private set; }
 
@@ -25,13 +25,20 @@ namespace SystemeCaisse.UI.Views
                 return;
             }
 
-            if (!decimal.TryParse(TxtPrix.Text.Replace('.', ','), out decimal prix))
+            string rawPrix = TxtPrix.Text.Replace('.', ',');
+            if (!decimal.TryParse(rawPrix, out decimal prix))
             {
                 MessageBox.Show("Prix de vente invalide.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
 
             decimal.TryParse(TxtStock.Text.Replace('.', ','), out decimal stock);
+            
+            int taxTier = 1;
+            if (CbTaxTier.SelectedItem is ComboBoxItem item && int.TryParse(item.Tag?.ToString(), out int val))
+            {
+                taxTier = val;
+            }
 
             NewProduct = new Produit
             {
@@ -41,6 +48,7 @@ namespace SystemeCaisse.UI.Views
                 PrixVente = prix,
                 Categorie = CbCategory.Text.Trim(),
                 StockActuel = stock,
+                TaxTier = taxTier,
                 Actif = true,
                 CreatedAt = DateTime.Now,
                 UpdatedAt = DateTime.Now
@@ -48,6 +56,26 @@ namespace SystemeCaisse.UI.Views
 
             DialogResult = true;
             Close();
+        }
+
+        private void PriceTextBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == System.Windows.Input.Key.Decimal || e.Key == System.Windows.Input.Key.OemPeriod)
+            {
+                var textBox = sender as TextBox;
+                if (textBox != null)
+                {
+                    e.Handled = true;
+                    int selectionStart = textBox.SelectionStart;
+                    textBox.Text = textBox.Text.Insert(selectionStart, ",");
+                    textBox.SelectionStart = selectionStart + 1;
+                }
+            }
+        }
+
+        private void PriceTextBox_GotFocus(object sender, RoutedEventArgs e)
+        {
+            (sender as TextBox)?.SelectAll();
         }
     }
 }

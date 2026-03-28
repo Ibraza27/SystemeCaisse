@@ -19,11 +19,12 @@ namespace SystemeCaisse.UI.ViewModels
             DecreaseQuantityCommand = new BasicRelayCommand(_ => { if (Quantite > 1) Quantite--; });
         }
 
-        public Produit Produit => _ligneVente.Produit;
+        public Produit Produit => _ligneVente.Produit ?? new Produit();
 
         public string ProduitNom => _ligneVente.ProduitNom;
         public decimal PrixUnitaire => _ligneVente.PrixUnitaire;
         public int? ProduitId => _ligneVente.ProduitId;
+        public int TaxTier => _ligneVente.TaxTier;
 
         public decimal TotalLigneStandard => _ligneVente.PrixUnitaire * _ligneVente.Quantite;
 
@@ -47,26 +48,28 @@ namespace SystemeCaisse.UI.ViewModels
         public decimal RemiseAuto
         {
             get => _remiseAuto;
-            set { _remiseAuto = value; SyncEntity(); OnPropertyChanged(); OnPropertyChanged(nameof(TotalLigne)); OnPropertyChanged(nameof(HasPromotion)); }
+            set { _remiseAuto = value; SyncEntity(); OnPropertyChanged(); OnPropertyChanged(nameof(RemiseTotale)); OnPropertyChanged(nameof(TotalLigne)); OnPropertyChanged(nameof(HasPromotion)); }
         }
 
         private decimal _remiseManuellePercent;
         public decimal RemiseManuellePercent
         {
             get => _remiseManuellePercent;
-            set { _remiseManuellePercent = value; SyncEntity(); OnPropertyChanged(); OnPropertyChanged(nameof(RemiseManuelle)); OnPropertyChanged(nameof(TotalLigne)); OnPropertyChanged(nameof(HasPromotion)); }
+            set { _remiseManuellePercent = value; SyncEntity(); OnPropertyChanged(); OnPropertyChanged(nameof(RemiseTotale)); OnPropertyChanged(nameof(RemiseManuelle)); OnPropertyChanged(nameof(TotalLigne)); OnPropertyChanged(nameof(HasPromotion)); }
         }
 
         private decimal _remiseManuelleFixed;
         public decimal RemiseManuelleFixed
         {
             get => _remiseManuelleFixed;
-            set { _remiseManuelleFixed = value; SyncEntity(); OnPropertyChanged(); OnPropertyChanged(nameof(RemiseManuelle)); OnPropertyChanged(nameof(TotalLigne)); OnPropertyChanged(nameof(HasPromotion)); }
+            set { _remiseManuelleFixed = value; SyncEntity(); OnPropertyChanged(); OnPropertyChanged(nameof(RemiseTotale)); OnPropertyChanged(nameof(RemiseManuelle)); OnPropertyChanged(nameof(TotalLigne)); OnPropertyChanged(nameof(HasPromotion)); }
         }
 
         public decimal RemiseManuelle => (TotalLigneStandard * (_remiseManuellePercent / 100)) + _remiseManuelleFixed;
+        
+        public decimal RemiseTotale => RemiseAuto + RemiseManuelle;
 
-        public decimal TotalLigne => TotalLigneStandard - RemiseAuto - RemiseManuelle;
+        public decimal TotalLigne => TotalLigneStandard - RemiseTotale;
 
         public string? PromotionAppliquee
         {

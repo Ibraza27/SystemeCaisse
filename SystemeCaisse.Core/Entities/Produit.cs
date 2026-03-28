@@ -9,9 +9,17 @@ namespace SystemeCaisse.Core.Entities
         [Key]
         public int Id { get; set; }
 
+        private string _nom = string.Empty;
         [Required]
         [MaxLength(100)]
-        public string Nom { get; set; } = string.Empty;
+        public string Nom 
+        { 
+            get => _nom; 
+            set => _nom = value?.ToUpper() ?? string.Empty; 
+        }
+
+        // 1: 5.5%, 2: 10%, 3: 20%
+        public int TaxTier { get; set; } = 1;
 
         [MaxLength(20)]
         public string? CodeBarre { get; set; }

@@ -1,0 +1,70 @@
+<Window x:Class="SystemeCaisse.Installer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Installation - Hippocampe Système de Caisse" Height="600" Width="650"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterScreen" ResizeMode="NoResize" Background="#F5F5F7"
+        Icon="logo.ico">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="100"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="80"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Background="#2E7D32">
+            <StackPanel Orientation="Horizontal" Margin="20,0">
+                <Image Source="pack://application:,,,/Resources/logo.png" Width="60" Height="60" Margin="0,0,20,0"/>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Hippocampe" FontSize="24" FontWeight="Bold" Foreground="White"/>
+                    <TextBlock Text="Système de Caisse - Assistant d'installation" FontSize="14" Foreground="#E8F5E9"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Content -->
+        <Grid Grid.Row="1" Margin="30">
+            <StackPanel x:Name="PnlStep1">
+                <TextBlock Text="Bienvenue dans l'assistant d'installation" FontSize="18" FontWeight="Bold" Margin="0,0,0,15"/>
+                <TextBlock Text="Ce programme va installer Hippocampe sur votre ordinateur." TextWrapping="Wrap" Margin="0,0,0,20"/>
+                
+                <GroupBox Header="Options de raccourcis" Padding="15" Margin="0,0,0,15">
+                    <StackPanel>
+                        <CheckBox x:Name="ChkDesktop" IsChecked="True" Content="Créer une icône sur le Bureau" Margin="0,0,0,10"/>
+                        <CheckBox x:Name="ChkStart" IsChecked="True" Content="Ajouter au Menu Démarrer" Margin="0,0,0,10"/>
+                        <CheckBox x:Name="ChkTaskbar" IsChecked="True" Content="Épingler à la barre des tâches"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <GroupBox Header="Base de données (Important)" Padding="15">
+                    <StackPanel>
+                        <RadioButton x:Name="RbNew" IsChecked="True" Content="Installation par défaut (Nouvelle base de données)"/>
+                        <RadioButton x:Name="RbImport" Content="Importer une base de données existante (database.db)"/>
+                        <TextBlock Text="ℹ️ Si vous importez, il faudra sélectionner le fichier à l'étape suivante." 
+                                   FontSize="11" Foreground="#666" Margin="24,5,0,0" FontStyle="Italic"/>
+                    </StackPanel>
+                </GroupBox>
+            </StackPanel>
+
+            <StackPanel x:Name="PnlProgress" Visibility="Collapsed" VerticalAlignment="Center">
+                <TextBlock x:Name="TxtStatus" Text="Installation en cours..." HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                <ProgressBar x:Name="PrgBar" Height="25" Minimum="0" Maximum="100"/>
+            </StackPanel>
+
+            <StackPanel x:Name="PnlFinished" Visibility="Collapsed" VerticalAlignment="Center">
+                <TextBlock Text="✅ Installation terminée avec succès !" FontSize="20" FontWeight="Bold" Foreground="#2E7D32" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                <TextBlock Text="Hippocampe est prêt à être utilisé." HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Footer -->
+        <Border Grid.Row="2" Background="White" BorderBrush="#EEE" BorderThickness="0,1,0,0">
+            <Grid Margin="20,0">
+                <Button x:Name="BtnCancel" Content="Annuler" HorizontalAlignment="Left" Width="100" Height="35" Click="BtnCancel_Click"/>
+                <Button x:Name="BtnInstall" Content="Installer Maintenant" HorizontalAlignment="Right" Width="150" Height="35" Background="#2E7D32" Foreground="White" FontWeight="Bold" Click="BtnInstall_Click"/>
+                <Button x:Name="BtnFinish" Content="Terminer" HorizontalAlignment="Right" Width="120" Height="35" Visibility="Collapsed" Click="BtnFinish_Click"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

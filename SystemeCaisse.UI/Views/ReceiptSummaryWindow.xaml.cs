@@ -5,7 +5,7 @@ using SystemeCaisse.UI.Services;
 
 namespace SystemeCaisse.UI.Views
 {
-    public partial class ReceiptSummaryWindow : Window
+    public partial class ReceiptSummaryWindow : System.Windows.Window
     {
         private readonly Vente _vente;
         private readonly Entreprise _entreprise;
@@ -23,7 +23,9 @@ namespace SystemeCaisse.UI.Views
             ChangeText.Text = $"{change:N2} €";
             
             // Load Preview
-            var doc = _printService.GenerateTicketDocument(vente, entreprise, isTraining);
+            double width = _printService.GetTicketWidth();
+            var doc = _printService.GenerateTicketDocument(vente, entreprise, isTraining, width);
+            doc.PageWidth = width;
             DocReader.Document = doc;
         }
 

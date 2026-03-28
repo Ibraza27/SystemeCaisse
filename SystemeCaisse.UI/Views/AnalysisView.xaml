@@ -58,6 +58,8 @@
                     <TextBlock Text="{Binding CurrentPeriodLabel}" FontStyle="Italic" Foreground="#666" VerticalAlignment="Center" Margin="0,0,15,0"/>
 
                     <Button Content="Aujourd'hui" Command="{Binding SetPeriodCommand}" CommandParameter="Today" Background="#F0F0F0" BorderBrush="#BBB" BorderThickness="1" Padding="8,4" Margin="0,0,5,0" Cursor="Hand"/>
+                    <Button Content="Hier" Command="{Binding SetPeriodCommand}" CommandParameter="Yesterday" Background="#F0F0F0" BorderBrush="#BBB" BorderThickness="1" Padding="8,4" Margin="0,0,5,0" Cursor="Hand"/>
+                    <Button Content="7 Jours" Command="{Binding SetPeriodCommand}" CommandParameter="Week" Background="#F0F0F0" BorderBrush="#BBB" BorderThickness="1" Padding="8,4" Margin="0,0,5,0" Cursor="Hand"/>
                     <Button Content="Ce Mois" Command="{Binding SetPeriodCommand}" CommandParameter="Month" Background="#F0F0F0" BorderBrush="#BBB" BorderThickness="1" Padding="8,4" Margin="0,0,5,0" Cursor="Hand"/>
                     <Button Content="Année" Command="{Binding SetPeriodCommand}" CommandParameter="Year" Background="#F0F0F0" BorderBrush="#BBB" BorderThickness="1" Padding="8,4" Margin="0,0,20,0" Cursor="Hand"/>
                 </StackPanel>

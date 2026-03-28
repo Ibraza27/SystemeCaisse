@@ -96,6 +96,11 @@ namespace SystemeCaisse.UI.ViewModels
                     EndDate = today.AddTicks(-1);
                     CurrentPeriodLabel = "Hier";
                     break;
+                case "Week":
+                    StartDate = today.AddDays(-6);
+                    EndDate = today.AddDays(1).AddTicks(-1);
+                    CurrentPeriodLabel = "7 derniers jours";
+                    break;
                 case "Month":
                     StartDate = new DateTime(today.Year, today.Month, 1);
                     EndDate = today.AddDays(1).AddTicks(-1);

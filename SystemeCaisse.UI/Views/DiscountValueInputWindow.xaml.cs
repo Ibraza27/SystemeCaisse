@@ -2,7 +2,7 @@ using System.Windows;
 
 namespace SystemeCaisse.UI.Views
 {
-    public partial class DiscountValueInputWindow : Window
+    public partial class DiscountValueInputWindow : System.Windows.Window
     {
         public decimal DiscountValue { get; private set; }
 

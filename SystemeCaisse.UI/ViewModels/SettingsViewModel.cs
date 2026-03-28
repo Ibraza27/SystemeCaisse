@@ -6,7 +6,11 @@ using System.Printing;
 using System.Windows;
 using SystemeCaisse.Core.Entities;
 using SystemeCaisse.Core.Interfaces;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
 using SystemeCaisse.Infrastructure.Data;
+using SystemeCaisse.UI.Services;
 
 namespace SystemeCaisse.UI.ViewModels
 {
@@ -33,14 +37,28 @@ namespace SystemeCaisse.UI.ViewModels
 
         [ObservableProperty]
         private bool _isTrainingMode;
+        
+        [ObservableProperty]
+        private bool _isCustomerDisplayEnabled = true;
+        
+        [ObservableProperty]
+        private int _selectedScreenIndex = 1;
+        
+        [ObservableProperty]
+        private bool _showCustomerDisplayPromotions = true;
+        
+        [ObservableProperty]
+        private ObservableCollection<string> _availableScreens = new();
 
         public SettingsViewModel(IDbContextFactory<AppDbContext> contextFactory, IDataMigrationService migrationService)
         {
             _contextFactory = contextFactory;
             _migrationService = migrationService;
             AvailablePrinters = new ObservableCollection<string>();
+            AvailableScreens = new ObservableCollection<string>();
             LoadData();
             LoadPrinters();
+            LoadScreens();
         }
 
         [RelayCommand]
@@ -57,8 +75,12 @@ namespace SystemeCaisse.UI.ViewModels
                 try 
                 {
                     await _migrationService.MigrateDataAsync(openDlg.FileName);
-                    MessageBox.Show("Migration réussie ! Veuillez redémarrer l'application.", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
-                    LoadData(); // Reload enterprise info if changed
+                    if (MessageBox.Show("Migration réussie ! L'application doit redémarrer pour appliquer les changements. Redémarrer maintenant ?", 
+                        "Succès", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+                    {
+                        RestartApplication();
+                    }
+                    LoadData(); 
                 }
                 catch (Exception ex)
                 {
@@ -81,6 +103,27 @@ namespace SystemeCaisse.UI.ViewModels
 
             var trainingConfig = context.Configuration.Find("training_mode");
             if (trainingConfig != null && bool.TryParse(trainingConfig.Valeur, out bool mode)) IsTrainingMode = mode;
+            
+            var cdEnabled = context.Configuration.Find("customer_display_enabled");
+            if (cdEnabled != null && bool.TryParse(cdEnabled.Valeur, out bool cdE)) IsCustomerDisplayEnabled = cdE;
+            
+            var cdScreen = context.Configuration.Find("customer_display_screen_index");
+            if (cdScreen != null && int.TryParse(cdScreen.Valeur, out int cdS)) SelectedScreenIndex = cdS;
+            
+            var cdPromo = context.Configuration.Find("customer_display_show_promotions");
+            if (cdPromo != null && bool.TryParse(cdPromo.Valeur, out bool cdP)) ShowCustomerDisplayPromotions = cdP;
+        }
+
+        private void LoadScreens()
+        {
+            AvailableScreens.Clear();
+            var screens = ScreenHelper.GetScreens();
+            for (int i = 0; i < screens.Count; i++)
+            {
+                var s = screens[i];
+                string name = $"Écran {i + 1} {(s.IsPrimary ? "(Principal)" : "")} - {s.Bounds.Width}x{s.Bounds.Height}";
+                AvailableScreens.Add(name);
+            }
         }
 
         private void LoadPrinters()
@@ -106,6 +149,32 @@ namespace SystemeCaisse.UI.ViewModels
         }
 
         [RelayCommand]
+        public async Task ApplyCustomerDisplay()
+        {
+            try
+            {
+                using var context = _contextFactory.CreateDbContext();
+                UpdateConfig(context, "customer_display_enabled", IsCustomerDisplayEnabled.ToString());
+                UpdateConfig(context, "customer_display_screen_index", SelectedScreenIndex.ToString());
+                UpdateConfig(context, "customer_display_show_promotions", ShowCustomerDisplayPromotions.ToString());
+                await context.SaveChangesAsync();
+
+                // Refresh Customer Display robustly
+                var mainWin = Application.Current.Windows.OfType<SystemeCaisse.UI.MainWindow>().FirstOrDefault();
+                if (mainWin != null)
+                {
+                    mainWin.ReinitializeCustomerDisplay();
+                }
+                
+                MessageBox.Show("Affichage client rafraîchi !", "Information", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Erreur lors de l'application : {ex.Message}");
+            }
+        }
+
+        [RelayCommand]
         private async Task SaveSettings()
         {
             try
@@ -119,8 +188,20 @@ namespace SystemeCaisse.UI.ViewModels
                 UpdateConfig(context, "ticket_width", TicketWidth.ToString());
                 UpdateConfig(context, "imprimante_defaut", SelectedPrinter);
                 UpdateConfig(context, "training_mode", IsTrainingMode.ToString());
+                UpdateConfig(context, "customer_display_enabled", IsCustomerDisplayEnabled.ToString());
+                UpdateConfig(context, "customer_display_screen_index", SelectedScreenIndex.ToString());
+                UpdateConfig(context, "customer_display_show_promotions", ShowCustomerDisplayPromotions.ToString());
 
                 await context.SaveChangesAsync();
+                
+                // Refresh Customer Display
+                // Refresh Customer Display
+                var mainWin = Application.Current.Windows.OfType<SystemeCaisse.UI.MainWindow>().FirstOrDefault();
+                if (mainWin != null)
+                {
+                    mainWin.ReinitializeCustomerDisplay();
+                }
+
                 MessageBox.Show("Paramètres enregistrés avec succès !", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
@@ -146,15 +227,22 @@ namespace SystemeCaisse.UI.ViewModels
         [RelayCommand]
         private void BackupDatabase()
         {
-            // Simple file copy backup
             try
             {
-                string dbPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "caisse.db"); // Adjust based on connection string
-                // Actually need to parse connection string or know the path. 
-                // Hardcoding purely for prototype speed, ideally read from config. 
-                // But wait, the context is using a hardcoded path in App.xaml.cs? 
-                // Let's assume standard path for now or ask user where to save.
+                // Dynamic path for installed environment
+                string dbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "caisse.db");
                 
+                if (!File.Exists(dbPath))
+                {
+                    dbPath = Path.Combine(Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName) ?? "", "caisse.db");
+                }
+
+                if (!File.Exists(dbPath))
+                {
+                    MessageBox.Show($"Base de données introuvable : {dbPath}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
                 var saveDlg = new Microsoft.Win32.SaveFileDialog
                 {
                     FileName = $"caisse_backup_{DateTime.Now:yyyyMMdd_HHmmss}.db",
@@ -163,16 +251,49 @@ namespace SystemeCaisse.UI.ViewModels
 
                 if (saveDlg.ShowDialog() == true)
                 {
-                    // To backup sqlite safely, better to use VACUUM INTO or just copy if WAL.
-                    // Simple Copy:
-                     var dbSource = @"C:\Users\Administrateur\Documents\DossierPartage\PROGRAMATION\SystemeCaisse\SystemeCaisse.Infrastructure\caisse.db";
-                     System.IO.File.Copy(dbSource, saveDlg.FileName, true);
+                     File.Copy(dbPath, saveDlg.FileName, true);
                      MessageBox.Show("Sauvegarde effectuée !");
                 }
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Erreur sauvegarde : {ex.Message}");
+            }
+        }
+        [RelayCommand]
+        private void ResetDatabase()
+        {
+            var result = MessageBox.Show("ÊTES-VOUS SÛR ? Cela effacera TOUTES les données (produits, ventes, historique). Cette action est irréversible.", 
+                "AVERTISSEMENT CRITIQUE", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            
+            if (result == MessageBoxResult.Yes)
+            {
+                try
+                {
+                    using var context = _contextFactory.CreateDbContext();
+                    context.Database.EnsureDeleted();
+                    context.Database.Migrate();
+                    
+                    if (MessageBox.Show("Base de données réinitialisée ! Redémarrer l'application pour finaliser ?", 
+                        "Réinitialisation terminée", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+                    {
+                        RestartApplication();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Erreur lors de la réinitialisation : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        private void RestartApplication()
+        {
+            var processPath = Process.GetCurrentProcess().MainModule?.FileName;
+            if (processPath != null)
+            {
+                Process.Start(processPath);
+                Application.Current.Shutdown();
             }
         }
     }

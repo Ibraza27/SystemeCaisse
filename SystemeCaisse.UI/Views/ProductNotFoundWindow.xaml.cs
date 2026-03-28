@@ -2,7 +2,7 @@ using System.Windows;
 
 namespace SystemeCaisse.UI.Views
 {
-    public partial class ProductNotFoundWindow : Window
+    public partial class ProductNotFoundWindow : System.Windows.Window
     {
         public bool AddRequested { get; private set; }
         public string ScannedCode { get; }

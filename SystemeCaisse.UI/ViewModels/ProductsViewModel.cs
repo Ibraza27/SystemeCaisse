@@ -164,7 +164,7 @@ namespace SystemeCaisse.UI.ViewModels
             // Search Text
             if (!string.IsNullOrWhiteSpace(SearchText))
             {
-                var s = SearchText.Trim().ToLower();
+                var s = SearchText.Trim().ToLower().Replace(',', '.');
                 bool match = (produit.Nom != null && produit.Nom.ToLower().Contains(s)) ||
                              (produit.CodeBarre != null && produit.CodeBarre.ToLower().Contains(s));
                 if (!match) return false;
@@ -188,12 +188,13 @@ namespace SystemeCaisse.UI.ViewModels
         {
             var newProduct = new Produit 
             { 
-                Nom = "Nouveau Produit", 
-                CodeBarre = GenerateEan13(),
+                Nom = "NOUVEAU PRODUIT", 
+                CodeBarre = string.Empty, // User must scan/enter barcode
                 PrixVente = 0,
                 StockActuel = 0,
                 Actif = true,
-                Categorie = "Autre"
+                Categorie = "Autre",
+                TaxTier = 1
             };
             _context.Produits.Add(newProduct);
             SelectedProduct = newProduct;
@@ -237,6 +238,8 @@ namespace SystemeCaisse.UI.ViewModels
                 foreach (var p in Products)
                 {
                     if (string.IsNullOrWhiteSpace(p.Categorie)) p.Categorie = "Autre";
+                    // Ensure uppercase for all (migration of old data)
+                    p.Nom = p.Nom?.ToUpper() ?? string.Empty;
                 }
                 
                 _context.SaveChanges();
@@ -255,6 +258,9 @@ namespace SystemeCaisse.UI.ViewModels
             if (SelectedProduct != null)
             {
                 SelectedProduct.CodeBarre = GenerateEan13();
+                // Instead of a full null reset which can clear multi-step bindings,
+                // we keep it surgical.
+                OnPropertyChanged(nameof(SelectedProduct));
             }
         }
 
@@ -264,6 +270,7 @@ namespace SystemeCaisse.UI.ViewModels
             if (SelectedProduct != null)
             {
                 SelectedProduct.Categorie = "Autre";
+                OnPropertyChanged(nameof(SelectedProduct));
             }
         }
 
