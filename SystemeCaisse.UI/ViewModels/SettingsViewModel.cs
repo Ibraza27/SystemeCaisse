@@ -11,9 +11,27 @@ using System.IO;
 using System.Linq;
 using SystemeCaisse.Infrastructure.Data;
 using SystemeCaisse.UI.Services;
+using System.Collections.Generic;
 
 namespace SystemeCaisse.UI.ViewModels
 {
+    public class DisplayPromotionItem : ObservableObject
+    {
+        public Promotion Promotion { get; }
+        private bool _isSelected;
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set => SetProperty(ref _isSelected, value);
+        }
+
+        public DisplayPromotionItem(Promotion promo, bool isSelected)
+        {
+            Promotion = promo;
+            _isSelected = isSelected;
+        }
+    }
+
     public partial class SettingsViewModel : ObservableObject
     {
         private readonly IDbContextFactory<AppDbContext> _contextFactory;
@@ -49,6 +67,8 @@ namespace SystemeCaisse.UI.ViewModels
         
         [ObservableProperty]
         private ObservableCollection<string> _availableScreens = new();
+
+        public ObservableCollection<DisplayPromotionItem> AvailableDisplayPromotions { get; set; } = new ObservableCollection<DisplayPromotionItem>();
 
         public SettingsViewModel(IDbContextFactory<AppDbContext> contextFactory, IDataMigrationService migrationService)
         {
@@ -144,6 +164,29 @@ namespace SystemeCaisse.UI.ViewModels
             
             var cdPromo = context.Configuration.Find("customer_display_show_promotions");
             if (cdPromo != null && bool.TryParse(cdPromo.Valeur, out bool cdP)) ShowCustomerDisplayPromotions = cdP;
+
+            // Load Display Promotions for selection
+            LoadDisplayPromotionsSelection(context);
+        }
+
+        private void LoadDisplayPromotionsSelection(AppDbContext context)
+        {
+            AvailableDisplayPromotions.Clear();
+            var allPromos = context.Promotions.Where(p => p.Actif).ToList();
+
+            var config = context.Configuration.Find("customer_display_promotions");
+            List<int> selectedIds = new List<int>();
+            if (config != null && !string.IsNullOrWhiteSpace(config.Valeur))
+            {
+                selectedIds = config.Valeur.Split(',').Select(id => int.TryParse(id, out int parsed) ? parsed : -1).ToList();
+            }
+
+            foreach (var promo in allPromos)
+            {
+                Application.Current.Dispatcher.Invoke(() => {
+                    AvailableDisplayPromotions.Add(new DisplayPromotionItem(promo, selectedIds.Contains(promo.Id)));
+                });
+            }
         }
 
         private void LoadScreens()
@@ -258,6 +301,10 @@ namespace SystemeCaisse.UI.ViewModels
                 UpdateConfig(context, "customer_display_enabled", IsCustomerDisplayEnabled.ToString());
                 UpdateConfig(context, "customer_display_screen_index", SelectedScreenIndex.ToString());
                 UpdateConfig(context, "customer_display_show_promotions", ShowCustomerDisplayPromotions.ToString());
+
+                // Save Selected Promotions
+                var selectedIds = AvailableDisplayPromotions.Where(p => p.IsSelected).Select(p => p.Promotion.Id);
+                UpdateConfig(context, "customer_display_promotions", string.Join(",", selectedIds));
 
                 await context.SaveChangesAsync();
                 

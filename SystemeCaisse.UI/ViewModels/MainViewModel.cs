@@ -61,6 +61,19 @@ namespace SystemeCaisse.UI.ViewModels
             set { _showThankYouMessage = value; OnPropertyChanged(); }
         }
 
+        // Customer Display: promotions carousel
+        public ObservableCollection<Promotion> DisplayPromotions { get; set; } = new();
+        
+        private Promotion? _currentDisplayPromotion;
+        public Promotion? CurrentDisplayPromotion
+        {
+            get => _currentDisplayPromotion;
+            set { _currentDisplayPromotion = value; OnPropertyChanged(); }
+        }
+        
+        private int _currentPromoIndex;
+        private System.Windows.Threading.DispatcherTimer? _promoCarouselTimer;
+
         public string CurrentDateTime => DateTime.Now.ToString("dddd dd MMMM yyyy HH:mm", new System.Globalization.CultureInfo("fr-FR"));
         public string CurrentDate => DateTime.Now.ToString("dd/MM/yyyy");
         public string CurrentTime => DateTime.Now.ToString("HH:mm:ss");
@@ -588,6 +601,15 @@ namespace SystemeCaisse.UI.ViewModels
                 var cdPromo = context.Configuration.Find("customer_display_show_promotions");
                 ShowDisplayPromotions = cdPromo == null || (bool.TryParse(cdPromo.Valeur, out bool p) && p);
 
+                // Load display promotions
+                LoadDisplayPromotions(context);
+
+                // Start or restart carousel timer
+                if (ShowDisplayPromotions && DisplayPromotions.Count > 0)
+                {
+                    StartPromoCarousel();
+                }
+
                 // Determine which screen to use
                 var screenConfig = context.Configuration.Find("customer_display_screen_index");
                 int savedScreenIndex = (screenConfig != null && int.TryParse(screenConfig.Valeur, out int si)) ? si : -1;
@@ -1037,6 +1059,17 @@ namespace SystemeCaisse.UI.ViewModels
                 // ONLY reset the sale after the summary window is closed
                 ResetSale();
                 BasketRemiseManuelle = 0;
+
+                // Trigger Thank You message on Customer Display
+                if (_customerDisplay != null && _customerDisplay.IsVisible)
+                {
+                    ShowThankYouMessage = true;
+                    // Auto-hide after 5 seconds
+                    _ = Task.Delay(5000).ContinueWith(_ => 
+                    {
+                        Application.Current.Dispatcher.Invoke(() => ShowThankYouMessage = false);
+                    });
+                }
                 
                 if (changeToReturn > 0)
                     MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Monnaie à rendre : {changeToReturn:C}", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -1057,6 +1090,92 @@ namespace SystemeCaisse.UI.ViewModels
             catch (Exception ex)
             {
                 System.Windows.MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur lors de l'enregistrement : {ex.Message}", "Erreur", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+            }
+        }
+
+        private void PrintLastTicket()
+        {
+            try
+            {
+                var lastVente = _context.Ventes
+                    .Include(v => v.Lignes)
+                    .OrderByDescending(v => v.CreatedAt)
+                    .FirstOrDefault();
+
+                if (lastVente != null)
+                {
+                    _printService.PrintTicket(lastVente, CurrentEntreprise ?? new Entreprise { Nom = "Inconnu" });
+                }
+                else
+                {
+                    System.Windows.MessageBox.Show(Services.WindowHelper.GetAdminWindow(), "Aucune vente récente à imprimer.", "Info", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur d'impression : {ex.Message}", "Erreur", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+            }
+        }
+
+        private void LoadDisplayPromotions(AppDbContext context)
+        {
+            var config = context.Configuration.Find("customer_display_promotions");
+            if (config != null && !string.IsNullOrWhiteSpace(config.Valeur))
+            {
+                var ids = config.Valeur.Split(',').Select(id => int.TryParse(id, out int parsed) ? parsed : -1).Where(id => id > 0).ToList();
+                var promos = context.Promotions.Where(p => ids.Contains(p.Id) && p.Actif).ToList();
+
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    DisplayPromotions.Clear();
+                    foreach (var p in promos) DisplayPromotions.Add(p);
+                    if (DisplayPromotions.Any()) CurrentDisplayPromotion = DisplayPromotions.First();
+                });
+            }
+            else
+            {
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    DisplayPromotions.Clear();
+                    CurrentDisplayPromotion = null;
+                });
+            }
+        }
+
+        private void StartPromoCarousel()
+        {
+            if (_promoCarouselTimer != null)
+            {
+                _promoCarouselTimer.Stop();
+            }
+
+            _currentPromoIndex = 0;
+            _promoCarouselTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(5)
+            };
+            _promoCarouselTimer.Tick += (s, e) =>
+            {
+                if (DisplayPromotions.Count == 0) return;
+                _currentPromoIndex = (_currentPromoIndex + 1) % DisplayPromotions.Count;
+                CurrentDisplayPromotion = DisplayPromotions[_currentPromoIndex];
+            };
+            _promoCarouselTimer.Start();
+        }
+
+        public void RefreshDisplayPromotions()
+        {
+            using var ctx = _contextFactory.CreateDbContext();
+            LoadDisplayPromotions(ctx);
+            
+            if (ShowDisplayPromotions && DisplayPromotions.Count > 0)
+            {
+                StartPromoCarousel();
+            }
+            else if (_promoCarouselTimer != null)
+            {
+                _promoCarouselTimer.Stop();
+                CurrentDisplayPromotion = null;
             }
         }
 

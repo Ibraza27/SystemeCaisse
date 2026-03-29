@@ -102,6 +102,31 @@
                                           IsChecked="{Binding ShowCustomerDisplayPromotions}" 
                                           IsEnabled="{Binding IsCustomerDisplayEnabled}"
                                           Margin="0,5,0,0"/>
+
+                                <GroupBox Header="Sélection des Promotions à Afficher" Margin="0,10,0,0">
+                                    <GroupBox.Style>
+                                        <Style TargetType="GroupBox">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ShowCustomerDisplayPromotions}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </GroupBox.Style>
+                                    
+                                    <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl ItemsSource="{Binding AvailableDisplayPromotions}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <CheckBox Content="{Binding Promotion.Nom}" 
+                                                              IsChecked="{Binding IsSelected}" 
+                                                              Margin="2,2,0,2"/>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </GroupBox>
                                 
                                 <TextBlock Text="Note: L'affichage s'ouvrira sur l'écran sélectionné après avoir enregistré." 
                                            FontSize="11" Foreground="#666" Margin="0,10,0,0" FontStyle="Italic" TextWrapping="Wrap"/>
