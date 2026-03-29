@@ -171,7 +171,7 @@ namespace SystemeCaisse.UI.ViewModels
 
         private void LoadDisplayPromotionsSelection(AppDbContext context)
         {
-            AvailableDisplayPromotions.Clear();
+            Application.Current.Dispatcher.Invoke(() => AvailableDisplayPromotions.Clear());
             var allPromos = context.Promotions.Where(p => p.Actif).ToList();
 
             var config = context.Configuration.Find("customer_display_promotions");
