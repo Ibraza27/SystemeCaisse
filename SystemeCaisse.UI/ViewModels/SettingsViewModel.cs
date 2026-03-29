@@ -189,7 +189,7 @@ namespace SystemeCaisse.UI.ViewModels
                 Title = "Sélectionner le logo de l'entreprise"
             };
 
-            if (openDlg.ShowDialog(Application.Current.MainWindow) == true)
+            if (openDlg.ShowDialog(Services.WindowHelper.GetAdminWindow()) == true)
             {
                 EntrepriseInfo.LogoPath = openDlg.FileName;
                 OnPropertyChanged(nameof(EntrepriseInfo));
@@ -209,7 +209,7 @@ namespace SystemeCaisse.UI.ViewModels
 
                 // Refresh Customer Display robustly
                 var screens = ScreenHelper.GetScreens();
-                var owner = Application.Current.MainWindow;
+                var owner = Services.WindowHelper.GetAdminWindow();
                 if (screens.Count < 2)
                 {
                     MessageBox.Show(owner, "Un seul écran détecté. L'affichage client nécessite un second écran en mode 'Étendre'.", 
@@ -236,7 +236,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
             catch (Exception ex)
             {
-                var owner = Application.Current.MainWindow;
+                var owner = Services.WindowHelper.GetAdminWindow();
                 MessageBox.Show(owner, $"Erreur lors de l'application : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -261,7 +261,7 @@ namespace SystemeCaisse.UI.ViewModels
 
                 await context.SaveChangesAsync();
                 
-                var owner = Application.Current.MainWindow;
+                var owner = Services.WindowHelper.GetAdminWindow();
                 
                 // Refresh MainViewModel enterprise info
                 var mainWin = owner as SystemeCaisse.UI.MainWindow;
@@ -274,7 +274,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
             catch (Exception ex)
             {
-                var owner = Application.Current.MainWindow;
+                var owner = Services.WindowHelper.GetAdminWindow();
                 MessageBox.Show(owner, $"Erreur lors de l'enregistrement : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -318,21 +318,21 @@ namespace SystemeCaisse.UI.ViewModels
                     Filter = "SQLite Database (*.db)|*.db"
                 };
 
-                if (saveDlg.ShowDialog(Application.Current.MainWindow) == true)
+                if (saveDlg.ShowDialog(Services.WindowHelper.GetAdminWindow()) == true)
                 {
                      File.Copy(dbPath, saveDlg.FileName, true);
-                     MessageBox.Show(Application.Current.MainWindow, "Sauvegarde effectuée !");
+                     MessageBox.Show(Services.WindowHelper.GetAdminWindow(), "Sauvegarde effectuée !");
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show(Application.Current.MainWindow, $"Erreur sauvegarde : {ex.Message}");
+                MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur sauvegarde : {ex.Message}");
             }
         }
         [RelayCommand]
         private void ResetDatabase()
         {
-            var mainWin = Application.Current.MainWindow;
+            var mainWin = Services.WindowHelper.GetAdminWindow();
             var result = MessageBox.Show(mainWin, "ÊTES-VOUS SÛR ? Cela effacera TOUTES les données (produits, ventes, historique). Cette action est irréversible.", 
                 "AVERTISSEMENT CRITIQUE", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             

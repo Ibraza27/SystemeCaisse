@@ -117,7 +117,7 @@ namespace SystemeCaisse.UI.ViewModels
                 {
                     var entreprise = _context.Entreprise.FirstOrDefault() ?? new Entreprise { Nom = "Inconnu" };
                     var win = new Views.ReceiptSummaryWindow(SelectedSale, entreprise, SelectedSale.MonnaieRendue, true);
-                    win.Owner = Application.Current.MainWindow;
+                    win.Owner = Services.WindowHelper.GetAdminWindow();
                     win.WindowStartupLocation = WindowStartupLocation.CenterOwner;
                     win.ShowDialog();
                 }

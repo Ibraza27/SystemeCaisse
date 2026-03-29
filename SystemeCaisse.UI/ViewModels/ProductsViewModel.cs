@@ -75,6 +75,7 @@ namespace SystemeCaisse.UI.ViewModels
         {
             try
             {
+                _pendingNewProduct = null; // Clear any unsaved new product
                 _context?.Dispose();
                 _context = await _contextFactory.CreateDbContextAsync();
                 
@@ -119,7 +120,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur chargement : {ex.Message}");
+                MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur chargement : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -200,6 +201,8 @@ namespace SystemeCaisse.UI.ViewModels
             return true;
         }
 
+        private Produit? _pendingNewProduct;
+
         [RelayCommand]
         private void Add()
         {
@@ -213,7 +216,9 @@ namespace SystemeCaisse.UI.ViewModels
                 Categorie = "Autre",
                 TaxTier = 1
             };
-            _context.Produits.Add(newProduct);
+            // Don't add to context yet — only on Save
+            _pendingNewProduct = newProduct;
+            Products.Add(newProduct);
             SelectedProduct = newProduct;
         }
 
@@ -259,13 +264,21 @@ namespace SystemeCaisse.UI.ViewModels
                     // Ensure uppercase for all (migration of old data)
                     p.Nom = p.Nom?.ToUpper() ?? string.Empty;
                 }
+                
+                // Add pending new product to context only on explicit Save
+                if (_pendingNewProduct != null)
+                {
+                    _context.Produits.Add(_pendingNewProduct);
+                    _pendingNewProduct = null;
+                }
+                
                 _context.SaveChanges();
-                MessageBox.Show(Application.Current.MainWindow, "Enregistré avec succès !", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(Services.WindowHelper.GetAdminWindow(), "Enregistré avec succès !", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
                 _ = LoadCategories(); // Refresh categories in case new ones were added
             }
             catch (Exception ex)
             {
-                MessageBox.Show(Application.Current.MainWindow, $"Erreur lors de l'enregistrement : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur lors de l'enregistrement : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

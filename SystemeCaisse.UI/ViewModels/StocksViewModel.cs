@@ -246,7 +246,7 @@ namespace SystemeCaisse.UI.ViewModels
         private void ValiderMouvement(object obj)
         {
             if (SelectedProduitMouvement == null) return;
-            var mainWin = Application.Current.MainWindow;
+            var mainWin = Services.WindowHelper.GetAdminWindow();
 
             if (QuantiteMouvement <= 0) 
             {

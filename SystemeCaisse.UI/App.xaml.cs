@@ -225,6 +225,14 @@ namespace SystemeCaisse.UI
                 await mainVM.InitializeAsync();
                 
                 mainWindow.Show();
+                
+                // CRITICAL: Explicitly set MainWindow to prevent WPF from auto-assigning
+                // it to CustomerDisplayWindow or SplashScreen
+                Application.Current.MainWindow = mainWindow;
+                
+                // Admin window opens maximized
+                mainWindow.WindowState = WindowState.Maximized;
+                
                 splash.Close();
                 System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Fenêtre Main affichée.\n");
             }

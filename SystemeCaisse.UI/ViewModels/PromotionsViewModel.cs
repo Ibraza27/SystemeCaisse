@@ -221,7 +221,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show(Application.Current.MainWindow, $"Erreur lors du chargement des promotions : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur lors du chargement des promotions : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -231,13 +231,13 @@ namespace SystemeCaisse.UI.ViewModels
             if (string.IsNullOrWhiteSpace(NewNom)) return;
             if (NewTypePromotion == "prix_degressif" && !NewTiers.Any())
             {
-                MessageBox.Show(Application.Current.MainWindow, "Veuillez ajouter au moins un tiers pour le prix dégressif.", "Attention", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(Services.WindowHelper.GetAdminWindow(), "Veuillez ajouter au moins un tiers pour le prix dégressif.", "Attention", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             if (NewTypePromotion == "offre_combine" && !CurrentBundleItems.Any())
             {
-                MessageBox.Show(Application.Current.MainWindow, "Veuillez ajouter au moins un article pour l'offre combinée.", "Attention", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(Services.WindowHelper.GetAdminWindow(), "Veuillez ajouter au moins un article pour l'offre combinée.", "Attention", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -309,7 +309,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show(Application.Current.MainWindow, $"Erreur lors de l'enregistrement : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur lors de l'enregistrement : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -406,7 +406,7 @@ namespace SystemeCaisse.UI.ViewModels
         public async Task DeletePromotionAsync(Promotion promo)
         {
             if (promo == null) return;
-            if (MessageBox.Show(Application.Current.MainWindow, "Supprimer cette promotion ?", "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+            if (MessageBox.Show(Services.WindowHelper.GetAdminWindow(), "Supprimer cette promotion ?", "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
 
             try
             {
@@ -417,7 +417,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show(Application.Current.MainWindow, $"Erreur de suppression : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur de suppression : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -437,7 +437,7 @@ namespace SystemeCaisse.UI.ViewModels
              }
              catch(Exception ex)
              {
-                 MessageBox.Show(Application.Current.MainWindow, $"Erreur de mise à jour : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                 MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur de mise à jour : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
              }
         }
         [RelayCommand]

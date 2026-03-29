@@ -56,7 +56,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show(Application.Current.MainWindow, $"Erreur chargement historique : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur chargement historique : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -94,14 +94,14 @@ namespace SystemeCaisse.UI.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show(Application.Current.MainWindow, $"Erreur création inventaire : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur création inventaire : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
         [RelayCommand]
         public void CancelInventory()
         {
-            if (MessageBox.Show(Application.Current.MainWindow, "Annuler l'inventaire en cours ? Tout travail non sauvegardé sera perdu.", "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+            if (MessageBox.Show(Services.WindowHelper.GetAdminWindow(), "Annuler l'inventaire en cours ? Tout travail non sauvegardé sera perdu.", "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
             {
                 ActiveInventory = null;
                 IsInventoryActive = false;
@@ -113,7 +113,7 @@ namespace SystemeCaisse.UI.ViewModels
         {
             if (ActiveInventory == null) return;
 
-            if (MessageBox.Show(Application.Current.MainWindow, "Valider l'inventaire ?\nCela mettra à jour les stocks de tous les produits.", "Attention - Irréversible", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            if (MessageBox.Show(Services.WindowHelper.GetAdminWindow(), "Valider l'inventaire ?\nCela mettra à jour les stocks de tous les produits.", "Attention - Irréversible", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
                 return;
 
             try
@@ -157,14 +157,14 @@ namespace SystemeCaisse.UI.ViewModels
                 context.Inventaires.Add(ActiveInventory);
                 await context.SaveChangesAsync();
 
-                MessageBox.Show(Application.Current.MainWindow, "Inventaire validé et stocks mis à jour !", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(Services.WindowHelper.GetAdminWindow(), "Inventaire validé et stocks mis à jour !", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
                 IsInventoryActive = false;
                 ActiveInventory = null;
                 await LoadHistoryAsync();
             }
             catch (Exception ex)
             {
-                MessageBox.Show(Application.Current.MainWindow, $"Erreur validation : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur validation : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }

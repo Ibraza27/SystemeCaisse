@@ -827,7 +827,7 @@ namespace SystemeCaisse.UI.ViewModels
 
             SuspendedSales.Add(sale);
             ResetSale();
-            MessageBox.Show(Application.Current.MainWindow, "Vente mise en attente.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(Services.WindowHelper.GetAdminWindow(), "Vente mise en attente.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void ResumeSale(object parameter)
@@ -836,7 +836,7 @@ namespace SystemeCaisse.UI.ViewModels
             {
                 if (Panier.Count > 0)
                 {
-                    if (MessageBox.Show(Application.Current.MainWindow, "Un panier est en cours. L'écraser ?", "Attention", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.No)
+                    if (MessageBox.Show(Services.WindowHelper.GetAdminWindow(), "Un panier est en cours. L'écraser ?", "Attention", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.No)
                         return;
                 }
 
@@ -968,16 +968,16 @@ namespace SystemeCaisse.UI.ViewModels
 
                 if (SelectedPaiementMode == "Especes" && MontantRecu < Total && Total > 0)
                 {
-                    MessageBox.Show(Application.Current.MainWindow, "Montant reçu insuffisant !", "Erreur", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    MessageBox.Show(Services.WindowHelper.GetAdminWindow(), "Montant reçu insuffisant !", "Erreur", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
                 
                 if (SettingsVM.IsTrainingMode)
                 {
-                    if (MessageBox.Show(Application.Current.MainWindow, "MODE FORMATION ACTIVE.\nLa vente ne sera pas enregistrée.\nContinuer ?", "Mode Formation", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.No)
+                    if (MessageBox.Show(Services.WindowHelper.GetAdminWindow(), "MODE FORMATION ACTIVE.\nLa vente ne sera pas enregistrée.\nContinuer ?", "Mode Formation", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.No)
                         return;
 
-                    if (MessageBox.Show(Application.Current.MainWindow, "Simuler l'impression du ticket ?", "Impression Formation", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+                    if (MessageBox.Show(Services.WindowHelper.GetAdminWindow(), "Simuler l'impression du ticket ?", "Impression Formation", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
                     {
                         _ = Task.Run(() => _printService.PrintTicket(vente, CurrentEntreprise ?? new Entreprise { Nom = "Inconnu" }, true));
                     }
@@ -1031,7 +1031,7 @@ namespace SystemeCaisse.UI.ViewModels
                 BasketRemiseManuelle = 0;
                 
                 if (changeToReturn > 0)
-                    MessageBox.Show(Application.Current.MainWindow, $"Monnaie à rendre : {changeToReturn:C}", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Monnaie à rendre : {changeToReturn:C}", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
 
                 _ = Task.Run(async () => 
                 {
@@ -1048,7 +1048,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show(Application.Current.MainWindow, $"Erreur lors de l'enregistrement : {ex.Message}", "Erreur", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                System.Windows.MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur lors de l'enregistrement : {ex.Message}", "Erreur", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
             }
         }
 
@@ -1284,7 +1284,7 @@ namespace SystemeCaisse.UI.ViewModels
         {
             try
             {
-                var mainWindow = Application.Current.MainWindow;
+                var mainWindow = Services.WindowHelper.GetAdminWindow();
                 var selectWindow = new SystemeCaisse.UI.Views.ManualDiscountSelectionWindow();
                 SetupWindowOwner(selectWindow);
                 if (selectWindow.ShowDialog() != true) return;

@@ -601,7 +601,7 @@ namespace SystemeCaisse.UI.ViewModels
                         }
                     });
 
-                    mainWin = Application.Current.MainWindow;
+                    mainWin = Services.WindowHelper.GetAdminWindow();
                     if (MessageBox.Show(mainWin, $"Export réussi vers {filePath}\n\nSouhaitez-vous ouvrir le fichier ?", "Export Réussi", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
                     {
                         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(filePath) { UseShellExecute = true });
@@ -609,7 +609,7 @@ namespace SystemeCaisse.UI.ViewModels
                 }
                 catch (Exception ex)
                 {
-                    mainWin = Application.Current.MainWindow;
+                    mainWin = Services.WindowHelper.GetAdminWindow();
                     MessageBox.Show(mainWin, $"Erreur lors de l'export : {ex.Message}", "Erreur d'Export", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
                 finally
