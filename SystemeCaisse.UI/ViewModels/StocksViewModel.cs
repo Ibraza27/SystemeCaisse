@@ -143,65 +143,71 @@ namespace SystemeCaisse.UI.ViewModels
             OverviewProductsView = CollectionViewSource.GetDefaultView(Produits); // View over the stable collection
             OverviewProductsView.Filter = FilterOverview;
 
-            LoadCommand = new BasicRelayCommand(_ => LoadData());
+            LoadCommand = new BasicRelayCommand(_ => _ = LoadDataAsync());
             ValiderMouvementCommand = new BasicRelayCommand(ValiderMouvement, _ => SelectedProduitMouvement != null && QuantiteMouvement > 0);
-
-            LoadData(); // Initial load
         }
 
-        public void LoadData()
+        public async Task InitializeAsync()
         {
-            try
-            {
-                _context?.Dispose();
-                _context = _contextFactory.CreateDbContext();
-                
-                _context.Produits.Load();
-                _context.MouvementsStock.Include(m => m.Produit).Load(); 
-                
-                // Update stable collection
-                Produits.Clear();
-                foreach (var p in _context.Produits.Local)
-                {
-                    Produits.Add(p);
-                }
-                
-                // No need to re-create OverviewProductsView, just Refresh if needed, 
-                // but CollectionChanged events will handle the data update naturally.
-                OverviewProductsView.Refresh();
-
-                // Load Movements History (Last 100)
-                var lastMouvements = _context.MouvementsStock.Local
-                    .OrderByDescending(m => m.DateMouvement)
-                    .Take(100)
-                    .ToList();
-                
-                Mouvements.Clear();
-                foreach(var m in lastMouvements) Mouvements.Add(m);
-
-
-                // Populate LastEntryDate
-                var entries = _context.MouvementsStock.Local
-                    .Where(m => m.TypeMouvement == "entree")
-                    .GroupBy(m => m.ProduitId)
-                    .ToDictionary(g => g.Key, g => g.Max(m => m.DateMouvement));
-                
-                foreach (var p in Produits)
-                {
-                    if (entries.TryGetValue(p.Id, out var date))
-                        p.LastEntryDate = date;
-                    else
-                        p.LastEntryDate = null;
-                }
-
-                CalculateStats();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Erreur chargement stocks : {ex.Message}");
-            }
+            await LoadDataAsync();
         }
 
+        public async Task LoadDataAsync()
+        {
+            await Task.Run(async () => 
+            {
+                try
+                {
+                    _context?.Dispose();
+                    _context = _contextFactory.CreateDbContext();
+                    
+                    _context.Produits.Load();
+                    _context.MouvementsStock.Include(m => m.Produit).Load(); 
+                    
+                    await System.Windows.Application.Current.Dispatcher.InvokeAsync(() => 
+                    {
+                        // Update stable collection
+                        Produits.Clear();
+                        foreach (var p in _context.Produits.Local)
+                        {
+                            Produits.Add(p);
+                        }
+                        
+                        OverviewProductsView.Refresh();
+
+                        // Load Movements History (Last 100)
+                        var lastMouvements = _context.MouvementsStock.Local
+                            .OrderByDescending(m => m.DateMouvement)
+                            .Take(100)
+                            .ToList();
+                        
+                        Mouvements.Clear();
+                        foreach(var m in lastMouvements) Mouvements.Add(m);
+
+
+                        // Populate LastEntryDate
+                        var entries = _context.MouvementsStock.Local
+                            .Where(m => m.TypeMouvement == "entree")
+                            .GroupBy(m => m.ProduitId)
+                            .ToDictionary(g => g.Key, g => g.Max(m => m.DateMouvement));
+                        
+                        foreach (var p in Produits)
+                        {
+                            if (entries.TryGetValue(p.Id, out var date))
+                                p.LastEntryDate = date;
+                            else
+                                p.LastEntryDate = null;
+                        }
+
+                        CalculateStats();
+                    });
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"LOAD STOCKS ERROR: {ex.Message}");
+                }
+            });
+        }
         private void CalculateStats()
         {
             ValeurTotaleStock = Produits.Sum(p => p.StockActuel * p.PrixVente); // Use PrixVente for potential value, or PrixAchat for cost
@@ -240,18 +246,22 @@ namespace SystemeCaisse.UI.ViewModels
         private void ValiderMouvement(object obj)
         {
             if (SelectedProduitMouvement == null) return;
+            var mainWin = Application.Current.MainWindow;
+
             if (QuantiteMouvement <= 0) 
             {
-                MessageBox.Show("La quantité doit être supérieure à 0.");
+                MessageBox.Show(mainWin, "La quantité doit être supérieure à 0.", "Attention", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             try
             {
+                using var context = _contextFactory.CreateDbContext();
+                
                 var m = new MouvementStock
                 {
                     ProduitId = SelectedProduitMouvement.Id,
-                    TypeMouvement = TypeMouvement,
+                    TypeMouvement = TypeMouvement, // Stores raw value from UI ("entree", "sortie", "inventaire")
                     Quantite = QuantiteMouvement,
                     PrixUnitaire = TypeMouvement == "entree" ? PrixUnitaireMouvement : (decimal?)null,
                     Commentaire = CommentaireMouvement,
@@ -259,55 +269,41 @@ namespace SystemeCaisse.UI.ViewModels
                     ProduitNomSnapshot = SelectedProduitMouvement.Nom
                 };
 
-                _context.MouvementsStock.Add(m);
+                context.MouvementsStock.Add(m);
 
                 // Update Stock
-                if (TypeMouvement == "entree")
+                var prod = context.Produits.Find(SelectedProduitMouvement.Id);
+                if (prod != null)
                 {
-                    SelectedProduitMouvement.StockActuel += QuantiteMouvement;
-                    // Optionally update purchase price
-                    if (PrixUnitaireMouvement > 0)
-                        SelectedProduitMouvement.PrixAchat = PrixUnitaireMouvement;
-                }
-                else if (TypeMouvement == "sortie")
-                {
-                    SelectedProduitMouvement.StockActuel -= QuantiteMouvement;
-                }
-                else if (TypeMouvement == "inventaire")
-                {
-                     // Difference
-                     decimal diff = QuantiteMouvement - SelectedProduitMouvement.StockActuel;
-                     // Logic for inventory is: 'Quantite' IS the new stock? Or 'Quantite' is the adjustment?
-                     // Legacy logic: 
-                     // entry_qte.get() -> if 'inventaire', usually "Quantity Counted"
-                     // Let's assume user enters Counted Quantity.
-                     // But naming 'Quantite' usually implies delta in movement tables.
-                     // Legacy app logic: `stocks_db.mouvement_stock` handles logic.
-                     // If I set 'inventaire', the Movement record usually stores the DELTA or the Count?
-                     // Let's just store the Delta for consistency in Movement table, but user inputs Absolute.
-                     // For simplicity here, let's say 'inventaire' inputs the DELTA for now, OR I implement logic:
-                     // Current: 10. Counted: 12. Delta: +2.
-                     // For now, let's treat "inventaire" as "Correction (+/-)".
-                     // User enters generic adjustment.
-                     // If user wants "Set Stock", calculation needed.
-                     // I will treat 'inventaire' here as a manual adjustment (delta).
-                     SelectedProduitMouvement.StockActuel += QuantiteMouvement; 
-                     // Actually, usually 'inventaire' means 'Physical Count'. 
-                     // But to keep it matching 'Entree/Sortie' input style (Quantite), let's stick to simple "Add/Remove" logic for now.
-                     // Or better: Type "Ajustement".
-                     // If type is "sortie", subtracting.
-                }
+                    if (TypeMouvement == "entree")
+                    {
+                        prod.StockActuel += QuantiteMouvement;
+                        if (PrixUnitaireMouvement > 0)
+                            prod.PrixAchat = PrixUnitaireMouvement;
+                    }
+                    else if (TypeMouvement == "sortie")
+                    {
+                        prod.StockActuel -= QuantiteMouvement;
+                    }
+                    else if (TypeMouvement == "inventaire")
+                    {
+                        // In this app, 'inventaire' enters a relative correction (Delta)
+                        prod.StockActuel += QuantiteMouvement;
+                    }
 
-                _context.SaveChanges();
-                
-                // Refresh
-                LoadData();
-                ResetForm();
-                MessageBox.Show("Mouvement enregistré !");
+                    context.Update(prod);
+                    context.SaveChanges();
+                    
+                    // Refresh local collections
+                    _ = LoadDataAsync();
+                    
+                    MessageBox.Show(mainWin, "Mouvement de stock enregistré avec succès !", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ResetForm();
+                }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur: {ex.Message}");
+                MessageBox.Show(mainWin, $"Erreur lors de l'enregistrement du mouvement : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

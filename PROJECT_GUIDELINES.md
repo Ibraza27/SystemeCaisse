@@ -1,69 +1,94 @@
-# 📜 Hippocampe - Guide de Stratégie & Règles d'Or
+# PROJECT_GUIDELINES.md
 
-Ce document sert de référence technique ultime pour le projet **SystemeCaisse**. Il recense les décisions d'architecture critiques, les optimisations de performance et les stratégies de stabilité pour éviter toute régression lors des futures évolutions.
+Ce document recense les règles d'or et les optimisations critiques du projet **SystemeCaisse** pour garantir la stabilité, la fluidité et la scalabilité de l'application. Il sert de référence pour toutes les futures implémentations.
 
----
+## 1. Stratégie Multi-Écran (Admin vs Client)
 
-## 🏗️ Architecture Globale
-- **Framework** : .NET 8 WPF.
-- **Pattern** : MVVM strict via `CommunityToolkit.Mvvm`.
-- **Communication** : Les ViewModels communiquent avec la `MainWindow` via des méthodes dédiées (ex: `SetupWindowOwner`).
-- **Style** : Thème moderne (vert #2E7D32) avec coins arrondis et glassmorphism.
+L'application est conçue pour fonctionner avec deux écrans (un pour le vendeur, un pour le client).
 
----
+### Règles d'or :
+- **Détection Automatique** : La fenêtre client (`CustomerDisplayWindow`) ne doit s'ouvrir QUE si au moins deux écrans sont détectés (`screens.Count < 2 → return`).
+- **Positionnement** : 
+  - Par défaut, la fenêtre Admin (`MainWindow`) s'affiche sur l'écran principal.
+  - La fenêtre Client s'affiche sur le premier écran secondaire détecté.
+  - Si l'utilisateur change la position dans les réglages, l'application doit immédiatement inverser les positions de TOUTES les fenêtres ouvertes.
+- **Logique de Centrage** : Toutes les fenêtres modales (Remises, Poids, Sélection produit) doivent être centrées sur l'écran de l'Admin via la méthode `SetupWindowOwner(win)`.
+- **Logging** : Le fichier `startup_log_v2.txt` trace la détection des écrans et l'ouverture de la fenêtre client pour le diagnostic.
 
-## 🖥️ Stratégie Multi-Écran (DÉTERMINANT)
-Le positionnement des fenêtres est le point le plus sensible. **Ne jamais modifier ces règles sans test multi-moniteur.**
+## 2. Gestion des Fenêtres Modales et Alertes
 
-### 1. La Règle "Normal avant Maximized"
-Windows ignore souvent les coordonnées `Left` / `Top` si la fenêtre est déjà en `WindowState.Maximized`.
-- **Règle** : Toujours repasser en `WindowState.Normal`, positionner la fenêtre via les coordonnées logiques, puis la passer en `Maximized`.
-- **Application** : Voir `InitializeCustomerDisplay` et `MoveAdminToScreen`.
+**TOUTES** les alertes (`MessageBox`) et fenêtres secondaires doivent être ancrées à la fenêtre principale pour éviter qu'elles n'apparaissent sur l'écran client ou derrière d'autres fenêtres.
 
-### 2. DPI Awareness & Coordonnées Logiques
-L'application supporte des écrans avec des échelles différentes (ex: 100% et 125%).
-- **Règle** : Ne jamais utiliser les pixels physiques de Win32 seuls. Utiliser `ScreenHelper.GetScreens()` qui calcule les **Coordonnées Logiques** (DPI-indépendantes) via `shcore.dll`.
-- **Calcul** : `Logiciel = Physique / (DPI / 96)`.
+### Règles strictes :
+- **MessageBox** : TOUJOURS spécifier `Application.Current.MainWindow` comme premier paramètre (owner).
+  ```csharp
+  // ✅ CORRECT
+  MessageBox.Show(Application.Current.MainWindow, "Message", "Titre", ...);
+  // ❌ INTERDIT — s'affiche potentiellement sur l'écran client
+  MessageBox.Show("Message", "Titre", ...);
+  ```
+- **Fenêtres personnalisées (ShowDialog)** : TOUJOURS appeler `SetupWindowOwner(dialog)` (dans MainViewModel) ou assigner `win.Owner = Application.Current.MainWindow` avant `ShowDialog()`.
+- **Fichiers concernés** : MainViewModel, PromotionsViewModel, InventoryViewModel, HistoryViewModel, SettingsViewModel, StocksViewModel, ProductsViewModel, et toutes les fenêtres XAML code-behind.
 
-### 3. Ancrage et Centrage des Modales
-Les fenêtres de dialogue ne doivent **JAMAIS** s'ouvrir sur l'écran client.
-- **Règle** : Utiliser `SetupWindowOwner(Window win)`. Elle calcule manuellement le centre de l'écran où se trouve actuellement la fenêtre **Admin** en utilisant les coordonnées logiques.
-- **Avantage** : Évite que les modales ne soient perdues sur l'écran secondaire ou décalées par le DPI.
+## 3. Performance et Stabilité Graphique
 
----
+- **Rendu Logiciel (Software Rendering)** : Pour éviter les deadlocks GPU ou les gels d'interface fréquents en WPF sur certaines configurations, le rendu logiciel est forcé globalement au démarrage dans `App.xaml.cs`.
+  ```csharp
+  RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
+  ```
 
-## 📊 Stratégies par Module
+## 4. Intégrité des Données et Panier
 
-### 🛒 Caisse (SalesView)
-- **Virtualisation** : Ne jamais désactiver la virtualisation UI pour les listes de produits (indispensable pour la fluidité).
-- **Saisie Poids** : La fenêtre de poids doit être modale et forcer l'ancrage sur l'Admin.
+- **Mise en Attente (Suspending Sales)** : Lorsque l'on suspend une vente, tous les paramètres du panier doivent être sauvegardés, y compris les **remises manuelles globale du panier** (`BasketRemiseManuelle`).
+- **Calcul des Totaux** : La méthode `UpdateTotal()` dans `MainViewModel` est la source unique de vérité pour le calcul du montant final. Elle prend en compte les remises par article (auto/manuelles) et la remise globale.
+- **Événements Panier** : Un seul abonnement `Panier.CollectionChanged` doit exister dans le constructeur. Ne JAMAIS dupliquer ce bloc.
 
-### 📈 Analyses (AnalysisView)
-- **Export Excel/PDF** : Le `SaveFileDialog` doit être rattaché à la `MainWindow` via `Owner = mainWin`.
-- **Performance** : Les calculs de statistiques lourds (ex: ventes sur an) doivent être optimisés au niveau SQLite (Index sur `Date`).
+## 5. Synchronisation en Temps Réel
 
-### ⚙️ Configuration (SettingsView)
-- **Mise à Jour Instantanée** : Le bouton "Appliquer" doit déclencher une réinitialisation complète des écrans sans redémarrer l'application.
+- **Paramètres Entreprise** : Toute modification des coordonnées de l'entreprise (nom, adresse, etc.) dans `SettingsViewModel` doit déclencher `ReloadEntrepriseInfo()` dans le `MainViewModel` pour rafraîchir instantanément toutes les vues (Ticket, Écran Client, etc.).
+- **Auto-Scroll Client** : La liste des produits sur l'écran client doit scroller automatiquement vers le bas à chaque ajout pour que le dernier produit soit toujours visible.
 
----
+## 6. Initialisation Résiliente
 
-## 🗄️ Gestion des Données & Sync
-- **Base de donnée** : SQLite (`caisse.db`).
-- **Sync Python** : L'installeur permet l'import d'une base `database.db` (Python) qui est convertie/renommée automatiquement.
-- **Schéma** : Les clés étrangères (`FK_Produit_Rayon`) sont activées au démarrage pour garantir l'intégrité.
+L'initialisation de l'application (`MainViewModel.InitializeAsync`) doit être **résiliente** : un échec d'un sous-ViewModel ne doit JAMAIS bloquer les suivants.
 
----
+### Règles :
+- **SafeInitAsync** : Chaque sous-VM s'initialise via `SafeInitAsync(name, func)` qui encapsule l'appel dans un try/catch individuel avec log fichier.
+- **Pas de MessageBox dans les catch de background threads** : Utiliser `System.Diagnostics.Debug.WriteLine` + `System.IO.File.AppendAllText("startup_log_v2.txt", ...)` au lieu de `MessageBox.Show` qui crasherait depuis un thread de fond.
+- **Ordre d'initialisation** : ProductsVM → StocksVM → HistoryVM → SettingsVM → DashboardVM → PromotionsVM → InventoryVM → AnalysisVM.
 
-## 📦 Build & Installer
-- **Publication** : Toujours utiliser `PublishSingleFile=true` et `SelfContained=true`.
-- **Installer** : Le projet `Installer` embarque le POS (`payload.exe`) en tant que ressource intégrée.
-- **Icones** : Le logo (`logo.png`) est copié dans `%LocalAppData%\Hippocampe\Images\` pour les raccourcis.
+## 7. Promotions
 
----
+- **Date de fin** : Une promotion peut avoir une date de fin **indéterminée** (`DateFin = null`). Dans ce cas, elle reste active tant qu'elle n'est pas désactivée manuellement.
+- **Validation** : La logique `ApplyAutomaticPromotions` doit traiter `DateFin == null` comme "toujours valide" (`p.DateFin == null || p.DateFin >= DateTime.Today`).
 
-## 🚫 Anti-Patterns & Pièges Connus
-- **Fichiers Lockés** : Lors du build, l'Admin doit être éteint car l'installeur utilise PowerShell pour tuer le processus.
-- **Namespace UI** : Ne jamais référencer `SystemeCaisse.UI.MainWindow` en dur dans les services partagés ; privilégier l'injection ou le casting via `Application.Current.Windows`.
+## 8. Hygiène du Code et du Projet
 
----
-*Ce document résume l'intelligence collective accumulée sur le projet. À consulter avant chaque modification structurelle.*
+### Fichiers interdits dans le dépôt :
+- Aucun `.exe`, `.dll`, `.pdb` (sauf NuGet packages)
+- Aucun fichier `.log`, `.txt` de debug
+- Aucun fichier `.db` (base de données)
+- Aucun dossier `publish_*`, `setup_*`, `temp_*`, `BuildOutput/`, `SAVE/`
+
+### Règles de code :
+- **Pas de `MessageBox.Show` de debug** en production. Utiliser `Debug.WriteLine` ou des logs fichier.
+- **Pas de code dupliqué**. Si un bloc est copié-collé, le refactoriser en méthode.
+- **Pas de `catch { }` vide**. Toujours logger l'erreur au minimum.
+
+## 9. Déploiement et Sécurité (Signature)
+
+Pour garantir un déploiement fluide et professionnel sans blocages "Éditeur inconnu" ou "Smart App Control" :
+
+### Procédure de Confiance (Installation Initiale) :
+Sur chaque nouvel ordinateur, avant de lancer l'installateur pour la première fois :
+1.  **Certificat** : Récupérer le fichier `HippocampeEnterprise.cer`.
+2.  **Installation** : 
+    - Double-cliquer sur le fichier.
+    - Choisir **Ordinateur local** (nécessite des droits admin).
+    - Choisir **Placer tous les certificats dans le magasin suivant**.
+    - Sélectionner **Autorités de certification racines de confiance**.
+3.  **Validation** : Une fois installé, Windows reconnaîtra "Hippocampe Systeme de Caisse" comme un éditeur de confiance.
+
+### Maintenance :
+- **Signature** : Toute nouvelle version de `SystemeCaisse.UI.exe` ou de l'installateur DOIT être signée avec le certificat `.pfx` correspondant en utilisant l'outil `signtool.exe`.
+- **Identité** : Ne jamais modifier les métadonnées d'assemblage (Company, Product) sans mettre à jour le certificat, sous peine d'invalidation de la signature.

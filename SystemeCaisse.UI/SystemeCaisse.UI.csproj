@@ -36,6 +36,14 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <Company>Hippocampe Systeme de Caisse</Company>
+    <Authors>Ibrahim</Authors>
+    <Product>Hippocampe POS</Product>
+    <Description>Système de Gestion de Caisse Moderne</Description>
+    <Copyright>Copyright © 2026 Hippocampe</Copyright>
+    <Version>4.4.2</Version>
+    <FileVersion>4.4.2.0</FileVersion>
+    <AssemblyVersion>4.4.2.0</AssemblyVersion>
   </PropertyGroup>
 
 </Project>

@@ -56,9 +56,33 @@ namespace SystemeCaisse.UI.ViewModels
             _migrationService = migrationService;
             AvailablePrinters = new ObservableCollection<string>();
             AvailableScreens = new ObservableCollection<string>();
-            LoadData();
-            LoadPrinters();
-            LoadScreens();
+        }
+
+        public async Task InitializeAsync()
+        {
+            await Task.Run(async () => 
+            {
+                LoadData();
+                
+                // Hardware discovery in background
+                var printers = System.Drawing.Printing.PrinterSettings.InstalledPrinters.Cast<string>().ToList();
+                var screens = SystemeCaisse.UI.Services.ScreenHelper.GetScreens();
+                var screenNames = new List<string>();
+                for (int i = 0; i < screens.Count; i++)
+                {
+                    var s = screens[i];
+                    screenNames.Add($"Écran {i + 1} {(s.IsPrimary ? "(Principal)" : "")} - {s.Bounds.Width}x{s.Bounds.Height}");
+                }
+
+                await Application.Current.Dispatcher.InvokeAsync(() => 
+                {
+                    AvailablePrinters.Clear();
+                    foreach (var p in printers) AvailablePrinters.Add(p);
+                    
+                    AvailableScreens.Clear();
+                    foreach (var name in screenNames) AvailableScreens.Add(name);
+                });
+            });
         }
 
         [RelayCommand]
@@ -76,16 +100,23 @@ namespace SystemeCaisse.UI.ViewModels
                 try 
                 {
                     await _migrationService.MigrateDataAsync(openDlg.FileName);
-                    if (MessageBox.Show("Migration réussie ! L'application doit redémarrer pour appliquer les changements. Redémarrer maintenant ?", 
+                    
+                    // Refresh MainViewModel enterprise info
+                    if (mainWin is SystemeCaisse.UI.MainWindow posWindow && posWindow.DataContext is MainViewModel mainVM)
+                    {
+                        mainVM.ReloadEntrepriseInfo();
+                    }
+
+                    if (MessageBox.Show(mainWin, "Migration réussie ! L'application doit redémarrer pour appliquer les changements. Redémarrer maintenant ?", 
                         "Succès", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
                     {
                         RestartApplication();
                     }
-                    LoadData(); 
+                    _ = Task.Run(() => LoadData());
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"Erreur migration : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show(mainWin, $"Erreur migration : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
         }
@@ -150,6 +181,22 @@ namespace SystemeCaisse.UI.ViewModels
         }
 
         [RelayCommand]
+        private void SelectLogo()
+        {
+            var openDlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "Images (*.png;*.jpg;*.jpeg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp|All Files (*.*)|*.*",
+                Title = "Sélectionner le logo de l'entreprise"
+            };
+
+            if (openDlg.ShowDialog(Application.Current.MainWindow) == true)
+            {
+                EntrepriseInfo.LogoPath = openDlg.FileName;
+                OnPropertyChanged(nameof(EntrepriseInfo));
+            }
+        }
+
+        [RelayCommand]
         public async Task ApplyCustomerDisplay()
         {
             try
@@ -161,17 +208,36 @@ namespace SystemeCaisse.UI.ViewModels
                 await context.SaveChangesAsync();
 
                 // Refresh Customer Display robustly
-                var mainWin = Application.Current.Windows.OfType<SystemeCaisse.UI.MainWindow>().FirstOrDefault();
+                var screens = ScreenHelper.GetScreens();
+                var owner = Application.Current.MainWindow;
+                if (screens.Count < 2)
+                {
+                    MessageBox.Show(owner, "Un seul écran détecté. L'affichage client nécessite un second écran en mode 'Étendre'.", 
+                        "Information", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                var mainWin = owner as SystemeCaisse.UI.MainWindow;
                 if (mainWin != null)
                 {
                     mainWin.ReinitializeCustomerDisplay();
+                    MessageBox.Show(owner, "Affichage client rafraîchi !", "Information", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
-                
-                MessageBox.Show("Affichage client rafraîchi !", "Information", MessageBoxButton.OK, MessageBoxImage.Information);
+                else
+                {
+                    // Fallback if mainWin is not MainWindow
+                    var posWindow = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.DataContext is MainViewModel);
+                    if (posWindow != null && posWindow.DataContext is MainViewModel vm)
+                    {
+                        vm.InitializeCustomerDisplay();
+                        MessageBox.Show(posWindow, "Affichage client rafraîchi !", "Information", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur lors de l'application : {ex.Message}");
+                var owner = Application.Current.MainWindow;
+                MessageBox.Show(owner, $"Erreur lors de l'application : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -195,19 +261,21 @@ namespace SystemeCaisse.UI.ViewModels
 
                 await context.SaveChangesAsync();
                 
-                // Refresh Customer Display
-                // Refresh Customer Display
-                var mainWin = Application.Current.Windows.OfType<SystemeCaisse.UI.MainWindow>().FirstOrDefault();
-                if (mainWin != null)
+                var owner = Application.Current.MainWindow;
+                
+                // Refresh MainViewModel enterprise info
+                var mainWin = owner as SystemeCaisse.UI.MainWindow;
+                if (mainWin != null && mainWin.DataContext is MainViewModel mainVM)
                 {
-                    mainWin.ReinitializeCustomerDisplay();
+                    mainVM.ReloadEntrepriseInfo();
                 }
 
-                MessageBox.Show("Paramètres enregistrés avec succès !", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(owner, "Paramètres enregistrés avec succès !", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur lors de l'enregistrement : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                var owner = Application.Current.MainWindow;
+                MessageBox.Show(owner, $"Erreur lors de l'enregistrement : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -250,21 +318,22 @@ namespace SystemeCaisse.UI.ViewModels
                     Filter = "SQLite Database (*.db)|*.db"
                 };
 
-                if (saveDlg.ShowDialog() == true)
+                if (saveDlg.ShowDialog(Application.Current.MainWindow) == true)
                 {
                      File.Copy(dbPath, saveDlg.FileName, true);
-                     MessageBox.Show("Sauvegarde effectuée !");
+                     MessageBox.Show(Application.Current.MainWindow, "Sauvegarde effectuée !");
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur sauvegarde : {ex.Message}");
+                MessageBox.Show(Application.Current.MainWindow, $"Erreur sauvegarde : {ex.Message}");
             }
         }
         [RelayCommand]
         private void ResetDatabase()
         {
-            var result = MessageBox.Show("ÊTES-VOUS SÛR ? Cela effacera TOUTES les données (produits, ventes, historique). Cette action est irréversible.", 
+            var mainWin = Application.Current.MainWindow;
+            var result = MessageBox.Show(mainWin, "ÊTES-VOUS SÛR ? Cela effacera TOUTES les données (produits, ventes, historique). Cette action est irréversible.", 
                 "AVERTISSEMENT CRITIQUE", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             
             if (result == MessageBoxResult.Yes)
@@ -275,7 +344,7 @@ namespace SystemeCaisse.UI.ViewModels
                     context.Database.EnsureDeleted();
                     context.Database.Migrate();
                     
-                    if (MessageBox.Show("Base de données réinitialisée ! Redémarrer l'application pour finaliser ?", 
+                    if (MessageBox.Show(mainWin, "Base de données réinitialisée ! Redémarrer l'application pour finaliser ?", 
                         "Réinitialisation terminée", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
                     {
                         RestartApplication();
@@ -283,7 +352,7 @@ namespace SystemeCaisse.UI.ViewModels
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"Erreur lors de la réinitialisation : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show(mainWin, $"Erreur lors de la réinitialisation : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
         }

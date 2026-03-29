@@ -63,10 +63,15 @@ namespace SystemeCaisse.UI.ViewModels
             SalesEvolution = new ObservableCollection<LineDataPoint>();
             CategoryDistribution = new ObservableCollection<PieDataPoint>();
             TopProducts = new ObservableCollection<TopProductItem>();
+        }
 
-            // Default filter: Today
-            // Default filter: Month (to show historical data by default)
-            SetPeriod("Month");
+        public async Task InitializeAsync()
+        {
+            await Application.Current.Dispatcher.InvokeAsync(() => 
+            {
+                SetPeriod("Month");
+            });
+            await LoadDashboardDataInternalAsync();
         }
 
         [RelayCommand]
@@ -101,11 +106,13 @@ namespace SystemeCaisse.UI.ViewModels
                     CurrentPeriodLabel = "Cette année";
                     break;
             }
-            LoadDashboardDataCommand.ExecuteAsync(null);
+            _ = LoadDashboardDataInternalAsync();
         }
 
         [RelayCommand]
-        public async Task LoadDashboardDataAsync()
+        public async Task LoadDashboardData() => await LoadDashboardDataInternalAsync();
+
+        public async Task LoadDashboardDataInternalAsync()
         {
             try
             {
@@ -151,11 +158,14 @@ namespace SystemeCaisse.UI.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur Dashboard: {ex.Message}\nStack: {ex.StackTrace}");
+                System.Diagnostics.Debug.WriteLine($"Dashboard Error: {ex.Message}\nStack: {ex.StackTrace}");
+                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Dashboard LOAD ERROR: {ex.Message}\n");
             }
         }
 
         [ObservableProperty] private bool _hasData;
+        [ObservableProperty] private bool _isActive;
+        partial void OnIsActiveChanged(bool value) { if(value) _ = LoadDashboardDataInternalAsync(); }
 
         private void CalculateKpis(List<Core.Entities.Vente> current, List<Core.Entities.Vente> previous)
         {
@@ -208,9 +218,13 @@ namespace SystemeCaisse.UI.ViewModels
 
         private async Task CalculateCharts(List<Core.Entities.Vente> sales, AppDbContext context)
         {
-            SalesEvolution.Clear();
-            CategoryDistribution.Clear();
-            TopProducts.Clear();
+            // Ensure collection clearing happens on UI thread
+            await Application.Current.Dispatcher.InvokeAsync(() => 
+            {
+                SalesEvolution.Clear();
+                CategoryDistribution.Clear();
+                TopProducts.Clear();
+            });
 
             // --- 1. Line Chart (Evolution) ---
             // Group by Date (or Hour if 1 day)
@@ -232,7 +246,10 @@ namespace SystemeCaisse.UI.ViewModels
             {
                 newSalesEvolution.Add(new LineDataPoint { Label = item.Key, Value = (double)item.Value });
             }
-            SalesEvolution = newSalesEvolution;
+            await Application.Current.Dispatcher.InvokeAsync(() => 
+            {
+                SalesEvolution = newSalesEvolution;
+            });
 
             // --- 2. Pie Chart (Categories) ---
             var flatLines = sales.SelectMany(v => v.Lignes).ToList();
@@ -264,7 +281,10 @@ namespace SystemeCaisse.UI.ViewModels
                 });
                 colorIdx++;
             }
-            CategoryDistribution = newCategoryDistribution;
+            await Application.Current.Dispatcher.InvokeAsync(() => 
+            {
+                CategoryDistribution = newCategoryDistribution;
+            });
 
             // --- 3. Top Products Table ---
             var topItems = flatLines
@@ -279,7 +299,10 @@ namespace SystemeCaisse.UI.ViewModels
                 .Take(5)
                 .ToList();
 
-            foreach (var item in topItems) TopProducts.Add(item);
+            await Application.Current.Dispatcher.InvokeAsync(() => 
+            {
+                foreach (var item in topItems) TopProducts.Add(item);
+            });
         }
     }
 }

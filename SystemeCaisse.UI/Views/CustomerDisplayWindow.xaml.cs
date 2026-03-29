@@ -9,6 +9,24 @@ namespace SystemeCaisse.UI.Views
         {
             InitializeComponent();
             DataContext = viewModel;
+
+            // Auto-scroll when the cart changes
+            if (viewModel.LignesVente is System.Collections.Specialized.INotifyCollectionChanged collection)
+            {
+                collection.CollectionChanged += (s, e) =>
+                {
+                    if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add)
+                    {
+                        _ = Application.Current.Dispatcher.BeginInvoke(new System.Action(() =>
+                        {
+                            if (CartListView.Items.Count > 0)
+                            {
+                                CartListView.ScrollIntoView(CartListView.Items[CartListView.Items.Count - 1]);
+                            }
+                        }), System.Windows.Threading.DispatcherPriority.Background);
+                    }
+                };
+            }
         }
     }
 }

@@ -51,11 +51,11 @@ namespace SystemeCaisse.UI.Views
                     var writer = System.Windows.Xps.Packaging.XpsDocument.CreateXpsDocumentWriter(xpsDoc);
                     writer.Write(((IDocumentPaginatorSource)DocReader.Document).DocumentPaginator);
                     xpsDoc.Close();
-                    MessageBox.Show("Ticket enregistré avec succès !");
+                    MessageBox.Show(this, "Ticket enregistré avec succès !", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 catch (System.Exception ex)
                 {
-                    MessageBox.Show($"Erreur lors de l'enregistrement : {ex.Message}");
+                    MessageBox.Show(this, $"Erreur lors de l'enregistrement : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
         }

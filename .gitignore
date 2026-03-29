@@ -1,3 +1,4 @@
+# Build artifacts
 [Oo]bj/
 [Bb]in/
 .vs/
@@ -6,13 +7,42 @@
 *.suo
 *.userosscache
 *.sln.docstates
-build_errors.txt
+BuildOutput/
+
+# Binary files
 *.exe
 *.dll
 *.pdb
+
+# Logs & Debug
 *.log
 *.txt
+!PROJECT_GUIDELINES.md
+!README.md
+
+# Data
 *.db
-publish_pos/
-publish_setup/
-BuildOutput/
+*.db-shm
+*.db-wal
+
+# Publish & Setup outputs
+publish_*/
+setup_*/
+setup_v*/
+
+# Temp & debug
+temp_*/
+SAVE/
+*.py
+
+# Reports (generated at runtime)
+*.csv
+*.xlsx
+
+# Certificates (keep on disk, not in repo)
+*.cer
+*.pfx
+
+# IDE
+.idea/
+*.DotSettings

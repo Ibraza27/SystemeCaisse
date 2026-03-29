@@ -48,7 +48,8 @@
 
                     <StackPanel Grid.Column="3" Margin="0,0,10,10">
                         <TextBlock Text="Fin" FontWeight="SemiBold" Margin="0,0,0,5"/>
-                        <DatePicker SelectedDate="{Binding NewDateFin}"/>
+                        <CheckBox Content="Sans date de fin" IsChecked="{Binding IsIndeterminateEndDate}" Margin="0,0,0,5" FontSize="11" Foreground="#666"/>
+                        <DatePicker SelectedDate="{Binding NewDateFin}" IsEnabled="{Binding IsIndeterminateEndDate, Converter={StaticResource BoolInverter}}"/>
                     </StackPanel>
                 </Grid>
 
@@ -205,7 +206,26 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
                 <DataGridTextColumn Header="Début" Binding="{Binding DateDebut, StringFormat=d}" Width="100"/>
-                <DataGridTextColumn Header="Fin" Binding="{Binding DateFin, StringFormat=d}" Width="100"/>
+                <DataGridTemplateColumn Header="Fin" Width="110">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock HorizontalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="{Binding DateFin, StringFormat=d}"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding DateFin}" Value="{x:Null}">
+                                                <Setter Property="Text" Value="Indéterminée"/>
+                                                <Setter Property="FontStyle" Value="Italic"/>
+                                                <Setter Property="Foreground" Value="#999"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 
                 <DataGridTemplateColumn Header="Actif" Width="60">
                     <DataGridTemplateColumn.CellTemplate>

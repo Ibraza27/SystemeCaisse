@@ -14,7 +14,7 @@ namespace SystemeCaisse.Core.Entities
         public string Nom { get; set; } = string.Empty;
 
         public DateTime DateDebut { get; set; }
-        public DateTime DateFin { get; set; }
+        public DateTime? DateFin { get; set; }
 
         [Required]
         [MaxLength(20)]

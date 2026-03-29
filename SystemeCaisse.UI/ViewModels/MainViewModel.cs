@@ -8,7 +8,7 @@ using System.Windows.Input;
 using Microsoft.EntityFrameworkCore;
 using SystemeCaisse.Core.Entities;
 using SystemeCaisse.Infrastructure.Data;
-using Views = SystemeCaisse.UI.Views;
+using SystemeCaisse.UI.Views;
 using SystemeCaisse.UI.Services;
 using SystemeCaisse.Core.Interfaces;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -20,6 +20,9 @@ namespace SystemeCaisse.UI.ViewModels
     {
         private readonly IDbContextFactory<AppDbContext> _contextFactory;
         private readonly AppDbContext _context;
+        private readonly PrintService _printService;
+        private readonly IDataMigrationService _migrationService;
+
 
         private List<Promotion> _activePromotions = new();
         
@@ -59,12 +62,15 @@ namespace SystemeCaisse.UI.ViewModels
         }
 
         public string CurrentDateTime => DateTime.Now.ToString("dddd dd MMMM yyyy HH:mm", new System.Globalization.CultureInfo("fr-FR"));
+        public string CurrentDate => DateTime.Now.ToString("dd/MM/yyyy");
+        public string CurrentTime => DateTime.Now.ToString("HH:mm:ss");
 
         public decimal TotalHorsRemise => Panier.Sum(x => x.TotalLigneStandard);
         public decimal TotalRemises => TotalRemise;
         public double TotalEuro => (double)TotalVente / 655.957;
 
-        private Views.CustomerDisplayWindow? _customerDisplay;
+        private System.Windows.Threading.DispatcherTimer? _clockTimer;
+        private SystemeCaisse.UI.Views.CustomerDisplayWindow? _customerDisplay;
 
         private Produit? _selectedSearchProduct;
         public Produit? SelectedSearchProduct
@@ -120,13 +126,13 @@ namespace SystemeCaisse.UI.ViewModels
                         else
                         {
                             IsSearchDropDownOpen = false;
-                            SearchSuggestions.Clear();
+                            _ = Application.Current.Dispatcher.InvokeAsync(() => SearchSuggestions.Clear());
                         }
                     }
                     else
                     {
                         IsSearchDropDownOpen = false;
-                        SearchSuggestions.Clear();
+                        _ = Application.Current.Dispatcher.InvokeAsync(() => SearchSuggestions.Clear());
                     }
                     
                     ProductsView.Refresh();
@@ -306,6 +312,27 @@ namespace SystemeCaisse.UI.ViewModels
             }
         }
 
+        public void ReloadEntrepriseInfo()
+        {
+            try
+            {
+                using var context = _contextFactory.CreateDbContext();
+                var entreprise = context.Entreprise.FirstOrDefault();
+                if (entreprise != null)
+                {
+                    CurrentEntreprise = entreprise;
+                    OnPropertyChanged(nameof(CurrentEntreprise));
+                    
+                    // Refresh Display
+                    InitializeCustomerDisplay();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"RELOAD ETP ERROR: {ex.Message}");
+            }
+        }
+
         public ICommand AddToCartCommand { get; }
         public ICommand RemoveItemCommand { get; }
         public ICommand CheckoutCommand { get; }
@@ -345,8 +372,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
         }
 
-        private readonly PrintService _printService;
-        private readonly IDataMigrationService _migrationService;
+
 
         private int _selectedTabIndex = 1;
         public int SelectedTabIndex
@@ -395,24 +421,12 @@ namespace SystemeCaisse.UI.ViewModels
             _printService = printService;
             _migrationService = migrationService;
             
-            // Load products from DB
-            _context.Produits.Load();
-            Produits = _context.Produits.Local.ToObservableCollection();
-            
-            // Calculate Sales Counts & Sort (and refresh view when done)
-            // Refresh TopProducts after loading
-            _ = CalculateProductPopularity(); 
+            AvailablePromotions = new ObservableCollection<Promotion>();
+            Panier = new ObservableCollection<CartItemViewModel>();
+            TopProducts = new ObservableCollection<Produit>();
+            AddToCartCommand = new BasicRelayCommand(AddToCart);
 
-            ProductsView = CollectionViewSource.GetDefaultView(Produits);
-            ProductsView.Filter = FilterProducts;
-            ProductsView.SortDescriptions.Clear();
-            ProductsView.SortDescriptions.Add(new SortDescription("ValidatedSalesCount", ListSortDirection.Descending));
-            ProductsView.SortDescriptions.Add(new SortDescription("Nom", ListSortDirection.Ascending));
-
-            // Load Entreprise Info
-            LoadEntrepriseInfo();
-            
-            // Initialize Child ViewModels
+            // Initialize Child ViewModels (instantiation only, no DB load)
             ProductsVM = new ProductsViewModel(contextFactory);
             StocksVM = new StocksViewModel(contextFactory);
             HistoryVM = new HistoryViewModel(contextFactory, _printService);
@@ -421,13 +435,6 @@ namespace SystemeCaisse.UI.ViewModels
             PromotionsVM = new PromotionsViewModel(contextFactory);
             InventoryVM = new InventoryViewModel(contextFactory);
             AnalysisVM = new AnalysisViewModel(contextFactory);
-
-            AvailablePromotions = new ObservableCollection<Promotion>();
-            LoadPromotions();
-            
-            Panier = new ObservableCollection<CartItemViewModel>();
-            TopProducts = new ObservableCollection<Produit>();
-            AddToCartCommand = new BasicRelayCommand(AddToCart);
             RemoveItemCommand = new BasicRelayCommand(RemoveItem);
             CheckoutCommand = new BasicRelayCommand(Checkout, _ => Panier.Count > 0);
             PaymentModeCommand = new BasicRelayCommand(SetPaymentMode);
@@ -441,7 +448,7 @@ namespace SystemeCaisse.UI.ViewModels
             OpenWeightDialogCommand = new BasicRelayCommand(_ => 
             {
                 var weightProducts = Produits.Where(p => string.Equals(p.TypeVente, "poids", StringComparison.OrdinalIgnoreCase)).ToList();
-                var selectDialog = new Views.ProductSelectionWindow(weightProducts);
+                var selectDialog = new SystemeCaisse.UI.Views.ProductSelectionWindow(weightProducts);
                 SetupWindowOwner(selectDialog);
                 if (selectDialog.ShowDialog() == true && selectDialog.SelectedProduct != null)
                 {
@@ -486,16 +493,76 @@ namespace SystemeCaisse.UI.ViewModels
             // This ensures it runs on the UI thread with a fully visible window.
 
             // Start Live Clock Timer
-            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-            timer.Tick += (s, e) => OnPropertyChanged(nameof(CurrentDateTime));
-            timer.Start();
+            _clockTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _clockTimer.Tick += (s, e) => { OnPropertyChanged(nameof(CurrentDateTime)); OnPropertyChanged(nameof(CurrentDate)); OnPropertyChanged(nameof(CurrentTime)); };
+            _clockTimer.Start();
+        }
+
+        public async Task InitializeAsync()
+        {
+            await Task.Run(async () => 
+            {
+                try 
+                {
+                    // 1. Initialize self data
+                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] _context.Produits.Load()\n");
+                    _context.Produits.Load();
+                    
+                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Dispatcher.Invoke (Produits list)\n");
+                    await Application.Current.Dispatcher.InvokeAsync(() => 
+                    {
+                        Produits = _context.Produits.Local.ToObservableCollection();
+                        ProductsView = CollectionViewSource.GetDefaultView(Produits);
+                        ProductsView.Filter = FilterProducts;
+                        ProductsView.SortDescriptions.Clear();
+                        ProductsView.SortDescriptions.Add(new SortDescription("ValidatedSalesCount", ListSortDirection.Descending));
+                        ProductsView.SortDescriptions.Add(new SortDescription("Nom", ListSortDirection.Ascending));
+                    });
+
+                    _ = CalculateProductPopularity(); 
+                    LoadEntrepriseInfo();
+                    LoadPromotions();
+                }
+                catch (Exception ex)
+                {
+                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] MAIN INIT ERROR: {ex.Message}\nStack: {ex.StackTrace}\n");
+                }
+
+                // 2. Initialize children — each wrapped in try/catch so one failure doesn't block others
+                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Sub-VM execution start\n");
+                
+                await SafeInitAsync("ProductsVM", () => ProductsVM.InitializeAsync());
+                await SafeInitAsync("StocksVM", () => StocksVM.InitializeAsync());
+                await SafeInitAsync("HistoryVM", () => HistoryVM.InitializeAsync());
+                await SafeInitAsync("SettingsVM", () => SettingsVM.InitializeAsync());
+                await SafeInitAsync("DashboardVM", () => DashboardVM.InitializeAsync());
+                await SafeInitAsync("PromotionsVM", () => PromotionsVM.InitializeAsync());
+                await SafeInitAsync("InventoryVM", () => InventoryVM.InitializeAsync());
+                await SafeInitAsync("AnalysisVM", () => AnalysisVM.InitializeAsync());
+                
+                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Sub-VM execution end\n");
+            });
+        }
+
+        private async Task SafeInitAsync(string name, Func<Task> init)
+        {
+            try
+            {
+                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] {name}.Init start\n");
+                await init();
+            }
+            catch (Exception ex)
+            {
+                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] {name}.Init FAILED: {ex.Message}\nStack: {ex.StackTrace}\n");
+                System.Diagnostics.Debug.WriteLine($"SILENT STABILITY: {name} init failed: {ex.Message}");
+            }
         }
 
         public void InitializeCustomerDisplay()
         {
             if (_customerDisplay != null)
             {
-                _customerDisplay.Close();
+                try { _customerDisplay.Close(); } catch { }
                 _customerDisplay = null;
             }
 
@@ -506,71 +573,84 @@ namespace SystemeCaisse.UI.ViewModels
                 var enabledConfig = context.Configuration.Find("customer_display_enabled");
                 bool isEnabled = enabledConfig == null || (bool.TryParse(enabledConfig.Valeur, out bool e) && e);
                 
-                if (!isEnabled) return;
+                if (!isEnabled)
+                {
+                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] CustomerDisplay: DISABLED by config.\n");
+                    return;
+                }
 
                 var cdPromo = context.Configuration.Find("customer_display_show_promotions");
                 ShowDisplayPromotions = cdPromo == null || (bool.TryParse(cdPromo.Valeur, out bool p) && p);
 
+                // Determine which screen to use
                 var screenConfig = context.Configuration.Find("customer_display_screen_index");
-                int screenIndex = (screenConfig != null && int.TryParse(screenConfig.Valeur, out int s)) ? s : 1;
+                int savedScreenIndex = (screenConfig != null && int.TryParse(screenConfig.Valeur, out int si)) ? si : -1;
+                
                 var screens = ScreenHelper.GetScreens();
-                ScreenHelper.ScreenInfo? targetScreen = null;
-                ScreenHelper.ScreenInfo? adminScreen = null;
-
-                if (screens.Count > 1)
+                
+                // Detailed logging for monitor discovery
+                string screenLog = $"[{DateTime.Now}] Screen Discovery: Found {screens.Count} screens.\n";
+                for (int i = 0; i < screens.Count; i++)
                 {
-                    // For debugging: log detected screens
-                    foreach(var scr in screens)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"Found Screen: Primary={scr.IsPrimary}, Logical={scr.LogicalBounds.Width}x{scr.LogicalBounds.Height}, Scale={scr.ScaleX}");
-                    }
+                    var s = screens[i];
+                    screenLog += $"  - Screen {i}: Primary={s.IsPrimary}, Bounds={s.Bounds.Width}x{s.Bounds.Height}, LogBounds={s.LogicalBounds.Width}x{s.LogicalBounds.Height}\n";
+                }
+                System.IO.File.AppendAllText("startup_log_v2.txt", screenLog);
 
-                    // If multiple screens, try to find the one matching the index
-                    if (screenIndex < screens.Count)
-                    {
-                        targetScreen = screens[screenIndex];
-                    }
-                    
-                    // If index is invalid or target is null, find first non-primary for customer by default
-                    if (targetScreen == null)
-                    {
-                         targetScreen = screens.FirstOrDefault(s => !s.IsPrimary) ?? screens[0];
-                    }
+                // PROJECT_GUIDELINES §1: Customer display requires at least 2 screens
+                if (screens.Count < 2)
+                {
+                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] CustomerDisplay: Only {screens.Count} screen(s) detected — need 2+ for client display. Skipping.\n");
+                    return; 
+                }
 
-                    // Admin screen is the "other" one
-                    adminScreen = screens.FirstOrDefault(s => s != targetScreen) ?? screens[0];
-                    
-                    System.Diagnostics.Debug.WriteLine($"Assigned: Admin={adminScreen.LogicalBounds.Left},{adminScreen.LogicalBounds.Top} | Customer={targetScreen.LogicalBounds.Left},{targetScreen.LogicalBounds.Top}");
+                ScreenHelper.ScreenInfo? targetScreen = null;
+                if (savedScreenIndex >= 0 && savedScreenIndex < screens.Count)
+                {
+                    targetScreen = screens[savedScreenIndex];
                 }
                 else
                 {
-                    // Only 1 screen: do NOT open customer display as it would cover the admin window
-                    System.Diagnostics.Debug.WriteLine("CustomerDisplay: Only 1 screen detected, skipping.");
+                    // Default: first non-primary screen or second screen
+                    targetScreen = screens.FirstOrDefault(s => !s.IsPrimary) ?? (screens.Count > 1 ? screens[1] : null);
+                }
+                
+                if (targetScreen == null)
+                {
+                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] CustomerDisplay: No valid target screen found. Skipping.\n");
                     return;
                 }
 
-                if (targetScreen != null)
-                {
-                    _customerDisplay = new Views.CustomerDisplayWindow(this);
-                    _customerDisplay.WindowStartupLocation = WindowStartupLocation.Manual;
-                    
-                    // CRITICAL: Ensure it's in Normal state for positioning
-                    _customerDisplay.WindowState = WindowState.Normal;
-                    _customerDisplay.WindowStyle = WindowStyle.None;
+                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Decision: Target Screen Index={screens.IndexOf(targetScreen)}, IsPrimary={targetScreen.IsPrimary}\n");
 
-                    // Use LOGICAL coordinates for WPF
-                    _customerDisplay.Left = targetScreen.LogicalBounds.Left;
-                    _customerDisplay.Top = targetScreen.LogicalBounds.Top;
-                    _customerDisplay.Width = targetScreen.LogicalBounds.Width;
-                    _customerDisplay.Height = targetScreen.LogicalBounds.Height;
-                    
-                    _customerDisplay.Show();
-                    
-                    // Re-set and maximize AFTER show to ensure it respects the monitor
-                    _customerDisplay.Left = targetScreen.LogicalBounds.Left;
-                    _customerDisplay.Top = targetScreen.LogicalBounds.Top;
-                    _customerDisplay.WindowState = WindowState.Maximized;
-                }
+                // Identify Admin screen (MUST be different from targetScreen)
+                var adminScreen = screens.FirstOrDefault(s => s != targetScreen) ?? screens.FirstOrDefault(s => s.IsPrimary) ?? screens[0];
+                
+                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Screen Assignment: Client=Screen {screens.IndexOf(targetScreen)}, Admin=Screen {screens.IndexOf(adminScreen)}\n");
+
+                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Attempting SHOW on monitor {screens.IndexOf(targetScreen)} at {targetScreen.LogicalBounds.Left},{targetScreen.LogicalBounds.Top}\n");
+
+                _customerDisplay = new SystemeCaisse.UI.Views.CustomerDisplayWindow(this);
+
+                _customerDisplay.WindowStartupLocation = WindowStartupLocation.Manual;
+                _customerDisplay.Topmost = true; // Stay on top
+                _customerDisplay.WindowState = WindowState.Normal;
+                _customerDisplay.WindowStyle = WindowStyle.None;
+
+                // Use LOGICAL coordinates for WPF
+                _customerDisplay.Left = targetScreen.LogicalBounds.Left;
+                _customerDisplay.Top = targetScreen.LogicalBounds.Top;
+                _customerDisplay.Width = targetScreen.LogicalBounds.Width;
+                _customerDisplay.Height = targetScreen.LogicalBounds.Height;
+                
+                _customerDisplay.Show();
+                
+                // Re-set and maximize AFTER show to ensure it respects the monitor
+                _customerDisplay.Left = targetScreen.LogicalBounds.Left;
+                _customerDisplay.Top = targetScreen.LogicalBounds.Top;
+                _customerDisplay.WindowState = WindowState.Maximized;
+                
+                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] CustomerDisplay: Window SHOWN successfully.\n");
 
                 // Ensure Admin window is moved to the designated admin screen
                 if (adminScreen != null)
@@ -580,6 +660,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
             catch (Exception ex)
             {
+                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] CustomerDisplay ERROR: {ex.Message}\nStack: {ex.StackTrace}\n");
                 System.Diagnostics.Debug.WriteLine($"Customer Display Error: {ex.Message}");
             }
         }
@@ -704,7 +785,7 @@ namespace SystemeCaisse.UI.ViewModels
                     }
                 }
 
-                Application.Current.Dispatcher.BeginInvoke(new Action(() => 
+                _ = Application.Current.Dispatcher.BeginInvoke(new Action(() => 
                 {
                     TopProducts.Clear();
                     foreach (var p in top20Items) 
@@ -739,6 +820,7 @@ namespace SystemeCaisse.UI.ViewModels
                 Id = Guid.NewGuid(),
                 Date = DateTime.Now,
                 Items = new List<CartItemViewModel>(Panier),
+                BasketRemiseManuelle = BasketRemiseManuelle,
                 Total = Total,
                 Label = $"Panier du {DateTime.Now:HH:mm} ({Panier.Count} art. - {Total:C})"
             };
@@ -763,6 +845,8 @@ namespace SystemeCaisse.UI.ViewModels
                 {
                     Panier.Add(item);
                 }
+                
+                BasketRemiseManuelle = sale.BasketRemiseManuelle;
                 SuspendedSales.Remove(sale);
                 UpdateTotal();
             }
@@ -793,7 +877,7 @@ namespace SystemeCaisse.UI.ViewModels
             else
             {
                 // Product Not Found logic
-                var dialog = new Views.ProductNotFoundWindow(code);
+                var dialog = new SystemeCaisse.UI.Views.ProductNotFoundWindow(code);
                 SetupWindowOwner(dialog);
                 if (dialog.ShowDialog() == true && dialog.AddRequested)
                 {
@@ -803,9 +887,10 @@ namespace SystemeCaisse.UI.ViewModels
                         .Where(c => !string.IsNullOrEmpty(c))
                         .Distinct()
                         .OrderBy(c => c)
+                        .Cast<string>()
                         .ToList();
 
-                    var addDialog = new Views.QuickAddProductWindow(code, categories);
+                    var addDialog = new SystemeCaisse.UI.Views.QuickAddProductWindow(code, categories);
                     SetupWindowOwner(addDialog);
                     if (addDialog.ShowDialog() == true && addDialog.NewProduct != null)
                     {
@@ -819,7 +904,7 @@ namespace SystemeCaisse.UI.ViewModels
                         Produits.Add(newProd);
 
                         _ = ProductsVM.LoadDataCommand.ExecuteAsync(null);
-                        StocksVM.LoadData();
+                        _ = StocksVM.LoadDataAsync();
                         _ = InventoryVM.LoadHistoryAsync();
 
                         // Automatically add to cart
@@ -841,7 +926,7 @@ namespace SystemeCaisse.UI.ViewModels
         {
             if (parameter is CartItemViewModel item)
             {
-                var dialog = new Views.QuantityInputWindow(item.Quantite);
+                var dialog = new SystemeCaisse.UI.Views.QuantityInputWindow(item.Quantite);
                 SetupWindowOwner(dialog);
                 if (dialog.ShowDialog() == true)
                 {
@@ -937,7 +1022,7 @@ namespace SystemeCaisse.UI.ViewModels
                 decimal changeToReturn = MonnaieRendre;
 
                 // Create the summary window BEFORE resetting the sale so all data is guaranteed valid
-                var summary = new Views.ReceiptSummaryWindow(vente, CurrentEntreprise ?? new Entreprise { Nom = "Inconnu" }, changeToReturn, false);
+                var summary = new SystemeCaisse.UI.Views.ReceiptSummaryWindow(vente, CurrentEntreprise ?? new Entreprise { Nom = "Inconnu" }, changeToReturn, false);
                 SetupWindowOwner(summary);
                 summary.ShowDialog();
 
@@ -951,11 +1036,11 @@ namespace SystemeCaisse.UI.ViewModels
                 _ = Task.Run(async () => 
                 {
                     await CalculateProductPopularity(); 
-                    Application.Current.Dispatcher.BeginInvoke(new Action(() => 
+                    _ = Application.Current.Dispatcher.BeginInvoke(new Action(() => 
                     {
-                        DashboardVM.LoadDashboardDataAsync().ConfigureAwait(false);
+                        _ = DashboardVM.LoadDashboardDataInternalAsync();
                         ProductsView.Refresh();
-                        StocksVM.LoadData();
+                        _ = StocksVM.LoadDataAsync();
                         _ = ProductsVM.LoadDataCommand.ExecuteAsync(null);
                         _ = InventoryVM.LoadHistoryAsync();
                     }), System.Windows.Threading.DispatcherPriority.Background);
@@ -993,7 +1078,7 @@ namespace SystemeCaisse.UI.ViewModels
 
                     if (isWeight)
                     {
-                        var dialog = new Views.WeightInputWindow(produit);
+                        var dialog = new SystemeCaisse.UI.Views.WeightInputWindow(produit);
                         SetupWindowOwner(dialog);
                         if (dialog.ShowDialog() == true)
                         {
@@ -1038,11 +1123,10 @@ namespace SystemeCaisse.UI.ViewModels
 
         private void ResetSale()
         {
-            foreach (var item in Panier)
-            {
-                item.RemiseManuellePercent = 0;
-                item.RemiseManuelleFixed = 0;
-            }
+            // IMPORTANT: Do NOT manually reset item properties (RemiseManuellePercent/Fixed) 
+            // before clearing, because SuspendSale keeps REFERENCES to these items.
+            // Just clearing the Panier is enough for a fresh start.
+            
             Panier.Clear();
             BasketRemiseManuelle = 0;
             UpdateTotal();
@@ -1060,11 +1144,14 @@ namespace SystemeCaisse.UI.ViewModels
                 _activePromotions = context.Promotions
                     .Include(p => p.Tiers)
                     .Include(p => p.BundleItems)
-                    .Where(p => p.Actif && p.DateDebut <= now && p.DateFin >= now)
+                    .Where(p => p.Actif && p.DateDebut <= now && (p.DateFin == null || p.DateFin >= now))
                     .AsNoTracking()
                     .ToList();
             }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"LoadPromotions error: {ex.Message}");
+            }
         }
 
         private void ApplyAutomaticPromotions()
@@ -1198,7 +1285,7 @@ namespace SystemeCaisse.UI.ViewModels
             try
             {
                 var mainWindow = Application.Current.MainWindow;
-                var selectWindow = new Views.ManualDiscountSelectionWindow();
+                var selectWindow = new SystemeCaisse.UI.Views.ManualDiscountSelectionWindow();
                 SetupWindowOwner(selectWindow);
                 if (selectWindow.ShowDialog() != true) return;
 
@@ -1206,25 +1293,25 @@ namespace SystemeCaisse.UI.ViewModels
                 var type = selectWindow.SelectedType;
                 CartItemViewModel? targetItem = null;
 
-                if (scope == Views.DiscountScope.Item)
+                if (scope == SystemeCaisse.UI.Views.DiscountScope.Item)
                 {
                     if (Panier.Count == 0) return;
-                    var itemWindow = new Views.CartItemSelectionWindow(Panier);
+                    var itemWindow = new SystemeCaisse.UI.Views.CartItemSelectionWindow(Panier);
                     SetupWindowOwner(itemWindow);
                     if (itemWindow.ShowDialog() != true) return;
                     targetItem = itemWindow.SelectedItem;
                 }
 
-                string title = (scope == Views.DiscountScope.Basket ? "Remise Panier" : $"Remise sur {targetItem?.ProduitNom}");
-                string unit = (type == Views.DiscountType.Percentage ? "%" : "€");
-                var valueWindow = new Views.DiscountValueInputWindow(title, unit);
+                string title = (scope == SystemeCaisse.UI.Views.DiscountScope.Basket ? "Remise Panier" : $"Remise sur {targetItem?.ProduitNom}");
+                string unit = (type == SystemeCaisse.UI.Views.DiscountType.Percentage ? "%" : "€");
+                var valueWindow = new SystemeCaisse.UI.Views.DiscountValueInputWindow(title, unit);
                 SetupWindowOwner(valueWindow);
                 if (valueWindow.ShowDialog() != true) return;
 
                 decimal val = valueWindow.DiscountValue;
-                if (scope == Views.DiscountScope.Basket)
+                if (scope == SystemeCaisse.UI.Views.DiscountScope.Basket)
                 {
-                    if (type == Views.DiscountType.Percentage)
+                    if (type == SystemeCaisse.UI.Views.DiscountType.Percentage)
                     {
                         decimal baseTotal = Panier.Sum(i => i.TotalLigneStandard);
                         BasketRemiseManuelle = baseTotal * val / 100;
@@ -1233,7 +1320,7 @@ namespace SystemeCaisse.UI.ViewModels
                 }
                 else if (targetItem != null)
                 {
-                    if (type == Views.DiscountType.Percentage)
+                    if (type == SystemeCaisse.UI.Views.DiscountType.Percentage)
                     {
                         targetItem.RemiseManuellePercent = val;
                         targetItem.RemiseManuelleFixed = 0;
@@ -1296,6 +1383,7 @@ namespace SystemeCaisse.UI.ViewModels
         public Guid Id { get; set; }
         public DateTime Date { get; set; }
         public List<CartItemViewModel> Items { get; set; } = new();
+        public decimal BasketRemiseManuelle { get; set; }
         public decimal Total { get; set; }
         public string Label { get; set; } = string.Empty;
         public override string ToString() => Label;

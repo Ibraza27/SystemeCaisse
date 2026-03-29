@@ -11,6 +11,7 @@
         <converters:BoolToVisibilityConverter x:Key="InvertedBoolToVis" Invert="True"/>
         <converters:BoolInverterConverter x:Key="BoolInverter"/>
         <converters:BoolToUnitConverter x:Key="BoolToUnitConverter"/>
+        <converters:StringToBoolConverter x:Key="StringToBool"/>
 
         <Style x:Key="ToggleButtonStyle" TargetType="RadioButton">
             <Setter Property="Template">

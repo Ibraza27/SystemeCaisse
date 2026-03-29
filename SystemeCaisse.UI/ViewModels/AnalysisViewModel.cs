@@ -66,8 +66,11 @@ namespace SystemeCaisse.UI.ViewModels
             var now = DateTime.Now;
             StartDate = new DateTime(now.Year, now.Month, 1);
             EndDate = now.Date.AddDays(1).AddTicks(-1);
-            
-            _ = LoadAnalysis();
+        }
+
+        public async Task InitializeAsync()
+        {
+            await LoadAnalysisInternalAsync();
         }
 
         [RelayCommand]
@@ -112,17 +115,18 @@ namespace SystemeCaisse.UI.ViewModels
                     CurrentPeriodLabel = "Cette année";
                     break;
             }
-            LoadAnalysisCommand.ExecuteAsync(null);
+            _ = LoadAnalysisInternalAsync();
         }
 
         [RelayCommand]
-        public async Task LoadAnalysis()
+        public async Task LoadAnalysis() => await LoadAnalysisInternalAsync();
+
+        private async Task LoadAnalysisInternalAsync()
         {
             if (IsLoading) return;
             IsActive = true;
             if (!IsActive) return;
 
-            _isDisposed = false;
             _cts?.Cancel();
             _cts = new CancellationTokenSource();
             var token = _cts.Token;
@@ -188,7 +192,7 @@ namespace SystemeCaisse.UI.ViewModels
                         decimal cost = g.Sum(x => (products.ContainsKey(x.ProduitId ?? 0) ? products[x.ProduitId ?? 0].PrixAchat : 0) * x.Quantite);
                         return new CategoryAnalysisItem
                         {
-                            CategoryName = g.Key,
+                            CategoryName = g.Key ?? "Autre",
                             TotalRevenue = revenue,
                             TotalMargin = revenue - cost,
                             ItemsCount = g.Count(),
@@ -212,7 +216,7 @@ namespace SystemeCaisse.UI.ViewModels
 
                 if (!IsActive) return;
 
-                Application.Current.Dispatcher.BeginInvoke(new Action(() => 
+                _ = Application.Current.Dispatcher.BeginInvoke(new Action(() => 
                 {
                     if (!IsActive || token.IsCancellationRequested) return;
                     ProductAnalysis.Clear();
@@ -239,7 +243,7 @@ namespace SystemeCaisse.UI.ViewModels
             _lastCategories = categories;
             _lastTemporal = temporal;
             _lastLines = lines;
-            Application.Current.Dispatcher.BeginInvoke(new Action(() => UpdateCharts()), System.Windows.Threading.DispatcherPriority.Background);
+            _ = Application.Current.Dispatcher.BeginInvoke(new Action(() => UpdateCharts()), System.Windows.Threading.DispatcherPriority.Background);
         }
 
         private void UpdateCharts()
@@ -328,7 +332,6 @@ namespace SystemeCaisse.UI.ViewModels
             IsBottomChartVisible = !string.IsNullOrEmpty(BottomChartTitle);
         }
 
-        private bool _isDisposed = false;
 
         public void Cleanup()
         {
@@ -598,14 +601,16 @@ namespace SystemeCaisse.UI.ViewModels
                         }
                     });
 
-                    if (MessageBox.Show($"Export réussi vers {filePath}\n\nSouhaitez-vous ouvrir le fichier ?", "Export Réussi", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+                    mainWin = Application.Current.MainWindow;
+                    if (MessageBox.Show(mainWin, $"Export réussi vers {filePath}\n\nSouhaitez-vous ouvrir le fichier ?", "Export Réussi", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
                     {
                         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(filePath) { UseShellExecute = true });
                     }
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"Erreur lors de l'export : {ex.Message}", "Erreur d'Export", MessageBoxButton.OK, MessageBoxImage.Error);
+                    mainWin = Application.Current.MainWindow;
+                    MessageBox.Show(mainWin, $"Erreur lors de l'export : {ex.Message}", "Erreur d'Export", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
                 finally
                 {

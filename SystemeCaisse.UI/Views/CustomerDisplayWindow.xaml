@@ -35,7 +35,7 @@
             </Grid.RowDefinitions>
 
             <!-- Header Redesign -->
-            <Border Background="White" BorderBrush="#EEE" BorderThickness="0,0,0,1" Padding="20,10">
+            <Border Background="White" BorderBrush="#EEE" BorderThickness="0,0,0,1" Padding="20,15">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -43,24 +43,47 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     
-                    <Image Source="pack://application:,,,/Images/logo.png" Width="120" Height="100" Stretch="Uniform"/>
+                    <Image Source="{Binding CurrentEntreprise.LogoPath, TargetNullValue='pack://application:,,,/Images/logo.png', FallbackValue='pack://application:,,,/Images/logo.png'}" 
+                           Width="140" Height="110" Stretch="Uniform" VerticalAlignment="Top"/>
                     
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="30,0,0,0">
-                        <TextBlock Text="HIPPOCAMPE IMPORT-EXPORT" FontSize="36" FontWeight="Black" Foreground="#2E7D32"/>
-                        <TextBlock Text="5 - 7 Rue Pascal 33370 Tresses, France" FontSize="18" Foreground="#555" Margin="0,5,0,0"/>
-                        <TextBlock Text="LUN - SAM : 9h - 18h | DIMANCHE : 10H - 12H" FontSize="16" FontWeight="SemiBold" Foreground="#777"/>
-                        <TextBlock Text="06 99 79 16 98 / 06 99 56 93 58" FontSize="18" FontWeight="Bold" Foreground="#333"/>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Top" Margin="30,0,0,0">
+                        <TextBlock Text="{Binding CurrentEntreprise.Nom, FallbackValue='HIPPOCAMPE'}" FontSize="36" FontWeight="Black" Foreground="#2E7D32" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding CurrentEntreprise.Adresse}" FontSize="16" Foreground="#555" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                            <TextBlock Text="{Binding CurrentEntreprise.HorairesSemaine}" FontSize="14" Foreground="#777" FontWeight="Bold" 
+                                       Visibility="{Binding CurrentEntreprise.HorairesSemaine, Converter={StaticResource StringToVis}}"/>
+                            <TextBlock Text="  |  " FontSize="14" Foreground="#CCC">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding CurrentEntreprise.HorairesSemaine, Converter={StaticResource StringToBool}}" Value="True"/>
+                                                    <Condition Binding="{Binding CurrentEntreprise.HorairesDimanche, Converter={StaticResource StringToBool}}" Value="True"/>
+                                                </MultiDataTrigger.Conditions>
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </MultiDataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Text="{Binding CurrentEntreprise.HorairesDimanche}" FontSize="14" Foreground="#777" FontWeight="Bold"
+                                       Visibility="{Binding CurrentEntreprise.HorairesDimanche, Converter={StaticResource StringToVis}}"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding CurrentEntreprise.Telephone}" FontSize="18" FontWeight="Bold" Foreground="#333" Margin="0,5,0,0"/>
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
-                        <TextBlock Text="{Binding CurrentDateTime}" FontSize="20" FontWeight="SemiBold" Foreground="#2E7D32" HorizontalAlignment="Right"/>
-                        <TextBlock Text="VOTRE PANIER" FontSize="16" Foreground="#999" HorizontalAlignment="Right" FontWeight="Bold" Margin="0,5,0,0"/>
+                        <TextBlock Text="{Binding CurrentDate}" FontSize="24" Foreground="#666" HorizontalAlignment="Right"/>
+                        <TextBlock Text="{Binding CurrentTime}" FontSize="32" Foreground="#333" FontWeight="Black" HorizontalAlignment="Right" Margin="0,2,0,0"/>
+                        <TextBlock Text="VOTRE PANIER" FontSize="18" Foreground="#999" HorizontalAlignment="Right" FontWeight="Black" Margin="0,10,0,0"/>
                     </StackPanel>
                 </Grid>
             </Border>
 
             <!-- Items List -->
-            <ListView Grid.Row="1" ItemsSource="{Binding LignesVente}" Margin="0,10" BorderThickness="0" FontFamily="Segoe UI">
+            <ListView x:Name="CartListView" Grid.Row="1" ItemsSource="{Binding LignesVente}" Margin="0,10" BorderThickness="0" FontFamily="Segoe UI">
                 <ListView.View>
                     <GridView>
                         <GridViewColumn Header="Produit" Width="350">
@@ -164,7 +187,9 @@
             <!-- Ad Carousel / Image -->
             <Border Grid.Row="0" Background="#222" CornerRadius="10" ClipToBounds="True">
                 <Grid>
-                    <Image x:Name="AdImage" Stretch="UniformToFill" Source="pack://application:,,,/Images/logo.png" Opacity="0.4"/>
+                    <Image x:Name="AdImage" Stretch="UniformToFill" 
+                           Source="{Binding CurrentEntreprise.LogoPath, TargetNullValue='pack://application:,,,/Images/logo.png', FallbackValue='pack://application:,,,/Images/logo.png'}" 
+                           Opacity="0.4"/>
                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                         <TextBlock Text="HIPPOCAMPE" FontSize="48" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
                         <TextBlock Text="IMPORT-EXPORT" FontSize="28" Foreground="#CCC" HorizontalAlignment="Center"/>
@@ -187,7 +212,8 @@
         <!-- Thank You Overlay -->
         <Border Grid.ColumnSpan="2" Background="#F2F2F7" Visibility="{Binding ShowThankYouMessage, Converter={StaticResource BoolToVis}}">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                <Image Source="pack://application:,,,/Images/logo.png" Width="250" Height="250" Margin="0,0,0,40"/>
+                <Image Source="{Binding CurrentEntreprise.LogoPath, TargetNullValue='pack://application:,,,/Images/logo.png', FallbackValue='pack://application:,,,/Images/logo.png'}" 
+                       Width="250" Height="250" Margin="0,0,0,40"/>
                 <TextBlock Text="MERCI DE VOTRE CONFIANCE !" FontSize="64" FontWeight="Black" Foreground="#2E7D32" HorizontalAlignment="Center"/>
                 <TextBlock Text="HIPPOCAMPE IMPORT-EXPORT" FontSize="36" FontWeight="Bold" Foreground="#333" HorizontalAlignment="Center" Margin="0,20,0,0"/>
                 <TextBlock Text="À très bientôt" FontSize="24" Foreground="#666" HorizontalAlignment="Center" Margin="0,10,0,0"/>

@@ -41,6 +41,12 @@
 
                                 <Label Content="Téléphone"/>
                                 <TextBox Text="{Binding EntrepriseInfo.Telephone}" Padding="5" Margin="0,0,0,10"/>
+
+                                <Label Content="Horaires (Lundi - Samedi)"/>
+                                <TextBox Text="{Binding EntrepriseInfo.HorairesSemaine}" Padding="5" Margin="0,0,0,10"/>
+
+                                <Label Content="Horaires (Dimanche)"/>
+                                <TextBox Text="{Binding EntrepriseInfo.HorairesDimanche}" Padding="5" Margin="0,0,0,10"/>
                                 
                                 <Label Content="Chemin du Logo"/>
                                 <Grid>
@@ -49,7 +55,8 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBox Text="{Binding EntrepriseInfo.LogoPath}" Padding="5" IsReadOnly="True"/>
-                                    <Button Grid.Column="1" Content="..." Width="30" Margin="5,0,0,0"/>
+                                    <Button Grid.Column="1" Content="..." Width="30" Margin="5,0,0,0"
+                                            Command="{Binding SelectLogoCommand}"/>
                                 </Grid>
                             </StackPanel>
                         </GroupBox>

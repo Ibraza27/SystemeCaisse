@@ -180,7 +180,24 @@ namespace SystemeCaisse.Installer
 
         private void BtnFinish_Click(object sender, RoutedEventArgs e)
         {
-            Process.Start(Path.Combine(_targetDir, "SystemeCaisse.exe"));
+            string exePath = Path.Combine(_targetDir, "SystemeCaisse.exe");
+            try
+            {
+                if (File.Exists(exePath))
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = exePath,
+                        WorkingDirectory = _targetDir,
+                        UseShellExecute = true
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"L'application a été installée avec succès, mais n'a pas pu être lancée automatiquement ({ex.Message}).\n\nVeuillez la lancer manuellement via le raccourci sur votre bureau ou directement depuis : {exePath}", 
+                    "Information", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
             Close();
         }
     }

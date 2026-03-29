@@ -9,11 +9,17 @@ using SystemeCaisse.Core.Interfaces;
 using SystemeCaisse.Infrastructure.Services;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Runtime.InteropServices;
 
 namespace SystemeCaisse.UI
 {
     public partial class App : Application
     {
+        [DllImport("user32.dll")]
+        private static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+
+        private static readonly IntPtr DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = (IntPtr)(-4);
+
         private readonly IHost _host;
 
         private static DateTime _lastLogTime = DateTime.MinValue;
@@ -35,6 +41,7 @@ namespace SystemeCaisse.UI
 
         public App()
         {
+            System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Constructeur App lancé\n");
             // v30: GLOBAL SOFTWARE RENDERING
             // This is the NUCLEAR OPTION for stability. By forcing software rendering globally at startup,
             // we eliminate all GPU deadlocks, driver crashes, and "switching shocks" that freeze the UI.
@@ -69,6 +76,7 @@ namespace SystemeCaisse.UI
                     services.AddTransient<IDataMigrationService, DataMigrationService>();
                 })
                 .Build();
+            System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Constructeur App: _host.Build() terminé.\n");
 
             // Setup global exception handling
             AppDomain.CurrentDomain.UnhandledException += (s, e) => LogException(e.ExceptionObject as Exception, "AppDomain");
@@ -101,30 +109,39 @@ namespace SystemeCaisse.UI
 
             try
             {
+                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] OnStartup: vérification _host...\n");
+                if (_host == null)
+                {
+                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] [CRITICAL] _host est NULL dans OnStartup!\n");
+                    throw new InvalidOperationException("_host is NULL in OnStartup");
+                }
                 await _host.StartAsync();
 
-                // Show Splash Screen
+                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Création SplashScreen...\n");
                 var splash = new Views.SplashScreen();
                 splash.Show();
+                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SplashScreen affiché. Démarrage Host...\n");
 
                 await Task.Run(async () => 
                 {
                     try 
                     {
+                        System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Task.Run: Création dossier Images...\n");
                         // Ensure Images directory exists for logo and product images
-                string imagesDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images");
-                if (!System.IO.Directory.Exists(imagesDir))
-                {
-                    System.IO.Directory.CreateDirectory(imagesDir);
-                }
+                        string imagesDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images");
+                        if (!System.IO.Directory.Exists(imagesDir))
+                        {
+                            System.IO.Directory.CreateDirectory(imagesDir);
+                        }
 
-                // Seed Data if empty
+                        System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Task.Run: Migration DB...\n");
+                        // Seed Data if empty
                         var factory = _host.Services.GetRequiredService<IDbContextFactory<AppDbContext>>();
                         using (var context = factory.CreateDbContext())
                         {
                             await context.Database.MigrateAsync();
-                            
-                            if (!context.Produits.Any())
+                            System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Task.Run: Migration terminée. Seed...\n");
+                            if (!await context.Produits.AnyAsync())
                             {
                                 context.Produits.AddRange(
                                     new Core.Entities.Produit { Nom = "Pomme Golden", PrixVente = 1.99m, StockActuel = 100, CodeBarre = "1001" },
@@ -141,16 +158,28 @@ namespace SystemeCaisse.UI
                             var entreprise = await context.Entreprise.FirstOrDefaultAsync();
                             if (entreprise == null)
                             {
-                                entreprise = new Core.Entities.Entreprise();
+                                entreprise = new Core.Entities.Entreprise
+                                {
+                                    Nom = "HIPPOCAMPE",
+                                    Adresse = "5 - 7 Rue Pascal 33370 Tresses, France",
+                                    Telephone = "06 00 00 00 00"
+                                };
                                 context.Entreprise.Add(entreprise);
+                                await context.SaveChangesAsync();
                             }
                             
-                            entreprise.Nom = "HIPPOCAMPE IMPORT-EXPORT";
-                            entreprise.Adresse = "5 - 7 Rue Pascal 33370 Tresses, France\nLUN - SAM : 9h - 18h | DIMANCHE : 10H - 12H"; 
-                            entreprise.Telephone = "06 99 79 16 98 / 06 99 56 93 58";
-                            entreprise.LogoPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images", "logo.png");
+                            // v4.4: Removed hardcoded overwrite of entreprise data to respect user settings.
                             
-                            // Data Migration: Rename "Divers" category to "Autre" for consistency
+                            // Update Splash Logo on UI Thread safely
+                            var logoPath = !string.IsNullOrEmpty(entreprise.LogoPath) && System.IO.File.Exists(entreprise.LogoPath) 
+                                ? entreprise.LogoPath 
+                                : null;
+                            
+                            System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Task.Run: Splash Logo Update...\n");
+                            await Application.Current.Dispatcher.InvokeAsync(() => {
+                                try { splash.SetLogo(logoPath); } catch { /* Ignore splash errors */ }
+                            });
+                            System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Task.Run: Divers data fix...\n");
                             var diversLines = await context.LignesVente
                                 .Where(l => l.CategorieNom == "Divers" || string.IsNullOrWhiteSpace(l.CategorieNom))
                                 .ToListAsync();
@@ -177,15 +206,11 @@ namespace SystemeCaisse.UI
                             }
 
                             await context.SaveChangesAsync();
-
-                            // Update Splash Logo on UI Thread
-                            var logoPath = entreprise.LogoPath;
-                            Application.Current.Dispatcher.Invoke(() => splash.SetLogo(logoPath));
                         }
                     }
                     catch (Exception innerEx)
                     {
-                        System.IO.File.WriteAllText("startup_inner_error.txt", innerEx.ToString());
+                        System.IO.File.AppendAllText("startup_log_v2.txt", $"[FAIL] Task Error: {innerEx}\n");
                         throw;
                     }
                     
@@ -194,8 +219,14 @@ namespace SystemeCaisse.UI
                 });
 
                 var mainWindow = _host.Services.GetRequiredService<MainWindow>();
+                var mainVM = (MainViewModel)mainWindow.DataContext;
+                
+                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Initialisation des données...\n");
+                await mainVM.InitializeAsync();
+                
                 mainWindow.Show();
                 splash.Close();
+                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Fenêtre Main affichée.\n");
             }
             catch (Exception ex)
             {
@@ -204,13 +235,17 @@ namespace SystemeCaisse.UI
                 Shutdown();
             }
 
+            System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Fin OnStartup. Fenêtre Main affichée.\n");
             base.OnStartup(e);
         }
 
         protected override async void OnExit(ExitEventArgs e)
         {
-            await _host.StopAsync();
-            _host.Dispose();
+            if (_host != null)
+            {
+                await _host.StopAsync();
+                _host.Dispose();
+            }
 
             base.OnExit(e);
         }

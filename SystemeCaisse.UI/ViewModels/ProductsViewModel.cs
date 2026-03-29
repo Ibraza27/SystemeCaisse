@@ -56,8 +56,11 @@ namespace SystemeCaisse.UI.ViewModels
             Categories = new ObservableCollection<string>();
             EditCategories = new ObservableCollection<string>();
             Fournisseurs = new ObservableCollection<Fournisseur>();
-            
-            LoadDataCommand.Execute(null);
+        }
+
+        public async Task InitializeAsync()
+        {
+            await LoadDataInternalAsync();
         }
 
         partial void OnSearchTextChanged(string value) => ProductsCollectionView?.Refresh();
@@ -66,7 +69,9 @@ namespace SystemeCaisse.UI.ViewModels
         partial void OnShowInactiveChanged(bool value) => ProductsCollectionView?.Refresh();
 
         [RelayCommand]
-        private async Task LoadData()
+        private async Task LoadData() => await LoadDataInternalAsync();
+
+        private async Task LoadDataInternalAsync()
         {
             try
             {
@@ -75,11 +80,17 @@ namespace SystemeCaisse.UI.ViewModels
                 
                 // Load Fournisseurs
                 var fournisseurs = await _context.Fournisseurs.ToListAsync();
-                Fournisseurs = new ObservableCollection<Fournisseur>(fournisseurs);
+                await Application.Current.Dispatcher.InvokeAsync(() => 
+                {
+                    Fournisseurs = new ObservableCollection<Fournisseur>(fournisseurs);
+                });
 
                 // Load Products
                 await _context.Produits.Include(p => p.Fournisseur).LoadAsync();
-                Products = _context.Produits.Local.ToObservableCollection();
+                await Application.Current.Dispatcher.InvokeAsync(() => 
+                {
+                    Products = _context.Produits.Local.ToObservableCollection();
+                });
 
                 // Ensure all products have a category
                 foreach (var p in Products)
@@ -94,12 +105,15 @@ namespace SystemeCaisse.UI.ViewModels
                 await CalculateProductPopularity();
 
                 // Setup CollectionView
-                ProductsCollectionView = CollectionViewSource.GetDefaultView(Products);
-                ProductsCollectionView.Filter = FilterProducts;
-                // Sort by Popularity (Descending) then Name
-                ProductsCollectionView.SortDescriptions.Add(new SortDescription("ValidatedSalesCount", ListSortDirection.Descending));
-                ProductsCollectionView.SortDescriptions.Add(new SortDescription("Nom", ListSortDirection.Ascending));
-                OnPropertyChanged(nameof(ProductsCollectionView));
+                await Application.Current.Dispatcher.InvokeAsync(() => 
+                {
+                    ProductsCollectionView = CollectionViewSource.GetDefaultView(Products);
+                    ProductsCollectionView.Filter = FilterProducts;
+                    // Sort by Popularity (Descending) then Name
+                    ProductsCollectionView.SortDescriptions.Add(new SortDescription("ValidatedSalesCount", ListSortDirection.Descending));
+                    ProductsCollectionView.SortDescriptions.Add(new SortDescription("Nom", ListSortDirection.Ascending));
+                    OnPropertyChanged(nameof(ProductsCollectionView));
+                });
 
                 await LoadCategories();
             }
@@ -145,13 +159,16 @@ namespace SystemeCaisse.UI.ViewModels
                 .Distinct()
                 .ToListAsync();
 
-            Categories.Clear();
-            Categories.Add("Toutes");
-            foreach(var c in cats.OrderBy(c => c)) Categories.Add(c!);
-            SelectedCategoryFilter = "Toutes";
+            await Application.Current.Dispatcher.InvokeAsync(() => 
+            {
+                Categories.Clear();
+                Categories.Add("Toutes");
+                foreach(var c in cats.OrderBy(c => c)) Categories.Add(c!);
+                SelectedCategoryFilter = "Toutes";
 
-            EditCategories.Clear();
-            foreach(var c in cats.OrderBy(c => c)) EditCategories.Add(c!);
+                EditCategories.Clear();
+                foreach(var c in cats.OrderBy(c => c)) EditCategories.Add(c!);
+            });
         }
 
         [RelayCommand]
@@ -204,13 +221,14 @@ namespace SystemeCaisse.UI.ViewModels
         private void Delete()
         {
             if (SelectedProduct == null) return;
+            var mainWin = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w is SystemeCaisse.UI.MainWindow);
             
             // Check if product has sales
             bool hasSales = _context.LignesVente.Any(l => l.ProduitId == SelectedProduct.Id);
 
             if (hasSales)
             {
-                var result = MessageBox.Show($"Ce produit a déjà été vendu et ne peut pas être supprimé pour préserver l'historique.\n\nVoulez-vous le DÉSACTIVER ? (Il ne sera plus visible en caisse)", 
+                var result = MessageBox.Show(mainWin, $"Ce produit a déjà été vendu et ne peut pas être supprimé pour préserver l'historique.\n\nVoulez-vous le DÉSACTIVER ? (Il ne sera plus visible en caisse)", 
                                            "Historique existant", MessageBoxButton.YesNo, MessageBoxImage.Information);
                 
                 if (result == MessageBoxResult.Yes)
@@ -221,7 +239,7 @@ namespace SystemeCaisse.UI.ViewModels
                 return;
             }
 
-            if (MessageBox.Show($"Supprimer '{SelectedProduct.Nom}' ?", "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+            if (MessageBox.Show(mainWin, $"Supprimer '{SelectedProduct.Nom}' ?", "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
             {
                 _context.Produits.Remove(SelectedProduct);
                 SelectedProduct = null;
@@ -241,14 +259,13 @@ namespace SystemeCaisse.UI.ViewModels
                     // Ensure uppercase for all (migration of old data)
                     p.Nom = p.Nom?.ToUpper() ?? string.Empty;
                 }
-                
                 _context.SaveChanges();
-                MessageBox.Show("Enregistré avec succès !");
+                MessageBox.Show(Application.Current.MainWindow, "Enregistré avec succès !", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
                 _ = LoadCategories(); // Refresh categories in case new ones were added
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur enregistrement : {ex.Message}");
+                MessageBox.Show(Application.Current.MainWindow, $"Erreur lors de l'enregistrement : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

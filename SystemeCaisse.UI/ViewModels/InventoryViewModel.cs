@@ -28,11 +28,17 @@ namespace SystemeCaisse.UI.ViewModels
         {
             _contextFactory = contextFactory;
             History = new ObservableCollection<Inventaire>();
-            LoadHistoryAsync();
+        }
+
+        public async Task InitializeAsync()
+        {
+            await LoadHistoryInternalAsync();
         }
 
         [RelayCommand]
-        public async Task LoadHistoryAsync()
+        public async Task LoadHistoryAsync() => await LoadHistoryInternalAsync();
+
+        private async Task LoadHistoryInternalAsync()
         {
             try
             {
@@ -42,12 +48,15 @@ namespace SystemeCaisse.UI.ViewModels
                     .OrderByDescending(i => i.DateCreation)
                     .ToListAsync();
                 
-                History.Clear();
-                foreach (var i in list) History.Add(i);
+                await Application.Current.Dispatcher.InvokeAsync(() => 
+                {
+                    History.Clear();
+                    foreach (var i in list) History.Add(i);
+                });
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur chargement historique : {ex.Message}");
+                MessageBox.Show(Application.Current.MainWindow, $"Erreur chargement historique : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -85,14 +94,14 @@ namespace SystemeCaisse.UI.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur création inventaire : {ex.Message}");
+                MessageBox.Show(Application.Current.MainWindow, $"Erreur création inventaire : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
         [RelayCommand]
         public void CancelInventory()
         {
-            if (MessageBox.Show("Annuler l'inventaire en cours ? Tout travail non sauvegardé sera perdu.", "Confirmation", MessageBoxButton.YesNo) == MessageBoxResult.Yes)
+            if (MessageBox.Show(Application.Current.MainWindow, "Annuler l'inventaire en cours ? Tout travail non sauvegardé sera perdu.", "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
             {
                 ActiveInventory = null;
                 IsInventoryActive = false;
@@ -104,7 +113,7 @@ namespace SystemeCaisse.UI.ViewModels
         {
             if (ActiveInventory == null) return;
 
-            if (MessageBox.Show("Valider l'inventaire ?\nCela mettra à jour les stocks de tous les produits.", "Attention - Irréversible", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            if (MessageBox.Show(Application.Current.MainWindow, "Valider l'inventaire ?\nCela mettra à jour les stocks de tous les produits.", "Attention - Irréversible", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
                 return;
 
             try
@@ -148,14 +157,14 @@ namespace SystemeCaisse.UI.ViewModels
                 context.Inventaires.Add(ActiveInventory);
                 await context.SaveChangesAsync();
 
-                MessageBox.Show("Inventaire validé et stocks mis à jour !");
+                MessageBox.Show(Application.Current.MainWindow, "Inventaire validé et stocks mis à jour !", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
                 IsInventoryActive = false;
                 ActiveInventory = null;
                 await LoadHistoryAsync();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur validation : {ex.Message}");
+                MessageBox.Show(Application.Current.MainWindow, $"Erreur validation : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }

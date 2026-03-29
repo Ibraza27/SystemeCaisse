@@ -24,7 +24,7 @@ namespace SystemeCaisse.UI.Views
             }
             else
             {
-                MessageBox.Show("Quantité invalide");
+                MessageBox.Show(this, "Quantité invalide", "Erreur", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
     }

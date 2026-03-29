@@ -26,28 +26,28 @@ namespace SystemeCaisse.UI.ViewModels
         public DateTime StartDate
         {
             get => _startDate;
-            set { _startDate = value; OnPropertyChanged(); LoadData(); }
+            set { _startDate = value; OnPropertyChanged(); _ = LoadDataAsync(); }
         }
 
         private DateTime _endDate = DateTime.Today;
         public DateTime EndDate
         {
             get => _endDate;
-            set { _endDate = value; OnPropertyChanged(); LoadData(); }
+            set { _endDate = value; OnPropertyChanged(); _ = LoadDataAsync(); }
         }
 
         private string _paymentFilter = "Tous";
         public string PaymentFilter
         {
             get => _paymentFilter;
-            set { _paymentFilter = value; OnPropertyChanged(); LoadData(); }
+            set { _paymentFilter = value; OnPropertyChanged(); _ = LoadDataAsync(); }
         }
 
         private string _searchText = string.Empty;
         public string SearchText
         {
             get => _searchText;
-            set { _searchText = value; OnPropertyChanged(); LoadData(); }
+            set { _searchText = value; OnPropertyChanged(); _ = LoadDataAsync(); }
         }
 
         private Vente _selectedSale;
@@ -100,7 +100,7 @@ namespace SystemeCaisse.UI.ViewModels
             _contextFactory = contextFactory;
             _printService = printService;
             
-            LoadCommand = new BasicRelayCommand(_ => LoadData());
+            LoadCommand = new BasicRelayCommand(_ => _ = LoadDataAsync());
             ReprintCommand = new BasicRelayCommand(_ => 
             {
                 if (SelectedSale != null)
@@ -117,15 +117,21 @@ namespace SystemeCaisse.UI.ViewModels
                 {
                     var entreprise = _context.Entreprise.FirstOrDefault() ?? new Entreprise { Nom = "Inconnu" };
                     var win = new Views.ReceiptSummaryWindow(SelectedSale, entreprise, SelectedSale.MonnaieRendue, true);
+                    win.Owner = Application.Current.MainWindow;
+                    win.WindowStartupLocation = WindowStartupLocation.CenterOwner;
                     win.ShowDialog();
                 }
             }, _ => SelectedSale != null);
 
             ClearSearchCommand = new BasicRelayCommand(_ => SearchText = string.Empty);
             SetPeriodCommand = new BasicRelayCommand(p => { if (p is string s) SetPeriod(s); });
-            
-            LoadData();
         }
+
+        public async Task InitializeAsync()
+        {
+            await LoadDataAsync();
+        }
+
 
         private void SetPeriod(string period)
         {
@@ -153,11 +159,13 @@ namespace SystemeCaisse.UI.ViewModels
                     EndDate = today;
                     break;
             }
-            LoadData();
+            _ = LoadDataAsync();
         }
 
-        private void LoadData()
+        public async Task LoadDataAsync()
         {
+            await Task.Run(async () => 
+            {
             _context?.Dispose();
             _context = _contextFactory.CreateDbContext();
 
@@ -183,14 +191,17 @@ namespace SystemeCaisse.UI.ViewModels
 
             var salesList = query.OrderByDescending(v => v.CreatedAt).ToList();
             
-            Sales = new ObservableCollection<Vente>(salesList);
-            TotalPeriod = salesList.Sum(v => v.Total);
-            CountPeriod = salesList.Count;
-            TotalCashPeriod = salesList.Sum(v => v.MontantEspeces);
-            TotalCardPeriod = salesList.Sum(v => v.MontantCB);
-
-            OnPropertyChanged(nameof(Sales));
-        }
+            await System.Windows.Application.Current.Dispatcher.InvokeAsync(() => 
+            {
+                Sales = new ObservableCollection<Vente>(salesList);
+                TotalPeriod = salesList.Sum(v => v.Total);
+                CountPeriod = salesList.Count;
+                TotalCashPeriod = salesList.Sum(v => v.MontantEspeces);
+                TotalCardPeriod = salesList.Sum(v => v.MontantCB);
+                OnPropertyChanged(nameof(Sales));
+            });
+        });
+    }
 
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string name = null) 

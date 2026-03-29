@@ -177,7 +177,7 @@ namespace SystemeCaisse.UI.Services
                     headerPara.Inlines.Add(new InlineUIContainer(barcodeImg));
                 }
             }
-            catch (Exception ex) 
+            catch (Exception) 
             { 
                headerPara.Inlines.Add(new Run($"Ticket N°: {vente.NumeroTicket}")); 
                // Console.WriteLine(ex.Message);

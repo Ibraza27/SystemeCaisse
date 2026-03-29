@@ -72,7 +72,10 @@ namespace SystemeCaisse.UI.ViewModels
         private DateTime _newDateDebut = DateTime.Today;
 
         [ObservableProperty]
-        private DateTime _newDateFin = DateTime.Today.AddDays(7);
+        private DateTime? _newDateFin = DateTime.Today.AddDays(7);
+
+        [ObservableProperty]
+        private bool _isIndeterminateEndDate;
 
         [ObservableProperty]
         private string _productSearchText = string.Empty;
@@ -120,7 +123,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
         }
 
-        private void RefreshFilteredProducts()
+        private async void RefreshFilteredProducts()
         {
             if (_isUpdatingSelection) return;
 
@@ -139,8 +142,11 @@ namespace SystemeCaisse.UI.ViewModels
             if (FilteredProduits.Count == matches.Count && FilteredProduits.All(p => matches.Contains(p)))
                 return;
 
-            FilteredProduits.Clear();
-            foreach (var m in matches) FilteredProduits.Add(m);
+            await Application.Current.Dispatcher.InvokeAsync(() => 
+            {
+                FilteredProduits.Clear();
+                foreach (var m in matches) FilteredProduits.Add(m);
+            });
         }
 
         public PromotionsViewModel(IDbContextFactory<AppDbContext> contextFactory)
@@ -149,53 +155,73 @@ namespace SystemeCaisse.UI.ViewModels
             Promotions = new ObservableCollection<Promotion>();
             AvailableProduits = new ObservableCollection<Produit>();
             AvailableCategories = new ObservableCollection<string>();
-            LoadDataAsync();
+        }
+
+        public async Task InitializeAsync()
+        {
+            await LoadDataInternalAsync();
         }
 
         [RelayCommand]
-        public async Task LoadDataAsync()
+        public async Task LoadDataAsync() => await LoadDataInternalAsync();
+
+        private async Task LoadDataInternalAsync()
         {
-            await LoadPromotionsAsync();
-            await LoadProduitsAndCategoriesAsync();
+            await LoadPromotionsInternalAsync();
+            await LoadProduitsAndCategoriesInternalAsync();
         }
 
-        private async Task LoadProduitsAndCategoriesAsync()
+        private async Task LoadProduitsAndCategoriesInternalAsync()
         {
             try
             {
                 using var context = _contextFactory.CreateDbContext();
                 var prods = await context.Produits.Where(p => p.Actif).ToListAsync();
-                AvailableProduits.Clear();
-                foreach (var p in prods) AvailableProduits.Add(p);
+                await Application.Current.Dispatcher.InvokeAsync(() => 
+                {
+                    AvailableProduits.Clear();
+                    foreach (var p in prods) AvailableProduits.Add(p);
+                });
                 RefreshFilteredProducts();
 
                 var cats = await context.Produits.Where(p => p.Actif && p.Categorie != null)
                                         .Select(p => p.Categorie)
                                         .Distinct()
                                         .ToListAsync();
-                AvailableCategories.Clear();
-                AvailableCategories.Add("Toutes");
-                foreach (var c in cats.OrderBy(c => c)) AvailableCategories.Add(c!);
+                await Application.Current.Dispatcher.InvokeAsync(() => 
+                {
+                    AvailableCategories.Clear();
+                    AvailableCategories.Add("Toutes");
+                    foreach (var c in cats.OrderBy(c => c)) AvailableCategories.Add(c!);
+                });
             }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"PromotionsVM LoadProduits error: {ex.Message}");
+            }
         }
 
         [RelayCommand]
-        public async Task LoadPromotionsAsync()
+        public async Task LoadPromotionsAsync() => await LoadPromotionsInternalAsync();
+
+        private async Task LoadPromotionsInternalAsync()
         {
             try
             {
                 using var context = _contextFactory.CreateDbContext();
                 var list = await context.Promotions.ToListAsync();
-                Promotions.Clear();
-                foreach (var p in list)
+                await Application.Current.Dispatcher.InvokeAsync(() => 
                 {
-                    Promotions.Add(p);
-                }
+                    Promotions.Clear();
+                    foreach (var p in list)
+                    {
+                        Promotions.Add(p);
+                    }
+                });
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur lors du chargement des promotions : {ex.Message}");
+                MessageBox.Show(Application.Current.MainWindow, $"Erreur lors du chargement des promotions : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -205,13 +231,13 @@ namespace SystemeCaisse.UI.ViewModels
             if (string.IsNullOrWhiteSpace(NewNom)) return;
             if (NewTypePromotion == "prix_degressif" && !NewTiers.Any())
             {
-                MessageBox.Show("Veuillez ajouter au moins un tiers pour le prix dégressif.");
+                MessageBox.Show(Application.Current.MainWindow, "Veuillez ajouter au moins un tiers pour le prix dégressif.", "Attention", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             if (NewTypePromotion == "offre_combine" && !CurrentBundleItems.Any())
             {
-                MessageBox.Show("Veuillez ajouter au moins un article pour l'offre combinée.");
+                MessageBox.Show(Application.Current.MainWindow, "Veuillez ajouter au moins un article pour l'offre combinée.", "Attention", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -239,7 +265,7 @@ namespace SystemeCaisse.UI.ViewModels
                 promo.Valeur = NewValeur;
                 promo.IsPourcentage = NewIsPourcentage;
                 promo.DateDebut = NewDateDebut;
-                promo.DateFin = NewDateFin;
+                promo.DateFin = IsIndeterminateEndDate ? null : NewDateFin;
                 promo.ProduitId = NewSelectedProduit?.Id;
                 promo.Categorie = NewSelectedCategorie == "Toutes" ? null : NewSelectedCategorie;
                 promo.SeuilQuantite = NewSeuilQuantite;
@@ -283,7 +309,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur lors de l'enregistrement : {ex.Message}");
+                MessageBox.Show(Application.Current.MainWindow, $"Erreur lors de l'enregistrement : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -303,6 +329,8 @@ namespace SystemeCaisse.UI.ViewModels
             ProductSearchText = string.Empty;
             NewSelectedCategorie = null;
             NewIsPourcentage = true;
+            NewDateFin = DateTime.Today.AddDays(7);
+            IsIndeterminateEndDate = false;
             CurrentBundleItems.Clear();
             _isUpdatingSelection = false;
         }
@@ -346,6 +374,7 @@ namespace SystemeCaisse.UI.ViewModels
             NewIsPourcentage = promo.IsPourcentage;
             NewDateDebut = promo.DateDebut;
             NewDateFin = promo.DateFin;
+            IsIndeterminateEndDate = promo.DateFin == null;
             NewSeuilQuantite = promo.SeuilQuantite;
             NewQuantiteOfferte = promo.QuantiteOfferte;
             NewIemeArticle = promo.IemeArticle;
@@ -377,7 +406,7 @@ namespace SystemeCaisse.UI.ViewModels
         public async Task DeletePromotionAsync(Promotion promo)
         {
             if (promo == null) return;
-            if (MessageBox.Show("Supprimer cette promotion ?", "Confirmation", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+            if (MessageBox.Show(Application.Current.MainWindow, "Supprimer cette promotion ?", "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
 
             try
             {
@@ -388,7 +417,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur de suppression : {ex.Message}");
+                MessageBox.Show(Application.Current.MainWindow, $"Erreur de suppression : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -408,7 +437,7 @@ namespace SystemeCaisse.UI.ViewModels
              }
              catch(Exception ex)
              {
-                 MessageBox.Show($"Erreur de mise à jour : {ex.Message}");
+                 MessageBox.Show(Application.Current.MainWindow, $"Erreur de mise à jour : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
              }
         }
         [RelayCommand]
