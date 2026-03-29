@@ -176,7 +176,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur lors du chargement des imprimantes : {ex.Message}");
+                MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur lors du chargement des imprimantes : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -308,7 +308,7 @@ namespace SystemeCaisse.UI.ViewModels
 
                 if (!File.Exists(dbPath))
                 {
-                    MessageBox.Show($"Base de données introuvable : {dbPath}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Base de données introuvable : {dbPath}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 

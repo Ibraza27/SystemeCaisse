@@ -411,6 +411,12 @@ namespace SystemeCaisse.UI.ViewModels
                     ApplyAutomaticPromotions();
                     UpdateTotal();
                 }
+
+                if (value == 4)
+                {
+                    // Auto-refresh history data when switching to Ventes tab
+                    _ = HistoryVM?.LoadDataAsync();
+                }
             }
         }
 
@@ -979,7 +985,9 @@ namespace SystemeCaisse.UI.ViewModels
 
                     if (MessageBox.Show(Services.WindowHelper.GetAdminWindow(), "Simuler l'impression du ticket ?", "Impression Formation", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
                     {
-                        _ = Task.Run(() => _printService.PrintTicket(vente, CurrentEntreprise ?? new Entreprise { Nom = "Inconnu" }, true));
+                        // PrintTicket uses WPF controls (FlowDocument, PrintDialog) which require STA thread
+                        // Must run on UI dispatcher, not Task.Run
+                        _printService.PrintTicket(vente, CurrentEntreprise ?? new Entreprise { Nom = "Inconnu" }, true);
                     }
                     
                     ResetSale();

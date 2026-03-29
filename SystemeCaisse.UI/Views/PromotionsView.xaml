@@ -177,19 +177,36 @@
                     </WrapPanel>
                 </Grid>
 
-                <Button Command="{Binding AddPromotionCommand}" HorizontalAlignment="Right" Padding="20,10" Background="#34C759" Foreground="White" BorderThickness="0" Cursor="Hand" FontWeight="Bold">
-                    <Button.Style>
-                        <Style TargetType="Button">
-                            <Setter Property="Content" Value="Ajouter la Promotion"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsEditing}" Value="True">
-                                    <Setter Property="Content" Value="Mettre à jour la Promotion"/>
-                                    <Setter Property="Background" Value="#007AFF"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                </Button>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                    <!-- Cancel Button (only visible when editing) -->
+                    <Button Command="{Binding CancelEditCommand}" Padding="20,10" Background="#FF3B30" Foreground="White" BorderThickness="0" Cursor="Hand" FontWeight="Bold" Content="Annuler" Margin="0,0,10,0">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    
+                    <!-- Add/Update Button -->
+                    <Button Command="{Binding AddPromotionCommand}" Padding="20,10" Background="#34C759" Foreground="White" BorderThickness="0" Cursor="Hand" FontWeight="Bold">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Content" Value="Ajouter la Promotion"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                        <Setter Property="Content" Value="Mettre à jour la Promotion"/>
+                                        <Setter Property="Background" Value="#007AFF"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </StackPanel>
             </StackPanel>
         </Border>
 

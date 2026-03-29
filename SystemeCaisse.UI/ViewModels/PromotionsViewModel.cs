@@ -209,7 +209,10 @@ namespace SystemeCaisse.UI.ViewModels
             try
             {
                 using var context = _contextFactory.CreateDbContext();
-                var list = await context.Promotions.ToListAsync();
+                var list = await context.Promotions
+                    .Include(p => p.Tiers)
+                    .Include(p => p.BundleItems)
+                    .ToListAsync();
                 await Application.Current.Dispatcher.InvokeAsync(() => 
                 {
                     Promotions.Clear();
@@ -333,6 +336,12 @@ namespace SystemeCaisse.UI.ViewModels
             IsIndeterminateEndDate = false;
             CurrentBundleItems.Clear();
             _isUpdatingSelection = false;
+        }
+
+        [RelayCommand]
+        public void CancelEdit()
+        {
+            ResetForms();
         }
 
         [RelayCommand]

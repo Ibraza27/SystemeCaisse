@@ -42,7 +42,7 @@ namespace SystemeCaisse.UI.Services
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur d'impression : {ex.Message}");
+                MessageBox.Show(WindowHelper.GetAdminWindow(), $"Erreur d'impression : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
