@@ -12,6 +12,7 @@ using System.Linq;
 using SystemeCaisse.Infrastructure.Data;
 using SystemeCaisse.UI.Services;
 using System.Collections.Generic;
+using CommunityToolkit.Mvvm.Messaging;
 
 namespace SystemeCaisse.UI.ViewModels
 {
@@ -76,6 +77,15 @@ namespace SystemeCaisse.UI.ViewModels
             _migrationService = migrationService;
             AvailablePrinters = new ObservableCollection<string>();
             AvailableScreens = new ObservableCollection<string>();
+
+            WeakReferenceMessenger.Default.Register<PromotionsChangedMessage>(this, (r, m) =>
+            {
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    using var context = _contextFactory.CreateDbContext();
+                    LoadDisplayPromotionsSelection(context);
+                });
+            });
         }
 
         public async Task InitializeAsync()

@@ -8,9 +8,12 @@ using System.Threading.Tasks;
 using System.Windows;
 using SystemeCaisse.Core.Entities;
 using SystemeCaisse.Infrastructure.Data;
+using CommunityToolkit.Mvvm.Messaging;
 
 namespace SystemeCaisse.UI.ViewModels
 {
+    public record PromotionsChangedMessage();
+
     public partial class PromotionsViewModel : ObservableObject
     {
         private readonly IDbContextFactory<AppDbContext> _contextFactory;
@@ -304,6 +307,7 @@ namespace SystemeCaisse.UI.ViewModels
                 }
 
                 await context.SaveChangesAsync();
+                WeakReferenceMessenger.Default.Send(new PromotionsChangedMessage());
 
                 if (!IsEditing) Promotions.Add(promo);
                 else await LoadPromotionsAsync(); // Refresh list to show changes
@@ -423,6 +427,9 @@ namespace SystemeCaisse.UI.ViewModels
                 context.Entry(promo).State = EntityState.Deleted;
                 await context.SaveChangesAsync();
                 Promotions.Remove(promo);
+                Application.Current.Dispatcher.Invoke(() => {
+                    WeakReferenceMessenger.Default.Send(new PromotionsChangedMessage());
+                });
             }
             catch (Exception ex)
             {
