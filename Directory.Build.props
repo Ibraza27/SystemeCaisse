@@ -1,0 +1,12 @@
+<Project>
+  <PropertyGroup>
+    <Authors>Ibraza27</Authors>
+    <Company>Hippocampe Import-Export</Company>
+    <Product>SystemeCaisse Hippocampe</Product>
+    <Description>Application multi-écrans de système de caisse pour HIPPOCAMPE IMPORT-EXPORT.</Description>
+    <Copyright>Copyright © 2026 Hippocampe Import-Export</Copyright>
+    <Version>4.4.7.0</Version>
+    <FileVersion>4.4.7.0</FileVersion>
+    <AssemblyVersion>4.4.7.0</AssemblyVersion>
+  </PropertyGroup>
+</Project>
