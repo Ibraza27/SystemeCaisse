@@ -67,6 +67,9 @@ namespace SystemeCaisse.UI.ViewModels
         private bool _showCustomerDisplayPromotions = true;
         
         [ObservableProperty]
+        private bool _isCompactCustomerDisplay;
+        
+        [ObservableProperty]
         private ObservableCollection<string> _availableScreens = new();
 
         public ObservableCollection<DisplayPromotionItem> AvailableDisplayPromotions { get; set; } = new ObservableCollection<DisplayPromotionItem>();
@@ -174,6 +177,9 @@ namespace SystemeCaisse.UI.ViewModels
             
             var cdPromo = context.Configuration.Find("customer_display_show_promotions");
             if (cdPromo != null && bool.TryParse(cdPromo.Valeur, out bool cdP)) ShowCustomerDisplayPromotions = cdP;
+
+            var cdCompact = context.Configuration.Find("customer_display_compact");
+            if (cdCompact != null && bool.TryParse(cdCompact.Valeur, out bool cdCp)) IsCompactCustomerDisplay = cdCp;
 
             // Load Display Promotions for selection
             LoadDisplayPromotionsSelection(context);
@@ -311,6 +317,7 @@ namespace SystemeCaisse.UI.ViewModels
                 UpdateConfig(context, "customer_display_enabled", IsCustomerDisplayEnabled.ToString());
                 UpdateConfig(context, "customer_display_screen_index", SelectedScreenIndex.ToString());
                 UpdateConfig(context, "customer_display_show_promotions", ShowCustomerDisplayPromotions.ToString());
+                UpdateConfig(context, "customer_display_compact", IsCompactCustomerDisplay.ToString());
 
                 // Save Selected Promotions
                 var selectedIds = AvailableDisplayPromotions.Where(p => p.IsSelected).Select(p => p.Promotion.Id);

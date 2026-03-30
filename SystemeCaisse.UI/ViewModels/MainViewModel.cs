@@ -61,6 +61,13 @@ namespace SystemeCaisse.UI.ViewModels
             set { _showThankYouMessage = value; OnPropertyChanged(); }
         }
 
+        private bool _isCompactCustomerDisplay;
+        public bool IsCompactCustomerDisplay
+        {
+            get => _isCompactCustomerDisplay;
+            set { _isCompactCustomerDisplay = value; OnPropertyChanged(); }
+        }
+
         // Customer Display: promotions carousel
         public ObservableCollection<Promotion> DisplayPromotions { get; set; } = new();
         
@@ -600,6 +607,9 @@ namespace SystemeCaisse.UI.ViewModels
 
                 var cdPromo = context.Configuration.Find("customer_display_show_promotions");
                 ShowDisplayPromotions = cdPromo == null || (bool.TryParse(cdPromo.Valeur, out bool p) && p);
+
+                var cdCompact = context.Configuration.Find("customer_display_compact");
+                IsCompactCustomerDisplay = cdCompact != null && bool.TryParse(cdCompact.Valeur, out bool cp) && cp;
 
                 // Load display promotions
                 LoadDisplayPromotions(context);

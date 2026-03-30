@@ -6,7 +6,7 @@
         xmlns:vm="clr-namespace:SystemeCaisse.UI.ViewModels"
         xmlns:conv="clr-namespace:SystemeCaisse.UI.Converters"
         mc:Ignorable="d"
-        Title="Hippocampe - Affichage Client v3.1" Height="1080" Width="1920"
+        Title="Hippocampe - Affichage Client v3.2" Height="1080" Width="1920"
         WindowStyle="None" Background="#F2F2F7">
 
     <Grid>
@@ -34,8 +34,18 @@
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <!-- Header Redesign -->
-            <Border Background="White" BorderBrush="#EEE" BorderThickness="0,0,0,1" Padding="20,15">
+            <!-- Header: NORMAL mode -->
+            <Border Background="White" BorderBrush="#EEE" BorderThickness="0,0,0,1">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Padding" Value="20,15"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                <Setter Property="Padding" Value="8,6"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -43,13 +53,74 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     
+                    <!-- Logo: smaller in compact -->
                     <Image Source="{Binding CurrentEntreprise.LogoPath, TargetNullValue='pack://application:,,,/Images/logo.png', FallbackValue='pack://application:,,,/Images/logo.png'}" 
-                           Width="140" Height="110" Stretch="Uniform" VerticalAlignment="Top"/>
+                           Stretch="Uniform" VerticalAlignment="Top">
+                        <Image.Style>
+                            <Style TargetType="Image">
+                                <Setter Property="Width" Value="140"/>
+                                <Setter Property="Height" Value="110"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                        <Setter Property="Width" Value="70"/>
+                                        <Setter Property="Height" Value="55"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Image.Style>
+                    </Image>
                     
-                    <StackPanel Grid.Column="1" VerticalAlignment="Top" Margin="30,0,0,0">
-                        <TextBlock Text="{Binding CurrentEntreprise.Nom, FallbackValue='HIPPOCAMPE'}" FontSize="36" FontWeight="Black" Foreground="#2E7D32" TextWrapping="Wrap"/>
-                        <TextBlock Text="{Binding CurrentEntreprise.Adresse}" FontSize="16" Foreground="#555" Margin="0,5,0,0" TextWrapping="Wrap"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                    <StackPanel Grid.Column="1" VerticalAlignment="Top">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Margin" Value="30,0,0,0"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                        <Setter Property="Margin" Value="10,0,0,0"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <!-- Enterprise Name -->
+                        <TextBlock Text="{Binding CurrentEntreprise.Nom, FallbackValue='HIPPOCAMPE'}" FontWeight="Black" Foreground="#2E7D32" TextWrapping="Wrap">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="FontSize" Value="36"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                            <Setter Property="FontSize" Value="18"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <!-- Address -->
+                        <TextBlock Text="{Binding CurrentEntreprise.Adresse}" Foreground="#555" TextWrapping="Wrap">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="FontSize" Value="16"/>
+                                    <Setter Property="Margin" Value="0,5,0,0"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                            <Setter Property="FontSize" Value="10"/>
+                                            <Setter Property="Margin" Value="0,2,0,0"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <!-- Horaires -->
+                        <StackPanel Orientation="Horizontal">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Margin" Value="0,5,0,0"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
                             <TextBlock Text="{Binding CurrentEntreprise.HorairesSemaine}" FontSize="14" Foreground="#777" FontWeight="Bold" 
                                        Visibility="{Binding CurrentEntreprise.HorairesSemaine, Converter={StaticResource StringToVis}}"/>
                             <TextBlock Text="  |  " FontSize="14" Foreground="#CCC">
@@ -71,19 +142,81 @@
                             <TextBlock Text="{Binding CurrentEntreprise.HorairesDimanche}" FontSize="14" Foreground="#777" FontWeight="Bold"
                                        Visibility="{Binding CurrentEntreprise.HorairesDimanche, Converter={StaticResource StringToVis}}"/>
                         </StackPanel>
-                        <TextBlock Text="{Binding CurrentEntreprise.Telephone}" FontSize="18" FontWeight="Bold" Foreground="#333" Margin="0,5,0,0"/>
+                        <!-- Phone -->
+                        <TextBlock Text="{Binding CurrentEntreprise.Telephone}" FontWeight="Bold" Foreground="#333">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="FontSize" Value="18"/>
+                                    <Setter Property="Margin" Value="0,5,0,0"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                            <Setter Property="FontSize" Value="11"/>
+                                            <Setter Property="Margin" Value="0,2,0,0"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
-                        <TextBlock Text="{Binding CurrentDate}" FontSize="24" Foreground="#666" HorizontalAlignment="Right"/>
-                        <TextBlock Text="{Binding CurrentTime}" FontSize="32" Foreground="#333" FontWeight="Black" HorizontalAlignment="Right" Margin="0,2,0,0"/>
-                        <TextBlock Text="VOTRE PANIER" FontSize="18" Foreground="#999" HorizontalAlignment="Right" FontWeight="Black" Margin="0,10,0,0"/>
+                        <!-- Date -->
+                        <TextBlock Text="{Binding CurrentDate}" Foreground="#666" HorizontalAlignment="Right">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="FontSize" Value="24"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                            <Setter Property="FontSize" Value="13"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <!-- Time -->
+                        <TextBlock Text="{Binding CurrentTime}" Foreground="#333" FontWeight="Black" HorizontalAlignment="Right" Margin="0,2,0,0">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="FontSize" Value="32"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                            <Setter Property="FontSize" Value="16"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <!-- VOTRE PANIER label -->
+                        <TextBlock Text="VOTRE PANIER" Foreground="#999" FontWeight="Black" HorizontalAlignment="Right">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="FontSize" Value="18"/>
+                                    <Setter Property="Margin" Value="0,10,0,0"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                            <Setter Property="FontSize" Value="11"/>
+                                            <Setter Property="Margin" Value="0,4,0,0"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </StackPanel>
                 </Grid>
             </Border>
 
-            <!-- Items List -->
+            <!-- Items List: NORMAL MODE -->
             <ListView x:Name="CartListView" Grid.Row="1" ItemsSource="{Binding LignesVente}" Margin="0,10" BorderThickness="0" FontFamily="Segoe UI">
+                <ListView.Style>
+                    <Style TargetType="ListView">
+                        <Setter Property="Visibility" Value="Visible"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ListView.Style>
                 <ListView.View>
                     <GridView>
                         <GridViewColumn Header="Produit" Width="350">
@@ -145,8 +278,101 @@
                 </ListView.View>
             </ListView>
 
+            <!-- Items List: COMPACT MODE (tighter columns, no horizontal scroll) -->
+            <ListView x:Name="CartListViewCompact" Grid.Row="1" ItemsSource="{Binding LignesVente}" Margin="0,2" BorderThickness="0" FontFamily="Segoe UI"
+                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListView.Style>
+                    <Style TargetType="ListView">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ListView.Style>
+                <ListView.View>
+                    <GridView>
+                        <!-- Hide the empty trailing column header -->
+                        <GridView.ColumnHeaderContainerStyle>
+                            <Style TargetType="GridViewColumnHeader">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <Trigger Property="Column" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </GridView.ColumnHeaderContainerStyle>
+                        <GridViewColumn Header="Produit" Width="300">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Produit.Nom}" FontSize="12" FontWeight="SemiBold" Margin="1" TextTrimming="CharacterEllipsis"/>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="Qté" Width="65">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                        <TextBlock Text="{Binding Quantite, StringFormat={}{0:N2}}" FontSize="12" Margin="1"/>
+                                        <TextBlock FontSize="9" Foreground="Gray" VerticalAlignment="Bottom" Margin="2,0,0,2">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Text" Value="u"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Produit.TypeVente}" Value="poids">
+                                                            <Setter Property="Text" Value="kg"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="P.U" Width="65">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding PrixUnitaire, StringFormat='{}{0:N2} €'}" FontSize="12" TextAlignment="Right" Margin="1"/>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="Rem." Width="55">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <TextBlock Text="{Binding RemiseTotale, StringFormat='{}{0:N2} €'}" FontSize="12" Foreground="#D32F2F" FontWeight="Bold" Visibility="{Binding HasPromotion, Converter={StaticResource BoolToVis}}"/>
+                                        <TextBlock Text="-" HorizontalAlignment="Center" FontSize="12" Visibility="{Binding HasPromotion, Converter={StaticResource InvertedBoolToVis}}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="Total" Width="75">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding TotalLigne, StringFormat='{}{0:N2} €'}" FontSize="13" FontWeight="Bold" Foreground="#2E7D32" TextAlignment="Right" Margin="1"/>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                    </GridView>
+                </ListView.View>
+            </ListView>
+
+
             <!-- Summary Footer -->
-            <Border Grid.Row="2" Background="#F5F5F7" Padding="25" CornerRadius="0,0,10,10" BorderBrush="#DDD" BorderThickness="0,1,0,0">
+            <Border Grid.Row="2" Background="#F5F5F7" CornerRadius="0,0,10,10" BorderBrush="#DDD" BorderThickness="0,1,0,0">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Padding" Value="25"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                <Setter Property="Padding" Value="10,6"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -154,31 +380,87 @@
                     </Grid.ColumnDefinitions>
                     
                     <StackPanel VerticalAlignment="Center">
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                            <TextBlock Text="Total Brut:" FontSize="22" Foreground="#666" Width="180"/>
-                            <TextBlock Text="{Binding TotalHorsRemise, StringFormat='{}{0:N2} €'}" FontSize="22" FontWeight="SemiBold"/>
+                        <!-- NORMAL: Total Brut and Remises stacked vertically -->
+                        <StackPanel>
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                <TextBlock Text="Total Brut:" FontSize="22" Foreground="#666" Width="180"/>
+                                <TextBlock Text="{Binding TotalHorsRemise, StringFormat='{}{0:N2} €'}" FontSize="22" FontWeight="SemiBold"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <TextBlock Text="Total Remises:" FontSize="22" Foreground="#D32F2F" Width="180"/>
+                                <TextBlock Text="{Binding TotalRemises, StringFormat='{}- {0:N2} €'}" FontSize="22" FontWeight="Bold" Foreground="#D32F2F"/>
+                            </StackPanel>
+                            <Border Height="2" Background="#DDD" Margin="0,5"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="TOTAL À PAYER" FontSize="40" FontWeight="Black" Foreground="#333" VerticalAlignment="Center"/>
+                            </StackPanel>
                         </StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                            <TextBlock Text="Total Remises:" FontSize="22" Foreground="#D32F2F" Width="180"/>
-                            <TextBlock Text="{Binding TotalRemises, StringFormat='{}- {0:N2} €'}" FontSize="22" FontWeight="Bold" Foreground="#D32F2F"/>
-                        </StackPanel>
-                        <Border Height="2" Background="#DDD" Margin="0,5"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="TOTAL À PAYER" FontSize="40" FontWeight="Black" Foreground="#333" VerticalAlignment="Center"/>
+
+                        <!-- COMPACT: Brut and Remises on same line, "Total :" label -->
+                        <StackPanel>
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
+                                <TextBlock Text="Brut:" FontSize="13" Foreground="#666" Width="80"/>
+                                <TextBlock Text="{Binding TotalHorsRemise, StringFormat='{}{0:N2} €'}" FontSize="13" FontWeight="SemiBold" Margin="0,0,20,0"/>
+                                <TextBlock Text="Remises:" FontSize="13" Foreground="#D32F2F"/>
+                                <TextBlock Text="{Binding TotalRemises, StringFormat='{} -{0:N2} €'}" FontSize="13" FontWeight="Bold" Foreground="#D32F2F" Margin="5,0,0,0"/>
+                            </StackPanel>
+                            <Border Height="1" Background="#DDD" Margin="0,2"/>
+                            <TextBlock Text="Total :" FontSize="22" FontWeight="Black" Foreground="#333" VerticalAlignment="Center" Margin="0,4,0,0"/>
                         </StackPanel>
                     </StackPanel>
 
                     <Grid Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock Text="{Binding TotalVente, StringFormat='{}{0:N2} €'}" 
-                                   FontSize="84" FontWeight="Black" Foreground="#2E7D32" 
-                                   TextAlignment="Right"/>
+                                   FontWeight="Black" Foreground="#2E7D32" 
+                                   TextAlignment="Right">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="FontSize" Value="84"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                            <Setter Property="FontSize" Value="40"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </Grid>
                 </Grid>
             </Border>
         </Grid>
 
         <!-- Right Column: Media / Promotions -->
-        <Grid Grid.Column="1" Margin="0,20,20,20" Visibility="{Binding ShowDisplayPromotions, Converter={StaticResource BoolToVis}}">
+        <Grid Grid.Column="1" Visibility="{Binding ShowDisplayPromotions, Converter={StaticResource BoolToVis}}">
+            <Grid.Style>
+                <Style TargetType="Grid">
+                    <Setter Property="Margin" Value="0,20,20,20"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                            <Setter Property="Margin" Value="0,8,8,8"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Grid.Style>
             <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
@@ -193,20 +475,80 @@
                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                         <!-- Default text when no promotion is active -->
                         <StackPanel Visibility="{Binding CurrentDisplayPromotion, Converter={StaticResource InvertedNullToVis}}">
-                            <TextBlock Text="{Binding CurrentEntreprise.Nom, FallbackValue='VOTRE MAGASIN'}" FontSize="48" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
-                            <TextBlock Text="IMPORT-EXPORT" FontSize="28" Foreground="#CCC" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding CurrentEntreprise.Nom, FallbackValue='VOTRE MAGASIN'}" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="FontSize" Value="48"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                                <Setter Property="FontSize" Value="22"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Text="IMPORT-EXPORT" Foreground="#CCC" HorizontalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="FontSize" Value="28"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                                <Setter Property="FontSize" Value="14"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
                         </StackPanel>
 
                         <!-- Active Promotion Display -->
                         <StackPanel Visibility="{Binding CurrentDisplayPromotion, Converter={StaticResource NullToVis}}">
-                            <Border Background="#2E7D32" Padding="30,15" CornerRadius="30" HorizontalAlignment="Center">
-                                <TextBlock Text="🌟 OFFRE SPÉCIALE" FontSize="24" FontWeight="Bold" Foreground="White"/>
+                            <Border Background="#2E7D32" CornerRadius="30" HorizontalAlignment="Center">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Padding" Value="30,15"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                                <Setter Property="Padding" Value="15,6"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <TextBlock Text="🌟 OFFRE SPÉCIALE" FontWeight="Bold" Foreground="White">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontSize" Value="24"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                                    <Setter Property="FontSize" Value="14"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
                             </Border>
-                            <TextBlock Text="{Binding CurrentDisplayPromotion.Nom}" FontSize="42" FontWeight="Black" Foreground="White" HorizontalAlignment="Center" Margin="0,20,0,10" TextWrapping="Wrap" TextAlignment="Center"/>
-                            <TextBlock Text="{Binding CurrentDisplayPromotion.Valeur, StringFormat='{}{0:0.##} €'}" FontSize="56" FontWeight="Black" Foreground="#FFD700" HorizontalAlignment="Center">
+                            <TextBlock Text="{Binding CurrentDisplayPromotion.Nom}" FontWeight="Black" Foreground="White" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
+                                        <Setter Property="FontSize" Value="42"/>
+                                        <Setter Property="Margin" Value="0,20,0,10"/>
                                         <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                                <Setter Property="FontSize" Value="20"/>
+                                                <Setter Property="Margin" Value="0,8,0,4"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Text="{Binding CurrentDisplayPromotion.Valeur, StringFormat='{}{0:0.##} €'}" FontWeight="Black" Foreground="#FFD700" HorizontalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="FontSize" Value="56"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                                <Setter Property="FontSize" Value="28"/>
+                                            </DataTrigger>
                                             <DataTrigger Binding="{Binding CurrentDisplayPromotion.IsPourcentage}" Value="True">
                                                 <Setter Property="Text" Value="{Binding CurrentDisplayPromotion.Valeur, StringFormat='{}- {0:0.##} %'}"/>
                                             </DataTrigger>
@@ -220,11 +562,60 @@
             </Border>
 
             <!-- Welcome Message -->
-            <Border Grid.Row="1" Background="White" Margin="0,20,0,0" Padding="30" CornerRadius="10">
+            <Border Grid.Row="1" Background="White" CornerRadius="10">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Margin" Value="0,20,0,0"/>
+                        <Setter Property="Padding" Value="30"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                <Setter Property="Margin" Value="0,6,0,0"/>
+                                <Setter Property="Padding" Value="10,6"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
                 <StackPanel>
-                    <TextBlock Text="Bienvenue chez" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="#666"/>
-                    <TextBlock Text="{Binding CurrentEntreprise.Nom, FallbackValue='NOUS'}" FontSize="28" FontWeight="Black" HorizontalAlignment="Center" Foreground="#2E7D32" Margin="0,5,0,0" TextWrapping="Wrap" TextAlignment="Center"/>
-                    <TextBlock Text="Nous sommes à votre service !" FontSize="18" Foreground="#666" HorizontalAlignment="Center" Margin="0,10,0,0"/>
+                    <TextBlock Text="Bienvenue chez" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="#666">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="FontSize" Value="20"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                        <Setter Property="FontSize" Value="12"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <TextBlock Text="{Binding CurrentEntreprise.Nom, FallbackValue='NOUS'}" FontWeight="Black" HorizontalAlignment="Center" Foreground="#2E7D32" TextWrapping="Wrap" TextAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="FontSize" Value="28"/>
+                                <Setter Property="Margin" Value="0,5,0,0"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                        <Setter Property="FontSize" Value="15"/>
+                                        <Setter Property="Margin" Value="0,2,0,0"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <TextBlock Text="Nous sommes à votre service !" Foreground="#666" HorizontalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="FontSize" Value="18"/>
+                                <Setter Property="Margin" Value="0,10,0,0"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                        <Setter Property="FontSize" Value="11"/>
+                                        <Setter Property="Margin" Value="0,3,0,0"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                 </StackPanel>
             </Border>
         </Grid>
