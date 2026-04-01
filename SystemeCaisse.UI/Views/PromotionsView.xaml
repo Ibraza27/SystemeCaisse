@@ -71,7 +71,22 @@
                                       IsDropDownOpen="{Binding IsProductDropDownOpen, Mode=TwoWay}"
                                       IsTextSearchEnabled="False"
                                       IsEditable="True"
-                                      DisplayMemberPath="Nom" Width="200" Padding="5"/>
+                                      TextSearch.TextPath="Nom" Width="250" Padding="5">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Border Width="25" Height="25" CornerRadius="4" Background="#F8F8F8" ClipToBounds="True" Margin="0,0,5,0">
+                                                <Grid>
+                                                    <Image Source="{Binding FullImagePath, Converter={StaticResource PathToImage}}" Stretch="Uniform" Margin="2"/>
+                                                    <TextBlock Text="📦" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#CCC"
+                                                               Visibility="{Binding FullImagePath, Converter={StaticResource InvertedNullToVis}}"/>
+                                                </Grid>
+                                            </Border>
+                                            <TextBlock Text="{Binding Nom}" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
                         </StackPanel>
 
                         <StackPanel Visibility="{Binding NewTypePromotion, Converter={StaticResource StringToVis}, ConverterParameter='remise_produit'}">

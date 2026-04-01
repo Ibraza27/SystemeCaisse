@@ -14,6 +14,7 @@
         <converters:StringToBoolConverter x:Key="StringToBool"/>
         <converters:NullToVisibilityConverter x:Key="NullToVis"/>
         <converters:InvertedNullToVisibilityConverter x:Key="InvertedNullToVis"/>
+        <converters:PathToImageConverter x:Key="PathToImage"/>
 
         <Style x:Key="ToggleButtonStyle" TargetType="RadioButton">
             <Setter Property="Template">

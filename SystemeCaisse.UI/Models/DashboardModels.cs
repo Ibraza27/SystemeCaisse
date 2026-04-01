@@ -8,6 +8,19 @@ namespace SystemeCaisse.UI.Models
         public string ProductName { get; set; }
         public decimal Quantity { get; set; }
         public decimal TotalRevenue { get; set; }
+        public string? ImagePath { get; set; }
+
+        public string? FullImagePath
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(ImagePath)) return null;
+                if (System.IO.Path.IsPathRooted(ImagePath)) 
+                    return System.IO.File.Exists(ImagePath) ? ImagePath : null;
+                var fullPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ImagePath);
+                return System.IO.File.Exists(fullPath) ? fullPath : null;
+            }
+        }
     }
 
     public class SalesDataPoint

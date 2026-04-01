@@ -1,6 +1,6 @@
 ; Script Inno Setup pour SystemeCaisse
 #define MyAppName "SystemeCaisse"
-#define MyAppVersion "4.4.9"
+#define MyAppVersion "4.5.0"
 #define MyAppPublisher "Hippocampe Import-Export"
 #define MyAppExeName "SystemeCaisse.UI.exe"
 #define BuildDir "SystemeCaisse.UI\bin\Release\net8.0-windows10.0.19041\win-x64\publish"
@@ -14,10 +14,13 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputBaseFilename=Setup_SystemeCaisse
+OutputDir=Distribution
 Compression=lzma2/ultra
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64
+SignTool=mysigntool
+SignedUninstaller=yes
 
 [Languages]
 Name: "french"; MessagesFile: "compiler:Languages\French.isl"

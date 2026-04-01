@@ -61,7 +61,7 @@
 
         <!-- 3. Main DataGrid -->
         <DataGrid Grid.Row="2" ItemsSource="{Binding OverviewProductsView}" AutoGenerateColumns="False" IsReadOnly="True"
-                  GridLinesVisibility="Horizontal" Background="White" RowHeight="35"
+                  GridLinesVisibility="Horizontal" Background="White" RowHeight="50"
                   HeadersVisibility="Column" Margin="10">
             <DataGrid.Resources>
                 <Style TargetType="DataGridRow">
@@ -79,6 +79,19 @@
             <DataGrid.Columns>
                 <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="50"/>
                 <DataGridTextColumn Header="Code-barres" Binding="{Binding CodeBarre}" Width="120"/>
+                <DataGridTemplateColumn Width="50">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Border Width="40" Height="40" CornerRadius="4" Background="#F8F8F8" ClipToBounds="True">
+                                <Grid>
+                                    <Image Source="{Binding FullImagePath, Converter={StaticResource PathToImage}}" Stretch="Uniform" Margin="2"/>
+                                    <TextBlock Text="📦" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#CCC"
+                                               Visibility="{Binding FullImagePath, Converter={StaticResource InvertedNullToVis}}"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <DataGridTextColumn Header="Nom du produit" Binding="{Binding Nom}" Width="*"/>
                 <DataGridTextColumn Header="Stock" Binding="{Binding StockActuel}" Width="80" FontWeight="Bold"/>
                 <DataGridTextColumn Header="Seuil" Binding="{Binding StockAlerte}" Width="80"/>

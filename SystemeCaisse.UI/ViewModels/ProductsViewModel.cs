@@ -10,6 +10,7 @@ using System.Windows;
 using System.Windows.Data;
 using SystemeCaisse.Core.Entities;
 using SystemeCaisse.Infrastructure.Data;
+using System.IO;
 
 namespace SystemeCaisse.UI.ViewModels
 {
@@ -316,6 +317,92 @@ namespace SystemeCaisse.UI.ViewModels
             }
             int checksum = (10 - (sum % 10)) % 10;
             return code + checksum;
+        }
+
+        [RelayCommand]
+        private void SelectProductImage()
+        {
+            if (SelectedProduct == null) return;
+
+            var openDlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "Images (*.png;*.jpg;*.jpeg;*.bmp;*.webp)|*.png;*.jpg;*.jpeg;*.bmp;*.webp",
+                Title = "Sélectionner une image pour le produit"
+            };
+
+            if (openDlg.ShowDialog(Services.WindowHelper.GetAdminWindow()) == true)
+            {
+                try
+                {
+                    // Remember old path to delete
+                    var oldPath = SelectedProduct.FullImagePath;
+
+                    // Create Images/Produits folder
+                    var imagesDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images", "Produits");
+                    Directory.CreateDirectory(imagesDir);
+
+                    // Copy with product-based name with timestamp to avoid cache issues
+                    var ext = Path.GetExtension(openDlg.FileName);
+                    var timestamp = DateTime.Now.Ticks;
+                    
+                    var fileName = SelectedProduct.Id > 0 
+                        ? $"produit_{SelectedProduct.Id}_{timestamp}{ext}" 
+                        : $"produit_new_{timestamp}{ext}";
+
+                    var destPath = Path.Combine(imagesDir, fileName);
+                    var relativePath = Path.Combine("Images", "Produits", fileName);
+
+                    // Clear the image path first to release WPF file lock
+                    SelectedProduct.ImagePath = null;
+                    OnPropertyChanged(nameof(SelectedProduct));
+
+                    // Small delay to let WPF release the file handle
+                    System.Threading.Thread.Sleep(50);
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+
+                    // Delete old image if exists
+                    if (!string.IsNullOrEmpty(oldPath) && File.Exists(oldPath))
+                    {
+                        try { File.Delete(oldPath); } catch { /* Ignore locked files */ }
+                    }
+
+                    // Copy using FileStream to handle potential locks
+                    using (var source = new FileStream(openDlg.FileName, FileMode.Open, FileAccess.Read, FileShare.Read))
+                    using (var dest = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                    {
+                        source.CopyTo(dest);
+                    }
+
+                    // Set the new path
+                    SelectedProduct.ImagePath = relativePath;
+                    OnPropertyChanged(nameof(SelectedProduct));
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur lors de la copie de l'image : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        [RelayCommand]
+        private void RemoveProductImage()
+        {
+            if (SelectedProduct == null) return;
+            
+            var oldPath = SelectedProduct.FullImagePath;
+            
+            SelectedProduct.ImagePath = null;
+            OnPropertyChanged(nameof(SelectedProduct));
+
+            System.Threading.Thread.Sleep(50);
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+
+            if (!string.IsNullOrEmpty(oldPath) && File.Exists(oldPath))
+            {
+                try { File.Delete(oldPath); } catch { /* Ignore locked files */ }
+            }
         }
     }
 }

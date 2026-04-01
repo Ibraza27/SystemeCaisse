@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.IO;
 
 namespace SystemeCaisse.Core.Entities
 {
@@ -54,9 +55,23 @@ namespace SystemeCaisse.Core.Entities
         public DateTime CreatedAt { get; set; } = DateTime.Now;
         public DateTime UpdatedAt { get; set; } = DateTime.Now;
 
-        // Image path relative to assets
+        // Image path relative to app directory (e.g. "Images/Produits/produit_42.png")
         [MaxLength(255)]
         public string? ImagePath { get; set; }
+
+        [NotMapped]
+        public string? FullImagePath
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(ImagePath)) return null;
+                // If already absolute, return as-is
+                if (Path.IsPathRooted(ImagePath)) return File.Exists(ImagePath) ? ImagePath : null;
+                // Resolve relative to app directory
+                var fullPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ImagePath);
+                return File.Exists(fullPath) ? fullPath : null;
+            }
+        }
 
         [NotMapped]
         public decimal ValidatedSalesCount { get; set; }

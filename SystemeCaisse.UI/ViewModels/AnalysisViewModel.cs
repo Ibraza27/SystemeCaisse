@@ -178,7 +178,8 @@ namespace SystemeCaisse.UI.ViewModels
                             Category = !string.IsNullOrWhiteSpace(prod?.Categorie) ? prod.Categorie : "Autre",
                             QuantitySold = qty,
                             TotalRevenue = revenue,
-                            TotalMargin = revenue - cost
+                            TotalMargin = revenue - cost,
+                            ImagePath = prod?.ImagePath
                         };
                     })
                     .OrderByDescending(x => x.TotalRevenue)
@@ -630,6 +631,19 @@ namespace SystemeCaisse.UI.ViewModels
         public decimal AveragePrice => QuantitySold != 0 ? TotalRevenue / QuantitySold : 0;
         public decimal TotalMargin { get; set; }
         public double MarginPercent => TotalRevenue != 0 ? (double)(TotalMargin / TotalRevenue) : 0;
+        public string? ImagePath { get; set; }
+
+        public string? FullImagePath
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(ImagePath)) return null;
+                if (System.IO.Path.IsPathRooted(ImagePath)) 
+                    return System.IO.File.Exists(ImagePath) ? ImagePath : null;
+                var fullPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ImagePath);
+                return System.IO.File.Exists(fullPath) ? fullPath : null;
+            }
+        }
     }
 
     public class CategoryAnalysisItem

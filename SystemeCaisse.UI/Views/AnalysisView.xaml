@@ -98,9 +98,22 @@
             <TabControl Margin="10" Visibility="{Binding IsChartViewActive, Converter={StaticResource InvertedBoolToVis}}">
                 <TabItem Header="Par produit">
                     <DataGrid ItemsSource="{Binding ProductAnalysis}" AutoGenerateColumns="False" IsReadOnly="True" Margin="5"
-                              CanUserSortColumns="False"
+                              CanUserSortColumns="False" RowHeight="50"
                               GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#F0F0F0" BorderThickness="0" Background="White">
                         <DataGrid.Columns>
+                            <DataGridTemplateColumn Width="50">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Border Width="40" Height="40" CornerRadius="4" Background="#F8F8F8" ClipToBounds="True">
+                                            <Grid>
+                                                <Image Source="{Binding FullImagePath, Converter={StaticResource PathToImage}}" Stretch="Uniform" Margin="2"/>
+                                                <TextBlock Text="📦" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#CCC"
+                                                           Visibility="{Binding FullImagePath, Converter={StaticResource InvertedNullToVis}}"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                             <DataGridTextColumn Header="Catégorie" Binding="{Binding Category}" Width="*" />
                             <DataGridTextColumn Header="Produit" Binding="{Binding ProductName}" Width="3*" />
                             <DataGridTextColumn Header="Quantité" Binding="{Binding QuantitySold, StringFormat={}{0:N2}}" Width="100" />
@@ -140,9 +153,22 @@
                 </TabItem>
                 <TabItem Header="Rentabilité">
                     <DataGrid ItemsSource="{Binding ProductAnalysis}" AutoGenerateColumns="False" IsReadOnly="True" Margin="5"
-                              CanUserSortColumns="False"
+                              CanUserSortColumns="False" RowHeight="50"
                               GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#F0F0F0" BorderThickness="0" Background="White">
                         <DataGrid.Columns>
+                            <DataGridTemplateColumn Width="50">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Border Width="40" Height="40" CornerRadius="4" Background="#F8F8F8" ClipToBounds="True">
+                                            <Grid>
+                                                <Image Source="{Binding FullImagePath, Converter={StaticResource PathToImage}}" Stretch="Uniform" Margin="2"/>
+                                                <TextBlock Text="📦" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#CCC"
+                                                           Visibility="{Binding FullImagePath, Converter={StaticResource InvertedNullToVis}}"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                             <DataGridTextColumn Header="Produit" Binding="{Binding ProductName}" Width="*" />
                             <DataGridTextColumn Header="Prix Vente (Moy)" Binding="{Binding AveragePrice, StringFormat={}{0:N2}€}" Width="150" />
                             <DataGridTextColumn Header="CA" Binding="{Binding TotalRevenue, StringFormat={}{0:N2}€}" Width="150" />

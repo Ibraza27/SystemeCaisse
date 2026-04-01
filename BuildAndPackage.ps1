@@ -7,6 +7,7 @@ Write-Host "=========================================="
 $projectPath = "SystemeCaisse.UI\SystemeCaisse.UI.csproj"
 $publishDir = "SystemeCaisse.UI\bin\Release\net8.0-windows10.0.19041\win-x64\publish"
 $distDir = "Distribution"
+$signBat = Join-Path (Get-Location) "sign.bat"
 
 # 1. Nettoyer les versions précédentes
 Write-Host "1. Nettoyage..."
@@ -23,7 +24,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# 3. Signature des binaires via PowerShell avant l'empaquetage
+# 3. Signature des binaires SystemeCaisse via PowerShell avant l'empaquetage
 Write-Host "3. Signature des binaires (DLLs et EXEs)..."
 $cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -eq "CN=Ibraza27 SystemeCaisse" } | Select-Object -First 1
 
@@ -38,8 +39,8 @@ if ($cert) {
     Write-Warning "Certificat Ibraza27 SystemeCaisse non trouvé. Les binaires ne seront pas signés formellement."
 }
 
-# 4. Création de l'installateur avec Inno Setup
-Write-Host "4. Génération de Setup.exe avec Inno Setup..."
+# 4. Création de l'installateur avec Inno Setup (avec SignTool intégré)
+Write-Host "4. Génération de Setup.exe avec Inno Setup (signature intégrée)..."
 $isccPath = "$env:ProgramFiles (x86)\Inno Setup 6\ISCC.exe"
 
 if (-not (Test-Path $isccPath)) {
@@ -47,29 +48,36 @@ if (-not (Test-Path $isccPath)) {
     exit 1
 }
 
-& $isccPath "systemecaisse.iss" /O"$distDir"
+# Passer le SignTool via /S pour que ISCC signe le setup.exe, le setup.tmp ET le uninstaller
+& $isccPath "systemecaisse.iss" /Smysigntool="$signBat `$f"
 
-# Si le Setup.exe a été généré, on le signe aussi
-$setupExe = (Get-ChildItem -Path $distDir -Filter "Setup_SystemeCaisse*.exe" | Select-Object -First 1).FullName
-if ($cert -and $setupExe) {
-    Write-Host "Signature du fichier d'installation : $setupExe"
-    Set-AuthenticodeSignature -Certificate $cert -FilePath $setupExe -TimestampServer "http://timestamp.digicert.com" -ErrorAction SilentlyContinue | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Warning "ISCC a échoué avec le SignTool intégré. Tentative sans SignTool..."
+    # Fallback: compiler sans SignTool, puis signer manuellement
+    & $isccPath "systemecaisse.iss" /O"$distDir" /DNoSignTool
+    
+    $setupExe = (Get-ChildItem -Path $distDir -Filter "Setup_SystemeCaisse*.exe" | Select-Object -First 1).FullName
+    if ($cert -and $setupExe) {
+        Write-Host "Signature manuelle du fichier d'installation : $setupExe"
+        Set-AuthenticodeSignature -Certificate $cert -FilePath $setupExe -TimestampServer "http://timestamp.digicert.com" -ErrorAction SilentlyContinue | Out-Null
+    }
 }
 
 # 5. Copie du certificat public pour la distribution
-Write-Host "4. Préparation du certificat de confiance..."
-$certName = "SystemeCaisseCert.cer"
-if (Test-Path $certName) {
-    Copy-Item $certName "$distDir\$certName"
-    
-    # Petit script batch pour installer le certif facilement sur d'autres PC
-    $installCertScript = "$distDir\InstallerAutorisationSecurite.bat"
-    Set-Content -Path $installCertScript -Value "@echo off"
-    Add-Content -Path $installCertScript -Value "echo Installation de l autorisation pour SystemeCaisse (Necessite les droits Administrateur)..."
-    Add-Content -Path $installCertScript -Value "certutil -addstore -f ""Root"" ""%~dp0$certName"""
-    Add-Content -Path $installCertScript -Value "echo Termine ! Vous pouvez maintenant lancer Setup_SystemeCaisse.exe"
-    Add-Content -Path $installCertScript -Value "pause"
+Write-Host "5. Préparation du certificat de confiance..."
+$certFile = "SystemeCaisseCert.cer"
+if ($cert) {
+    Export-Certificate -Cert $cert -FilePath "$distDir\$certFile" -Force | Out-Null
 }
+
+# Script batch pour installer le certif sur d'autres PC (TrustedPublisher + Root)
+$installCertScript = "$distDir\InstallerAutorisationSecurite.bat"
+Set-Content -Path $installCertScript -Value "@echo off"
+Add-Content -Path $installCertScript -Value "echo Installation de l autorisation pour SystemeCaisse (Necessite les droits Administrateur)..."
+Add-Content -Path $installCertScript -Value "certutil -addstore -f ""TrustedPublisher"" ""%~dp0$certFile"""
+Add-Content -Path $installCertScript -Value "certutil -addstore -f ""Root"" ""%~dp0$certFile"""
+Add-Content -Path $installCertScript -Value "echo Termine ! Vous pouvez maintenant lancer Setup_SystemeCaisse.exe"
+Add-Content -Path $installCertScript -Value "pause"
 
 Write-Host "=========================================="
 Write-Host "✅ Terminé ! Le Setup complet se trouve dans le dossier Distribution."

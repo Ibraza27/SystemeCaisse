@@ -6,12 +6,15 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:vm="clr-namespace:SystemeCaisse.UI.ViewModels"
+             xmlns:conv="clr-namespace:SystemeCaisse.UI.Converters"
              mc:Ignorable="d" 
              d:DataContext="{d:DesignInstance Type=vm:ProductsViewModel}"
              Language="fr-FR"
              d:DesignHeight="700" d:DesignWidth="1200">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <conv:NullToVisibilityConverter x:Key="NullToVis"/>
+        <conv:InvertedNullToVisibilityConverter x:Key="InvertedNullToVis"/>
         
         <Style TargetType="DataGridRow">
             <Setter Property="Background" Value="White"/>
@@ -75,7 +78,7 @@
                       CanUserAddRows="False"
                       CanUserDeleteRows="False"
                       AlternationCount="2"
-                      RowHeight="32"
+                      RowHeight="55"
                       Background="White" BorderBrush="#DDD" BorderThickness="1">
                 <DataGrid.Resources>
                      <Style TargetType="DataGridColumnHeader">
@@ -102,6 +105,18 @@
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="50"/>
                     <DataGridTextColumn Header="Code Barres" Binding="{Binding CodeBarre}" Width="110"/>
+                    <DataGridTemplateColumn Header="Image" Width="60">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Grid>
+                                    <Image Source="{Binding FullImagePath, Converter={StaticResource PathToImage}}" Width="45" Height="45" Stretch="Uniform" 
+                                           Visibility="{Binding FullImagePath, Converter={StaticResource NullToVis}}"/>
+                                    <TextBlock Text="📷" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#CCC"
+                                               Visibility="{Binding FullImagePath, Converter={StaticResource InvertedNullToVis}}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                     <DataGridTextColumn Header="Nom du produit" Binding="{Binding Nom}" Width="*"/>
                     <DataGridTextColumn Header="Type" Binding="{Binding TypeVente}" Width="80"/>
                     <DataGridTextColumn Header="Prix Vente" Binding="{Binding PrixVente, StringFormat=C}" Width="90"/>
@@ -192,7 +207,31 @@
                               DisplayMemberPath="Nom"
                               Padding="5" Margin="0,0,0,10"/>
 
-                    <CheckBox IsChecked="{Binding SelectedProduct.Actif}" Content="Produit actif" Margin="0,10,0,20"/>
+                    <CheckBox IsChecked="{Binding SelectedProduct.Actif}" Content="Produit actif" Margin="0,10,0,10"/>
+
+                    <!-- Product Image Section -->
+                    <Label Content="Image du produit :"/>
+                    <Border Background="#F8F8F8" CornerRadius="8" Padding="10" Margin="0,0,0,10" BorderBrush="#DDD" BorderThickness="1" MinHeight="80">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="80"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <!-- Preview -->
+                            <Border Background="White" CornerRadius="4" Width="70" Height="70">
+                                <Grid>
+                                    <Image Source="{Binding SelectedProduct.FullImagePath, Converter={StaticResource PathToImage}}" Stretch="Uniform" Margin="3"/>
+                                    <TextBlock Text="📷" FontSize="28" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#CCC"
+                                               Visibility="{Binding SelectedProduct.FullImagePath, Converter={StaticResource InvertedNullToVis}}"/>
+                                </Grid>
+                            </Border>
+                            <!-- Buttons -->
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
+                                <Button Command="{Binding SelectProductImageCommand}" Content="📁 Choisir une image" Padding="8,5" Margin="0,0,0,5" Background="#007AFF" Foreground="White" FontWeight="SemiBold"/>
+                                <Button Command="{Binding RemoveProductImageCommand}" Content="🗑️ Supprimer" Padding="8,5" Background="#FF3B30" Foreground="White" FontWeight="SemiBold"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
 
                     <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
                         <Button Command="{Binding SaveCommand}" Content="Enregistrer" Padding="15,8" Background="#4CAF50" Foreground="White" FontWeight="Bold" Margin="0,0,10,0"/>

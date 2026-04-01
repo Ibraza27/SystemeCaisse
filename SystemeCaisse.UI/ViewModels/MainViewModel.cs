@@ -1133,7 +1133,9 @@ namespace SystemeCaisse.UI.ViewModels
             if (config != null && !string.IsNullOrWhiteSpace(config.Valeur))
             {
                 var ids = config.Valeur.Split(',').Select(id => int.TryParse(id, out int parsed) ? parsed : -1).Where(id => id > 0).ToList();
-                var promos = context.Promotions.Where(p => ids.Contains(p.Id) && p.Actif).ToList();
+                var promos = context.Promotions.Include(p => p.Produit)
+                                               .Include(p => p.BundleItems).ThenInclude(b => b.Produit)
+                                               .Where(p => ids.Contains(p.Id) && p.Actif).ToList();
 
                 Application.Current.Dispatcher.Invoke(() =>
                 {

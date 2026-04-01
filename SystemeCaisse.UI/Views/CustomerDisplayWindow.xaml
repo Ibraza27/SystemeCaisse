@@ -219,7 +219,20 @@
                 </ListView.Style>
                 <ListView.View>
                     <GridView>
-                        <GridViewColumn Header="Produit" Width="350">
+                        <GridViewColumn Width="60">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Border Width="45" Height="45" CornerRadius="4" Background="#F8F8F8" ClipToBounds="True" Margin="0,2">
+                                        <Grid>
+                                            <Image Source="{Binding Produit.FullImagePath, Converter={StaticResource PathToImage}}" Stretch="Uniform" Margin="2"/>
+                                            <TextBlock Text="📦" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#CCC"
+                                                       Visibility="{Binding Produit.FullImagePath, Converter={StaticResource InvertedNullToVis}}"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="Produit" Width="300">
                             <GridViewColumn.CellTemplate>
                                 <DataTemplate>
                                     <TextBlock Text="{Binding Produit.Nom}" FontSize="22" FontWeight="SemiBold" Margin="5"/>
@@ -304,7 +317,20 @@
                                 </Style.Triggers>
                             </Style>
                         </GridView.ColumnHeaderContainerStyle>
-                        <GridViewColumn Header="Produit" Width="300">
+                        <GridViewColumn Width="45">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Border Width="35" Height="35" CornerRadius="4" Background="#F8F8F8" ClipToBounds="True">
+                                        <Grid>
+                                            <Image Source="{Binding Produit.FullImagePath, Converter={StaticResource PathToImage}}" Stretch="Uniform" Margin="2"/>
+                                            <TextBlock Text="📦" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#CCC"
+                                                       Visibility="{Binding Produit.FullImagePath, Converter={StaticResource InvertedNullToVis}}"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="Produit" Width="260">
                             <GridViewColumn.CellTemplate>
                                 <DataTemplate>
                                     <TextBlock Text="{Binding Produit.Nom}" FontSize="12" FontWeight="SemiBold" Margin="1" TextTrimming="CharacterEllipsis"/>
@@ -527,6 +553,97 @@
                                     </TextBlock.Style>
                                 </TextBlock>
                             </Border>
+                            <!-- Product Images Layout (Single or Bundle) -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,15,0,5">
+                                <!-- Normal Product Image -->
+                                <Border CornerRadius="10" Width="120" Height="120" Background="#33FFFFFF" ClipToBounds="True">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsCompactCustomerDisplay}" Value="True">
+                                                    <Setter Property="Width" Value="60"/>
+                                                    <Setter Property="Height" Value="60"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding CurrentDisplayPromotion.TypePromotion}" Value="offre_combine">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding CurrentDisplayPromotion.TypePromotion}" Value="remise_total">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding CurrentDisplayPromotion.TypePromotion}" Value="seuil_panier">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <Grid>
+                                        <Image Source="{Binding CurrentDisplayPromotion.Produit.FullImagePath, Converter={StaticResource PathToImage}}" Stretch="Uniform" Margin="5"/>
+                                        <TextBlock Text="📦" FontSize="60" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#CCC">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding CurrentDisplayPromotion.Produit.FullImagePath}" Value="{x:Null}">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Bundle Items Images (visible ONLY if offre_combine) -->
+                                <ItemsControl ItemsSource="{Binding CurrentDisplayPromotion.BundleItems}">
+                                    <ItemsControl.Style>
+                                        <Style TargetType="ItemsControl">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding CurrentDisplayPromotion.TypePromotion}" Value="offre_combine">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ItemsControl.Style>
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border CornerRadius="10" Width="120" Height="120" Background="#33FFFFFF" Margin="0,0,10,0" ClipToBounds="True">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding DataContext.IsCompactCustomerDisplay, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                                                <Setter Property="Width" Value="60"/>
+                                                                <Setter Property="Height" Value="60"/>
+                                                                <Setter Property="Margin" Value="0,0,5,0"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <Grid>
+                                                    <Image Source="{Binding Produit.FullImagePath, Converter={StaticResource PathToImage}}" Stretch="Uniform" Margin="5"/>
+                                                    <TextBlock Text="📦" FontSize="60" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#CCC">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Produit.FullImagePath}" Value="{x:Null}">
+                                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
                             <TextBlock Text="{Binding CurrentDisplayPromotion.Nom}" FontWeight="Black" Foreground="White" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">

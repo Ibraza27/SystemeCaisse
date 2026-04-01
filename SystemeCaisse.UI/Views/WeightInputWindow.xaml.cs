@@ -12,6 +12,7 @@ namespace SystemeCaisse.UI.Views
             InitializeComponent();
             if (produit != null)
             {
+                DataContext = produit;
                 ProductNameTxt.Text = produit.Nom;
                 ProductPriceTxt.Text = $"{produit.PrixVente:N2} €/kg";
             }

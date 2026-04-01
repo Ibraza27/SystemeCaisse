@@ -161,6 +161,7 @@
                             <StackPanel>
                                 <TextBlock Text="Sauvegardez vos données régulièrement pour éviter toute perte." TextWrapping="Wrap" Margin="0,0,0,15" Foreground="#666"/>
                                 <Button Command="{Binding BackupDatabaseCommand}" Content="📦 Créer une Sauvegarde (Backup)" Width="250" Height="40" HorizontalAlignment="Left" Background="#007AFF" Foreground="White"/>
+                                <Button Command="{Binding RestoreDatabaseCommand}" Content="📥 Restaurer une Sauvegarde" Width="250" Height="40" HorizontalAlignment="Left" Background="#FF9500" Foreground="White" Margin="0,10,0,0"/>
                                 
                                 <TextBlock Text="Migration depuis l'ancienne version (Python)" FontWeight="SemiBold" Margin="0,15,0,5"/>
                                 <Button Command="{Binding ImportDataCommand}" Content="📥 Importer depuis database.db" Width="250" Height="40" HorizontalAlignment="Left" Background="#5856D6" Foreground="White" Margin="0,5,0,0"/>

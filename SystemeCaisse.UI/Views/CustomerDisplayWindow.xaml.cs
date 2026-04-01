@@ -23,6 +23,10 @@ namespace SystemeCaisse.UI.Views
                             {
                                 CartListView.ScrollIntoView(CartListView.Items[CartListView.Items.Count - 1]);
                             }
+                            if (CartListViewCompact.Items.Count > 0)
+                            {
+                                CartListViewCompact.ScrollIntoView(CartListViewCompact.Items[CartListViewCompact.Items.Count - 1]);
+                            }
                         }), System.Windows.Threading.DispatcherPriority.Background);
                     }
                 };

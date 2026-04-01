@@ -1,20 +1,29 @@
 <Window x:Class="SystemeCaisse.UI.Views.WeightInputWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Saisie Poids" Height="350" Width="400"
+        Title="Saisie Poids" Width="500" SizeToContent="Height"
         WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
         Background="#F5F5F5">
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <Border Background="#E0F7FA" CornerRadius="5" Margin="0,0,0,20" Padding="15">
             <StackPanel>
                  <TextBlock Text="⚖️ Produit au Poids" FontSize="18" FontWeight="Bold" Foreground="#333" HorizontalAlignment="Center" Margin="0,0,0,5"/>
-                 <Separator Margin="0,5,0,5" Background="#B0BEC5"/>
+                 <Separator Margin="0,5,0,10" Background="#B0BEC5"/>
+                 
+                 <Border Width="80" Height="80" CornerRadius="8" Background="White" HorizontalAlignment="Center" Margin="0,0,0,10" ClipToBounds="True">
+                     <Grid>
+                         <Image Source="{Binding FullImagePath, Converter={StaticResource PathToImage}}" Stretch="Uniform" Margin="5"/>
+                         <TextBlock Text="📦" FontSize="40" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#CCC"
+                                    Visibility="{Binding FullImagePath, Converter={StaticResource InvertedNullToVis}}"/>
+                     </Grid>
+                 </Border>
+                 
                  <TextBlock x:Name="ProductNameTxt" Text="Produit" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center" Foreground="#0277BD" TextWrapping="Wrap" TextAlignment="Center"/>
                  <TextBlock x:Name="ProductPriceTxt" Text="0.00 €/kg" FontSize="16" HorizontalAlignment="Center" Foreground="#455A64" Margin="0,5,0,0"/>
             </StackPanel>

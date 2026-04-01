@@ -159,6 +159,16 @@ namespace SystemeCaisse.UI.ViewModels
             using var context = _contextFactory.CreateDbContext();
             EntrepriseInfo = context.Entreprise.FirstOrDefault() ?? new Entreprise();
             
+            // Default logo path if empty
+            if (string.IsNullOrWhiteSpace(EntrepriseInfo.LogoPath))
+            {
+                var defaultLogo = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images", "logo.png");
+                if (File.Exists(defaultLogo))
+                {
+                    EntrepriseInfo.LogoPath = defaultLogo;
+                }
+            }
+
             // Load Configs
             var widthConfig = context.Configuration.Find("ticket_width");
             if (widthConfig != null && int.TryParse(widthConfig.Valeur, out int w)) TicketWidth = w;
@@ -192,15 +202,18 @@ namespace SystemeCaisse.UI.ViewModels
 
             var config = context.Configuration.Find("customer_display_promotions");
             List<int> selectedIds = new List<int>();
-            if (config != null && !string.IsNullOrWhiteSpace(config.Valeur))
+            bool hasExistingConfig = config != null && !string.IsNullOrWhiteSpace(config.Valeur);
+            if (hasExistingConfig)
             {
-                selectedIds = config.Valeur.Split(',').Select(id => int.TryParse(id, out int parsed) ? parsed : -1).ToList();
+                selectedIds = config!.Valeur!.Split(',').Select(id => int.TryParse(id, out int parsed) ? parsed : -1).ToList();
             }
 
             foreach (var promo in allPromos)
             {
+                // Auto-check new promotions (those not in existing config) 
+                bool isSelected = hasExistingConfig ? selectedIds.Contains(promo.Id) : true;
                 Application.Current.Dispatcher.Invoke(() => {
-                    AvailableDisplayPromotions.Add(new DisplayPromotionItem(promo, selectedIds.Contains(promo.Id)));
+                    AvailableDisplayPromotions.Add(new DisplayPromotionItem(promo, isSelected));
                 });
             }
         }
@@ -391,6 +404,48 @@ namespace SystemeCaisse.UI.ViewModels
             catch (Exception ex)
             {
                 MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur sauvegarde : {ex.Message}");
+            }
+        }
+
+        [RelayCommand]
+        private void RestoreDatabase()
+        {
+            try
+            {
+                string dbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "caisse.db");
+                if (!File.Exists(dbPath))
+                {
+                    dbPath = Path.Combine(Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName) ?? "", "caisse.db");
+                }
+
+                var openDlg = new Microsoft.Win32.OpenFileDialog
+                {
+                    Filter = "SQLite Database (*.db)|*.db",
+                    Title = "Sélectionner la sauvegarde à restaurer"
+                };
+
+                var mainWin = Services.WindowHelper.GetAdminWindow();
+                if (openDlg.ShowDialog(mainWin) == true)
+                {
+                    var confirm = MessageBox.Show(mainWin, 
+                        "⚠️ ATTENTION : Cela remplacera TOUTES les données actuelles par celles de la sauvegarde sélectionnée.\n\nÊtes-vous sûr de vouloir continuer ?", 
+                        "Restauration de sauvegarde", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                    
+                    if (confirm == MessageBoxResult.Yes)
+                    {
+                        File.Copy(openDlg.FileName, dbPath, true);
+                        
+                        if (MessageBox.Show(mainWin, "Sauvegarde restaurée avec succès !\nL'application doit redémarrer pour appliquer les changements.\n\nRedémarrer maintenant ?", 
+                            "Restauration terminée", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+                        {
+                            RestartApplication();
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur restauration : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
         [RelayCommand]

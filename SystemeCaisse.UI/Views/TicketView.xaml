@@ -61,8 +61,21 @@
         <!-- Cart List -->
         <DataGrid Grid.Row="1" ItemsSource="{Binding Panier}" AutoGenerateColumns="False" CanUserAddRows="False" 
                   GridLinesVisibility="Horizontal" HeadersVisibility="Column" Background="Transparent" BorderThickness="0"
-                  SelectionMode="Single" SelectedItem="{Binding SelectedCartItem}">
+                  SelectionMode="Single" SelectedItem="{Binding SelectedCartItem}" RowHeight="50">
             <DataGrid.Columns>
+                <DataGridTemplateColumn Width="50">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Border Width="40" Height="40" CornerRadius="4" Background="#F8F8F8" ClipToBounds="True">
+                                <Grid>
+                                    <Image Source="{Binding Produit.FullImagePath, Converter={StaticResource PathToImage}}" Stretch="Uniform" Margin="2"/>
+                                    <TextBlock Text="📦" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#CCC"
+                                               Visibility="{Binding Produit.FullImagePath, Converter={StaticResource InvertedNullToVis}}"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <DataGridTemplateColumn Header="Produit" Width="*">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>

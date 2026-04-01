@@ -257,13 +257,16 @@ namespace SystemeCaisse.UI.ViewModels
             // Fetch CURRENT categories from Products table for all sold products
             // This fixes the "Autre 100%" issue by showing actual categories even for old sales
             var productIds = flatLines.Select(l => l.ProduitId).Distinct().ToList();
-            var productCats = await context.Produits
+            var productInfo = await context.Produits
                 .Where(p => productIds.Contains(p.Id))
-                .ToDictionaryAsync(p => p.Id, p => !string.IsNullOrWhiteSpace(p.Categorie) ? p.Categorie : "Autre");
+                .ToDictionaryAsync(p => p.Id, p => new { 
+                    Category = !string.IsNullOrWhiteSpace(p.Categorie) ? p.Categorie : "Autre",
+                    p.ImagePath 
+                });
 
             var catGroups = flatLines
-                .GroupBy(l => (l.ProduitId.HasValue && productCats.ContainsKey(l.ProduitId.Value)) 
-                                ? productCats[l.ProduitId.Value] 
+                .GroupBy(l => (l.ProduitId.HasValue && productInfo.ContainsKey(l.ProduitId.Value)) 
+                                ? productInfo[l.ProduitId.Value].Category 
                                 : (!string.IsNullOrWhiteSpace(l.CategorieNom) ? l.CategorieNom : "Autre"))
                 .Select(g => new { Cat = g.Key, Total = g.Sum(l => l.TotalLigne) })
                 .OrderByDescending(x => x.Total)
@@ -288,12 +291,14 @@ namespace SystemeCaisse.UI.ViewModels
 
             // --- 3. Top Products Table ---
             var topItems = flatLines
-                .GroupBy(l => l.ProduitNom)
+                .GroupBy(l => new { l.ProduitNom, l.ProduitId })
                 .Select(g => new TopProductItem
                 {
-                    ProductName = g.Key,
+                    ProductName = g.Key.ProduitNom,
                     Quantity = g.Sum(x => x.Quantite),
-                    TotalRevenue = g.Sum(x => x.TotalLigne)
+                    TotalRevenue = g.Sum(x => x.TotalLigne),
+                    ImagePath = (g.Key.ProduitId.HasValue && productInfo.ContainsKey(g.Key.ProduitId.Value)) 
+                                ? productInfo[g.Key.ProduitId.Value].ImagePath : null
                 })
                 .OrderByDescending(x => x.TotalRevenue)
                 .Take(5)

@@ -183,8 +183,21 @@
                                     <TextBlock Text="Top Produits performants" FontSize="16" FontWeight="Bold" Foreground="#34495E" Margin="0,0,0,15"/>
 
                                     <DataGrid Grid.Row="1" ItemsSource="{Binding TopProducts}" AutoGenerateColumns="False" IsReadOnly="True"
-                                              HeadersVisibility="Column" GridLinesVisibility="Horizontal" Background="White" BorderThickness="0">
+                                              HeadersVisibility="Column" GridLinesVisibility="Horizontal" Background="White" BorderThickness="0" RowHeight="50">
                                         <DataGrid.Columns>
+                                            <DataGridTemplateColumn Width="50">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <Border Width="40" Height="40" CornerRadius="4" Background="#F8F8F8" ClipToBounds="True">
+                                                            <Grid>
+                                                                <Image Source="{Binding FullImagePath, Converter={StaticResource PathToImage}}" Stretch="Uniform" Margin="2"/>
+                                                                <TextBlock Text="📦" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#CCC"
+                                                                           Visibility="{Binding FullImagePath, Converter={StaticResource InvertedNullToVis}}"/>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
                                             <DataGridTextColumn Header="Produit" Binding="{Binding ProductName}" Width="*">
                                                 <DataGridTextColumn.ElementStyle>
                                                     <Style TargetType="TextBlock">
