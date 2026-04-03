@@ -1,7 +1,7 @@
 <Window x:Class="SystemeCaisse.UI.Views.WeightInputWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Saisie Poids" Width="500" SizeToContent="Height"
+        Title="Saisie Poids" Width="520" SizeToContent="Height"
         WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
         Background="#F5F5F5">
     <Grid Margin="20">
@@ -9,9 +9,11 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <Border Background="#E0F7FA" CornerRadius="5" Margin="0,0,0,20" Padding="15">
+        <!-- Product Info Header -->
+        <Border Background="#E0F7FA" CornerRadius="8" Margin="0,0,0,15" Padding="15">
             <StackPanel>
                  <TextBlock Text="⚖️ Produit au Poids" FontSize="18" FontWeight="Bold" Foreground="#333" HorizontalAlignment="Center" Margin="0,0,0,5"/>
                  <Separator Margin="0,5,0,10" Background="#B0BEC5"/>
@@ -29,30 +31,124 @@
             </StackPanel>
         </Border>
 
-        <Grid Grid.Row="1">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
+        <!-- Mode Toggle -->
+        <Grid Grid.Row="1" Margin="0,0,0,15">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
             
-            <TextBlock Text="Poids (kg) :" FontWeight="SemiBold" Margin="0,0,0,5"/>
-            <TextBox x:Name="WeightInput" Grid.Row="1" FontSize="24" FontWeight="Bold" Padding="5" HorizontalContentAlignment="Center"/>
+            <RadioButton x:Name="AutoModeRadio" Grid.Column="0" GroupName="Mode" 
+                         IsChecked="True" Checked="ModeChanged"
+                         HorizontalAlignment="Stretch" Margin="0,0,5,0">
+                <RadioButton.Template>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Border" CornerRadius="8" Padding="12,10" Background="#E8F5E9" BorderBrush="#4CAF50" BorderThickness="2" Cursor="Hand">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock Text="⚖️" FontSize="16" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Automatique" FontSize="14" FontWeight="SemiBold" Foreground="#2E7D32" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="#4CAF50"/>
+                                <Setter TargetName="Border" Property="BorderBrush" Value="#2E7D32"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </RadioButton.Template>
+            </RadioButton>
+            
+            <RadioButton x:Name="ManualModeRadio" Grid.Column="1" GroupName="Mode"
+                         Checked="ModeChanged"
+                         HorizontalAlignment="Stretch" Margin="5,0,0,0">
+                <RadioButton.Template>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Border" CornerRadius="8" Padding="12,10" Background="#E3F2FD" BorderBrush="#1976D2" BorderThickness="2" Cursor="Hand">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock Text="✏️" FontSize="16" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Manuel" FontSize="14" FontWeight="SemiBold" Foreground="#1565C0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="#1976D2"/>
+                                <Setter TargetName="Border" Property="BorderBrush" Value="#0D47A1"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </RadioButton.Template>
+            </RadioButton>
         </Grid>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
-            <Button Content="Annuler" IsCancel="True" Width="100" Height="40" Margin="0,0,10,0" Background="#FFEBEE" Foreground="#D32F2F" BorderThickness="0">
-                 <Button.Resources>
-                    <Style TargetType="Border">
-                        <Setter Property="CornerRadius" Value="5"/>
-                    </Style>
-                </Button.Resources>
+        <!-- AUTO MODE Panel -->
+        <StackPanel x:Name="AutoPanel" Grid.Row="2" Margin="0,0,0,10">
+            <!-- Connection Status -->
+            <Border x:Name="StatusBorder" CornerRadius="6" Padding="8,4" HorizontalAlignment="Center" Margin="0,0,0,10" Background="#FFF3E0">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="StatusIcon" Text="🔴" FontSize="12" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <TextBlock x:Name="StatusText" Text="Balance non connectée" FontSize="12" Foreground="#E65100" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Live Weight Display -->
+            <Border Background="#FFF8E1" CornerRadius="10" Padding="15" Margin="0,0,0,10" BorderBrush="#FFD54F" BorderThickness="2">
+                <StackPanel>
+                    <TextBlock Text="POIDS EN DIRECT" FontSize="11" FontWeight="Bold" Foreground="#F57F17" HorizontalAlignment="Center" Margin="0,0,0,5"/>
+                    <TextBlock x:Name="LiveWeightText" Text="0.000" FontSize="52" FontWeight="Black" HorizontalAlignment="Center" Foreground="#E65100" FontFamily="Consolas"/>
+                    <TextBlock Text="kg" FontSize="18" HorizontalAlignment="Center" Foreground="#F57F17" Margin="0,-5,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Price Estimation -->
+            <Border Background="#E8F5E9" CornerRadius="10" Padding="15" Margin="0,0,0,10" BorderBrush="#81C784" BorderThickness="2">
+                <StackPanel>
+                    <TextBlock Text="ESTIMATION DU PRIX" FontSize="11" FontWeight="Bold" Foreground="#2E7D32" HorizontalAlignment="Center" Margin="0,0,0,5"/>
+                    <TextBlock x:Name="EstimatedPriceText" Text="0.00 €" FontSize="40" FontWeight="Black" HorizontalAlignment="Center" Foreground="#1B5E20" FontFamily="Consolas"/>
+                </StackPanel>
+            </Border>
+            
+            <!-- Tare and Zero buttons -->
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
+                <Button x:Name="BtnTare" Content="⚖️ Tare" Click="BtnTare_Click" Width="100" Height="35" Margin="0,0,10,0" 
+                        Background="#FFF3E0" Foreground="#E65100" BorderBrush="#FFB74D" BorderThickness="1" FontWeight="SemiBold" Cursor="Hand">
+                    <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                </Button>
+                <Button x:Name="BtnZero" Content="0️⃣ Zéro" Click="BtnZero_Click" Width="100" Height="35"
+                        Background="#E3F2FD" Foreground="#1565C0" BorderBrush="#64B5F6" BorderThickness="1" FontWeight="SemiBold" Cursor="Hand">
+                    <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                </Button>
+            </StackPanel>
+
+            <!-- Add to Cart Button (Auto) -->
+            <Button x:Name="BtnAddAuto" Content="⚖️  Ajouter au panier" Click="BtnAddAuto_Click" Height="50" FontSize="18" FontWeight="Bold"
+                    Background="#2E7D32" Foreground="White" BorderThickness="0" Cursor="Hand">
+                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
             </Button>
-            <Button Content="Valider" IsDefault="True" Click="BtnValider_Click" Width="100" Height="40" Background="#2E7D32" Foreground="White" BorderThickness="0">
-                 <Button.Resources>
-                    <Style TargetType="Border">
-                        <Setter Property="CornerRadius" Value="5"/>
-                    </Style>
-                </Button.Resources>
+        </StackPanel>
+
+        <!-- MANUAL MODE Panel -->
+        <StackPanel x:Name="ManualPanel" Grid.Row="2" Visibility="Collapsed" Margin="0,0,0,10">
+            <TextBlock Text="Poids (kg) :" FontWeight="SemiBold" Margin="0,0,0,5"/>
+            <TextBox x:Name="WeightInput" FontSize="24" FontWeight="Bold" Padding="8" HorizontalContentAlignment="Center" Margin="0,0,0,15"/>
+            
+            <!-- Manual Price Estimation -->
+            <Border x:Name="ManualPriceEstBorder" Background="#E8F5E9" CornerRadius="8" Padding="10" Margin="0,0,0,15" 
+                    BorderBrush="#81C784" BorderThickness="1" Visibility="Collapsed">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <TextBlock Text="Prix estimé : " FontSize="16" Foreground="#2E7D32" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="ManualEstimatedPriceText" Text="0.00 €" FontSize="20" FontWeight="Bold" Foreground="#1B5E20" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+
+        <!-- Footer Buttons -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,5,0,0">
+            <Button Content="Annuler" IsCancel="True" Width="110" Height="42" Margin="0,0,10,0" Background="#FFEBEE" Foreground="#D32F2F" BorderThickness="0" FontSize="14">
+                 <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+            </Button>
+            <Button x:Name="BtnValider" Content="✅ Valider" IsDefault="True" Click="BtnValider_Click" Width="110" Height="42" Background="#2E7D32" Foreground="White" BorderThickness="0" FontSize="14">
+                 <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
             </Button>
         </StackPanel>
     </Grid>

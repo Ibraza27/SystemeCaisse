@@ -82,6 +82,34 @@
                             </StackPanel>
                         </GroupBox>
 
+                        <GroupBox Header="⚖️ Balance (RS-232)" Padding="15" Margin="0,20,0,0">
+                            <StackPanel>
+                                <CheckBox Content="Activer la balance connectée" IsChecked="{Binding IsScaleEnabled}" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                                
+                                <StackPanel IsEnabled="{Binding IsScaleEnabled}">
+                                    <Label Content="Port COM de la balance"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox ItemsSource="{Binding AvailableComPorts}" SelectedItem="{Binding ScalePortName}" Padding="5" Margin="0,0,10,0"/>
+                                        <Button Grid.Column="1" Content="🔄" Command="{Binding RefreshComPortsCommand}" Width="35" Height="30" ToolTip="Rafraîchir les ports COM"/>
+                                    </Grid>
+
+                                    <Label Content="Vitesse (Baud Rate)" Margin="0,10,0,0"/>
+                                    <ComboBox ItemsSource="{Binding AvailableBaudRates}" SelectedItem="{Binding ScaleBaudRate}" Padding="5" Margin="0,0,0,10"/>
+
+                                    <Button Content="🔍 Tester la connexion" Command="{Binding TestScaleConnectionCommand}" 
+                                            Background="#FF9800" Foreground="White" Padding="10,5" HorizontalAlignment="Left" Margin="0,0,0,10">
+                                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="5"/></Style></Button.Resources>
+                                    </Button>
+                                    
+                                    <TextBlock x:Name="ScaleTestStatusText" Text="{Binding ScaleTestStatus}" FontSize="12" Foreground="#666" FontStyle="Italic" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </GroupBox>
+
                         <GroupBox Header="📺 Affichage Client (2ème Écran)" Padding="15" Margin="0,20,0,0">
                             <StackPanel>
                                 <CheckBox Content="Activer l'affichage client" IsChecked="{Binding IsCustomerDisplayEnabled}" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>

@@ -91,6 +91,7 @@ namespace SystemeCaisse.UI.ViewModels
 
         private System.Windows.Threading.DispatcherTimer? _clockTimer;
         private SystemeCaisse.UI.Views.CustomerDisplayWindow? _customerDisplay;
+        private SerialScaleService? _scaleService;
 
         private Produit? _selectedSearchProduct;
         public Produit? SelectedSearchProduct
@@ -567,6 +568,40 @@ namespace SystemeCaisse.UI.ViewModels
                 await SafeInitAsync("AnalysisVM", () => AnalysisVM.InitializeAsync());
                 
                 System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Sub-VM execution end\n");
+
+                // 3. Initialize Scale Service
+                try
+                {
+                    using var scaleCtx = _contextFactory.CreateDbContext();
+                    var scaleEnabled = scaleCtx.Configuration.Find("scale_enabled");
+                    if (scaleEnabled != null && bool.TryParse(scaleEnabled.Valeur, out bool se) && se)
+                    {
+                        var scalePort = scaleCtx.Configuration.Find("scale_port_name");
+                        var scaleBaud = scaleCtx.Configuration.Find("scale_baud_rate");
+                        string portName = scalePort?.Valeur ?? "COM3";
+                        int baudRate = 9600;
+                        if (scaleBaud != null) int.TryParse(scaleBaud.Valeur, out baudRate);
+
+                        await Application.Current.Dispatcher.InvokeAsync(() =>
+                        {
+                            try
+                            {
+                                _scaleService = new SerialScaleService();
+                                _scaleService.Start(portName, baudRate);
+                                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Scale connected on {portName} at {baudRate}\n");
+                            }
+                            catch (Exception ex)
+                            {
+                                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Scale FAILED: {ex.Message}\n");
+                                _scaleService = null;
+                            }
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Scale init error: {ex.Message}\n");
+                }
             });
         }
 
@@ -1217,7 +1252,7 @@ namespace SystemeCaisse.UI.ViewModels
 
                     if (isWeight)
                     {
-                        var dialog = new SystemeCaisse.UI.Views.WeightInputWindow(produit);
+                        var dialog = new SystemeCaisse.UI.Views.WeightInputWindow(produit, _scaleService);
                         SetupWindowOwner(dialog);
                         if (dialog.ShowDialog() == true)
                         {

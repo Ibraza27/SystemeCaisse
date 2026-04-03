@@ -8,6 +8,7 @@ using SystemeCaisse.Core.Entities;
 using SystemeCaisse.Core.Interfaces;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Ports;
 using System.Linq;
 using SystemeCaisse.Infrastructure.Data;
 using SystemeCaisse.UI.Services;
@@ -72,6 +73,24 @@ namespace SystemeCaisse.UI.ViewModels
         [ObservableProperty]
         private ObservableCollection<string> _availableScreens = new();
 
+        // === Scale Properties ===
+        [ObservableProperty]
+        private bool _isScaleEnabled;
+
+        [ObservableProperty]
+        private string _scalePortName = "COM3";
+
+        [ObservableProperty]
+        private int _scaleBaudRate = 9600;
+
+        [ObservableProperty]
+        private ObservableCollection<string> _availableComPorts = new();
+
+        [ObservableProperty]
+        private string _scaleTestStatus = "";
+
+        public List<int> AvailableBaudRates { get; } = new() { 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200 };
+
         public ObservableCollection<DisplayPromotionItem> AvailableDisplayPromotions { get; set; } = new ObservableCollection<DisplayPromotionItem>();
 
         public SettingsViewModel(IDbContextFactory<AppDbContext> contextFactory, IDataMigrationService migrationService)
@@ -107,6 +126,9 @@ namespace SystemeCaisse.UI.ViewModels
                     screenNames.Add($"Écran {i + 1} {(s.IsPrimary ? "(Principal)" : "")} - {s.Bounds.Width}x{s.Bounds.Height}");
                 }
 
+                // Discover COM ports
+                var comPorts = SerialScaleService.GetAvailablePorts();
+
                 await Application.Current.Dispatcher.InvokeAsync(() => 
                 {
                     AvailablePrinters.Clear();
@@ -114,6 +136,9 @@ namespace SystemeCaisse.UI.ViewModels
                     
                     AvailableScreens.Clear();
                     foreach (var name in screenNames) AvailableScreens.Add(name);
+
+                    AvailableComPorts.Clear();
+                    foreach (var port in comPorts) AvailableComPorts.Add(port);
                 });
             });
         }
@@ -190,6 +215,16 @@ namespace SystemeCaisse.UI.ViewModels
 
             var cdCompact = context.Configuration.Find("customer_display_compact");
             if (cdCompact != null && bool.TryParse(cdCompact.Valeur, out bool cdCp)) IsCompactCustomerDisplay = cdCp;
+
+            // Load Scale settings
+            var scaleEnabled = context.Configuration.Find("scale_enabled");
+            if (scaleEnabled != null && bool.TryParse(scaleEnabled.Valeur, out bool se)) IsScaleEnabled = se;
+
+            var scalePort = context.Configuration.Find("scale_port_name");
+            if (scalePort != null && !string.IsNullOrWhiteSpace(scalePort.Valeur)) ScalePortName = scalePort.Valeur;
+
+            var scaleBaud = context.Configuration.Find("scale_baud_rate");
+            if (scaleBaud != null && int.TryParse(scaleBaud.Valeur, out int sb)) ScaleBaudRate = sb;
 
             // Load Display Promotions for selection
             LoadDisplayPromotionsSelection(context);
@@ -331,6 +366,11 @@ namespace SystemeCaisse.UI.ViewModels
                 UpdateConfig(context, "customer_display_screen_index", SelectedScreenIndex.ToString());
                 UpdateConfig(context, "customer_display_show_promotions", ShowCustomerDisplayPromotions.ToString());
                 UpdateConfig(context, "customer_display_compact", IsCompactCustomerDisplay.ToString());
+
+                // Save Scale settings
+                UpdateConfig(context, "scale_enabled", IsScaleEnabled.ToString());
+                UpdateConfig(context, "scale_port_name", ScalePortName);
+                UpdateConfig(context, "scale_baud_rate", ScaleBaudRate.ToString());
 
                 // Save Selected Promotions
                 var selectedIds = AvailableDisplayPromotions.Where(p => p.IsSelected).Select(p => p.Promotion.Id);
@@ -484,6 +524,52 @@ namespace SystemeCaisse.UI.ViewModels
                 Process.Start(processPath);
                 Application.Current.Shutdown();
             }
+        }
+
+        [RelayCommand]
+        private void RefreshComPorts()
+        {
+            AvailableComPorts.Clear();
+            foreach (var port in SerialScaleService.GetAvailablePorts())
+            {
+                AvailableComPorts.Add(port);
+            }
+            if (AvailableComPorts.Count == 0)
+            {
+                ScaleTestStatus = "❌ Aucun port COM détecté. Vérifiez la connexion USB.";
+            }
+            else
+            {
+                ScaleTestStatus = $"🔄 {AvailableComPorts.Count} port(s) COM détecté(s).";
+            }
+        }
+
+        [RelayCommand]
+        private async Task TestScaleConnection()
+        {
+            if (string.IsNullOrWhiteSpace(ScalePortName))
+            {
+                ScaleTestStatus = "❌ Veuillez sélectionner un port COM.";
+                return;
+            }
+
+            ScaleTestStatus = "⏳ Test en cours...";
+
+            bool success = await Task.Run(() =>
+            {
+                try
+                {
+                    return SerialScaleService.TestConnection(ScalePortName, ScaleBaudRate);
+                }
+                catch
+                {
+                    return false;
+                }
+            });
+
+            ScaleTestStatus = success
+                ? $"✅ Connexion réussie sur {ScalePortName} à {ScaleBaudRate} baud !"
+                : $"❌ Impossible de se connecter sur {ScalePortName}. Vérifiez le branchement et les paramètres.";
         }
     }
 }
