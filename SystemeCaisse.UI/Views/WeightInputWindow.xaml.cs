@@ -59,12 +59,6 @@ namespace SystemeCaisse.UI.Views
                 _scaleService.StatusChanged += OnStatusChanged;
                 UpdateConnectionStatus(true);
                 AutoModeRadio.IsChecked = true;
-
-                // Envoyer le prix unitaire à l'afficheur de la balance
-                if (_prixKg > 0)
-                {
-                    _scaleService.SendUnitPrice(_prixKg);
-                }
             }
             else
             {

@@ -1255,12 +1255,45 @@ namespace SystemeCaisse.UI.ViewModels
 
                     if (isWeight)
                     {
+                        // Ouvrir la fenêtre poids client sur l'écran secondaire
+                        SystemeCaisse.UI.Views.CustomerWeightDisplayWindow? customerWeightWin = null;
+                        try
+                        {
+                            var screens = ScreenHelper.GetScreens();
+                            if (screens.Count >= 2 && _customerDisplay != null)
+                            {
+                                // Utiliser le même écran que l'affichage client
+                                using var ctx = _contextFactory.CreateDbContext();
+                                var screenConfig = ctx.Configuration.Find("customer_display_screen_index");
+                                int savedIndex = (screenConfig != null && int.TryParse(screenConfig.Valeur, out int si)) ? si : -1;
+
+                                ScreenHelper.ScreenInfo? targetScreen = null;
+                                if (savedIndex >= 0 && savedIndex < screens.Count)
+                                    targetScreen = screens[savedIndex];
+                                else
+                                    targetScreen = screens.FirstOrDefault(s => !s.IsPrimary) ?? (screens.Count > 1 ? screens[1] : null);
+
+                                if (targetScreen != null)
+                                {
+                                    customerWeightWin = new SystemeCaisse.UI.Views.CustomerWeightDisplayWindow(produit, _scaleService);
+                                    customerWeightWin.ShowOnScreen(targetScreen);
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"CustomerWeightDisplay error: {ex.Message}");
+                        }
+
                         var dialog = new SystemeCaisse.UI.Views.WeightInputWindow(produit, _scaleService);
                         SetupWindowOwner(dialog);
                         if (dialog.ShowDialog() == true)
                         {
                             AddLine(produit, dialog.PoidsSaisi);
                         }
+
+                        // Fermer la fenêtre poids client
+                        try { customerWeightWin?.Close(); } catch { }
                     }
                     else
                     {
