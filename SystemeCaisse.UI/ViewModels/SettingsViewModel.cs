@@ -91,6 +91,23 @@ namespace SystemeCaisse.UI.ViewModels
 
         public List<int> AvailableBaudRates { get; } = new() { 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200 };
 
+        private bool _scaleSettingsChanged;
+
+        partial void OnIsScaleEnabledChanged(bool value)
+        {
+            _scaleSettingsChanged = true;
+        }
+
+        partial void OnScalePortNameChanged(string value)
+        {
+            _scaleSettingsChanged = true;
+        }
+
+        partial void OnScaleBaudRateChanged(int value)
+        {
+            _scaleSettingsChanged = true;
+        }
+
         public ObservableCollection<DisplayPromotionItem> AvailableDisplayPromotions { get; set; } = new ObservableCollection<DisplayPromotionItem>();
 
         public SettingsViewModel(IDbContextFactory<AppDbContext> contextFactory, IDataMigrationService migrationService)
@@ -388,6 +405,21 @@ namespace SystemeCaisse.UI.ViewModels
                 }
 
                 MessageBox.Show(owner, "Paramètres enregistrés avec succès !", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
+
+                // Proposer un redémarrage si les paramètres balance ont changé
+                if (_scaleSettingsChanged)
+                {
+                    _scaleSettingsChanged = false;
+                    var result = MessageBox.Show(owner,
+                        "Les paramètres de la balance ont été modifiés.\nVoulez-vous redémarrer l'application maintenant pour appliquer les changements ?",
+                        "Redémarrage requis",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        RestartApplication();
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -555,11 +587,19 @@ namespace SystemeCaisse.UI.ViewModels
 
             ScaleTestStatus = "⏳ Test en cours...";
 
+            // Récupérer le service actif depuis le MainViewModel
+            SerialScaleService? activeService = null;
+            var mainWin = Application.Current.MainWindow;
+            if (mainWin?.DataContext is MainViewModel mainVM)
+            {
+                activeService = mainVM.ScaleService;
+            }
+
             bool success = await Task.Run(() =>
             {
                 try
                 {
-                    return SerialScaleService.TestConnection(ScalePortName, ScaleBaudRate);
+                    return SerialScaleService.TestConnection(ScalePortName, ScaleBaudRate, activeService);
                 }
                 catch
                 {

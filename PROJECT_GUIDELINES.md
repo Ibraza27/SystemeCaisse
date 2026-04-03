@@ -92,3 +92,59 @@ Sur chaque nouvel ordinateur, avant de lancer l'installateur pour la première f
 ### Maintenance :
 - **Signature** : Toute nouvelle version de `SystemeCaisse.UI.exe` ou de l'installateur DOIT être signée avec le certificat `.pfx` correspondant en utilisant l'outil `signtool.exe`.
 - **Identité** : Ne jamais modifier les métadonnées d'assemblage (Company, Product) sans mettre à jour le certificat, sous peine d'invalidation de la signature.
+
+## 10. Intégration Balance RS-232 (Adam Equipment Swift SWZ)
+
+L'application supporte une balance connectée via un adaptateur USB-RS232 (FTDI FT232R) pour la pesée automatique des produits.
+
+### Architecture :
+- **Service** : `SerialScaleService.cs` (thread dédié haute priorité avec boucle de lecture serrée)
+- **UI** : `WeightInputWindow` avec double mode Automatique (balance) / Manuel (clavier)
+- **Configuration** : Section "Balance (RS-232)" dans l'onglet Périphériques des paramètres
+- **Initialisation** : Le service est démarré dans `MainViewModel.InitializeAsync()` si activé en config
+
+### Configuration matérielle optimale :
+
+| Composant | Paramètre | Valeur optimale |
+|-----------|-----------|-----------------|
+| **Balance** | Mode RS-232 | `PC` (Continuous to PC) |
+| **Balance** | Format | `Format 3` (poids seul : `+ 0.200kg`) |
+| **Balance** | Baud Rate | `115200` |
+| **FTDI (Gestionnaire périph.)** | Latency Timer | `1 ms` |
+| **FTDI** | Réception (Octets) | `64` (minimum) |
+| **FTDI** | Transmission (Octets) | `64` (minimum) |
+| **Application** | Baud Rate | `115200` (doit correspondre à la balance) |
+
+### Règles de code :
+- **Thread dédié** : Ne JAMAIS utiliser `DataReceived` event de SerialPort (latence ThreadPool ~15ms). Toujours utiliser un thread dédié avec `ThreadPriority.Highest`.
+- **Regex compilé** : Le pattern de parsing du poids doit être `static readonly` avec `RegexOptions.Compiled`.
+- **Dernière ligne seulement** : En mode continu, ne traiter que la DERNIÈRE ligne reçue pour éviter la latence cumulée.
+- **Dispatcher Send** : Les mises à jour UI depuis le thread série doivent utiliser `DispatcherPriority.Send` (priorité maximale).
+- **Brushes frozen** : Tous les `SolidColorBrush` dans `WeightInputWindow` doivent être `static readonly` et `.Freeze()` pour le cross-thread.
+- **Test connexion** : `TestConnection()` doit vérifier si le service actif utilise déjà le port (sinon erreur "port occupé").
+- **Redémarrage** : Toute modification des paramètres balance doit proposer un redémarrage automatique après sauvegarde.
+
+### Commandes RS-232 Adam Equipment SWZ :
+| Commande | Format | Description |
+|----------|--------|-------------|
+| **Tare** | `T\r\n` | Tarer la balance |
+| **Zéro** | `Z\r\n` | Remettre à zéro |
+| **Print** | `P\r\n` | Demander le poids |
+| **Prix unitaire** | `$XX.XX\r\n` | Envoyer le prix/kg à l'afficheur |
+
+> **Important** : Toutes les commandes DOIVENT être en lettres MAJUSCULES.
+
+### Produits connectés :
+- **Adaptateur** : FTDI FT232R (VID: 0403, PID: 6001)
+- **Balance** : Adam Equipment Swift SWZ (série)
+- **Port par défaut** : COM3
+- **Trame** : 8 bits, pas de parité, 1 stop bit, pas de contrôle de flux
+
+## 11. Gestion des Images Produits
+
+### Règles :
+- **Stockage** : Dossier `Images/Produits/` à la racine de l'exécutable.
+- **Nommage** : `produit_{Id}_{ticks}.png` — le timestamp force le rechargement du cache WPF.
+- **Remplacement** : Lors du remplacement d'une image, SUPPRIMER l'ancien fichier avant d'écrire le nouveau.
+- **Suppression** : Quand l'image d'un produit est supprimée, le fichier physique doit aussi être supprimé.
+- **Affichage** : Les images doivent apparaître dans : Panier admin, Panier client, Fenêtre poids, Remise article, Promotions, Écran client, Dashboard, Stocks.

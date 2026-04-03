@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.Windows;
+using System.Windows.Media;
 using System.Windows.Threading;
 using SystemeCaisse.Core.Entities;
 using SystemeCaisse.UI.Services;
@@ -16,6 +17,21 @@ namespace SystemeCaisse.UI.Views
         private readonly decimal _prixKg;
         private bool _isAutoMode = true;
         private decimal _liveWeight;
+
+        // Pré-cached brushes pour éviter les allocations à chaque mise à jour
+        private static readonly SolidColorBrush BrushGreen = new((Color)ColorConverter.ConvertFromString("#2E7D32"));
+        private static readonly SolidColorBrush BrushGreenBg = new((Color)ColorConverter.ConvertFromString("#E8F5E9"));
+        private static readonly SolidColorBrush BrushOrange = new((Color)ColorConverter.ConvertFromString("#E65100"));
+        private static readonly SolidColorBrush BrushOrangeBg = new((Color)ColorConverter.ConvertFromString("#FFF3E0"));
+
+        static WeightInputWindow()
+        {
+            // Freeze brushes for thread-safe cross-thread usage
+            BrushGreen.Freeze();
+            BrushGreenBg.Freeze();
+            BrushOrange.Freeze();
+            BrushOrangeBg.Freeze();
+        }
 
         /// <summary>
         /// Constructeur avec service balance optionnel.
@@ -43,6 +59,12 @@ namespace SystemeCaisse.UI.Views
                 _scaleService.StatusChanged += OnStatusChanged;
                 UpdateConnectionStatus(true);
                 AutoModeRadio.IsChecked = true;
+
+                // Envoyer le prix unitaire à l'afficheur de la balance
+                if (_prixKg > 0)
+                {
+                    _scaleService.SendUnitPrice(_prixKg);
+                }
             }
             else
             {
@@ -64,11 +86,13 @@ namespace SystemeCaisse.UI.Views
 
         private void OnWeightChanged(decimal weight)
         {
-            Dispatcher.BeginInvoke(() =>
+            // DispatcherPriority.Send = Priorité MAXIMALE, exécution immédiate
+            // (plus prioritaire que Input, Render, DataBind, etc.)
+            Dispatcher.BeginInvoke(DispatcherPriority.Send, () =>
             {
                 _liveWeight = weight;
                 LiveWeightText.Text = weight.ToString("N3");
-                
+
                 decimal estimated = weight * _prixKg;
                 EstimatedPriceText.Text = $"{estimated:N2} €";
             });
@@ -76,7 +100,7 @@ namespace SystemeCaisse.UI.Views
 
         private void OnStatusChanged(string status)
         {
-            Dispatcher.BeginInvoke(() =>
+            Dispatcher.BeginInvoke(DispatcherPriority.Send, () =>
             {
                 bool connected = status == "Connecté";
                 UpdateConnectionStatus(connected);
@@ -90,19 +114,15 @@ namespace SystemeCaisse.UI.Views
             {
                 StatusIcon.Text = "🟢";
                 StatusText.Text = "Balance connectée";
-                StatusText.Foreground = new System.Windows.Media.SolidColorBrush(
-                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2E7D32"));
-                StatusBorder.Background = new System.Windows.Media.SolidColorBrush(
-                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#E8F5E9"));
+                StatusText.Foreground = BrushGreen;
+                StatusBorder.Background = BrushGreenBg;
             }
             else
             {
                 StatusIcon.Text = "🔴";
                 StatusText.Text = "Balance déconnectée";
-                StatusText.Foreground = new System.Windows.Media.SolidColorBrush(
-                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#E65100"));
-                StatusBorder.Background = new System.Windows.Media.SolidColorBrush(
-                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FFF3E0"));
+                StatusText.Foreground = BrushOrange;
+                StatusBorder.Background = BrushOrangeBg;
             }
         }
 

@@ -93,6 +93,9 @@ namespace SystemeCaisse.UI.ViewModels
         private SystemeCaisse.UI.Views.CustomerDisplayWindow? _customerDisplay;
         private SerialScaleService? _scaleService;
 
+        /// <summary>Service balance RS-232 actif (peut être null si désactivé).</summary>
+        public SerialScaleService? ScaleService => _scaleService;
+
         private Produit? _selectedSearchProduct;
         public Produit? SelectedSearchProduct
         {

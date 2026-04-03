@@ -1,22 +1,35 @@
 using System;
 using System.Globalization;
 using System.IO.Ports;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 
 namespace SystemeCaisse.UI.Services
 {
     /// <summary>
-    /// Service de communication avec une balance Adam Equipment Swift SWZ via RS-232.
-    /// Supporte les modes Continu (PC), Commande et Impression.
-    /// Format de données attendu (Format 3) : "+ 0.200kg<cr><lf>"
+    /// Service ultra-réactif de communication avec une balance Adam Equipment Swift SWZ via RS-232.
+    /// 
+    /// Architecture : Thread dédié avec lecture active en boucle serrée.
+    /// Mode hybride : fonctionne en continu (réception passive) ET en polling actif
+    /// (envoi de commande P toutes les ~30ms pour forcer la balance à répondre).
+    /// 
+    /// CONFIGURATION OPTIMALE :
+    /// - Balance : Mode PC/Continuous, Format 3, Baud 115200
+    /// - FTDI : Latency Timer = 1ms, Réception/Transmission = 64 octets
+    /// - Application : Baud Rate = 115200
     /// </summary>
     public class SerialScaleService : IDisposable
     {
         private SerialPort? _serialPort;
-        private string _buffer = string.Empty;
-        private readonly object _lock = new();
+        private Thread? _readThread;
+        private volatile bool _running;
         private bool _disposed;
+
+        // Regex pré-compilé en code IL natif
+        private static readonly Regex WeightRegex = new(
+            @"([+-])?\s*(\d+\.?\d*)\s*(kg|g|lb|oz)?",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         /// <summary>Déclenché à chaque nouveau poids lu.</summary>
         public event Action<decimal>? WeightChanged;
@@ -33,14 +46,18 @@ namespace SystemeCaisse.UI.Services
         /// <summary>Dernier poids lu (en kg).</summary>
         public decimal CurrentWeight { get; private set; }
 
+        /// <summary>Active le mode polling (envoie P\r\n en boucle).</summary>
+        public bool PollingEnabled { get; set; } = false;
+
+        /// <summary>Nom du port actuellement ouvert.</summary>
+        public string? ActivePortName => _serialPort?.PortName;
+
         /// <summary>
-        /// Ouvre le port série et commence l'écoute des données de la balance.
+        /// Ouvre le port série et démarre le thread de lecture ultra-rapide.
         /// </summary>
-        /// <param name="portName">Nom du port (ex: COM3)</param>
-        /// <param name="baudRate">Vitesse de transmission (défaut: 9600)</param>
         public void Start(string portName, int baudRate = 9600)
         {
-            Stop(); // Fermer toute connexion précédente
+            Stop();
 
             try
             {
@@ -52,19 +69,45 @@ namespace SystemeCaisse.UI.Services
                     Parity = Parity.None,
                     StopBits = StopBits.One,
                     Handshake = Handshake.None,
-                    ReadTimeout = 2000,
-                    WriteTimeout = 1000,
-                    Encoding = System.Text.Encoding.ASCII,
+
+                    // Buffers au minimum absolu
+                    ReadBufferSize = 128,
+                    WriteBufferSize = 64,
+
+                    // Notification immédiate
+                    ReceivedBytesThreshold = 1,
+
+                    // Timeout très court
+                    ReadTimeout = 30,
+                    WriteTimeout = 30,
+
+                    // Ignorer les zéros parasites
+                    DiscardNull = true,
+
+                    Encoding = Encoding.ASCII,
                     NewLine = "\r\n",
-                    // DTR/RTS activés pour certaines balances qui en ont besoin
+
+                    // FTDI signaux
                     DtrEnable = true,
                     RtsEnable = true
                 };
 
-                _serialPort.DataReceived += OnDataReceived;
-                _serialPort.ErrorReceived += OnErrorReceived;
-
                 _serialPort.Open();
+
+                // Purge complète
+                _serialPort.DiscardInBuffer();
+                _serialPort.DiscardOutBuffer();
+                _serialPort.BaseStream.Flush();
+
+                // Thread haute priorité
+                _running = true;
+                _readThread = new Thread(ReadLoop)
+                {
+                    Name = "ScaleReader",
+                    IsBackground = true,
+                    Priority = ThreadPriority.Highest
+                };
+                _readThread.Start();
 
                 StatusChanged?.Invoke("Connecté");
             }
@@ -86,181 +129,246 @@ namespace SystemeCaisse.UI.Services
         }
 
         /// <summary>
-        /// Ferme le port série et arrête l'écoute.
+        /// Boucle de lecture ultra-rapide sur thread dédié (priorité max).
+        /// Lit en continu + polling actif optionnel.
         /// </summary>
+        private void ReadLoop()
+        {
+            var buffer = new StringBuilder(32);
+            int pollCounter = 0;
+
+            while (_running)
+            {
+                try
+                {
+                    if (_serialPort == null || !_serialPort.IsOpen)
+                    {
+                        Thread.Sleep(50);
+                        continue;
+                    }
+
+                    // === POLLING ACTIF : envoyer P toutes les ~30ms ===
+                    if (PollingEnabled)
+                    {
+                        pollCounter++;
+                        if (pollCounter >= 3) // Toutes les 3 itérations (~30ms)
+                        {
+                            pollCounter = 0;
+                            try
+                            {
+                                _serialPort.Write("P\r\n");
+                            }
+                            catch { }
+                        }
+                    }
+
+                    // === LECTURE INSTANTANÉE ===
+                    if (_serialPort.BytesToRead > 0)
+                    {
+                        // Lire tout d'un coup via le Stream sous-jacent (plus rapide que ReadExisting)
+                        byte[] readBuffer = new byte[_serialPort.BytesToRead];
+                        int bytesRead = _serialPort.BaseStream.Read(readBuffer, 0, readBuffer.Length);
+
+                        if (bytesRead > 0)
+                        {
+                            string data = Encoding.ASCII.GetString(readBuffer, 0, bytesRead);
+                            buffer.Append(data);
+
+                            // Traiter dès qu'on a un \n
+                            string bufStr = buffer.ToString();
+                            int lastNl = bufStr.LastIndexOf('\n');
+
+                            if (lastNl >= 0)
+                            {
+                                string remaining = lastNl + 1 < bufStr.Length ? bufStr.Substring(lastNl + 1) : "";
+                                string complete = bufStr.Substring(0, lastNl + 1);
+
+                                buffer.Clear();
+                                if (remaining.Length > 0) buffer.Append(remaining);
+
+                                // DERNIÈRE ligne valide uniquement
+                                int start = complete.LastIndexOf('\n', lastNl > 0 ? lastNl - 1 : 0);
+                                string lastLine;
+                                if (start >= 0)
+                                {
+                                    lastLine = complete.Substring(start + 1).Trim('\r', '\n', ' ');
+                                    if (string.IsNullOrWhiteSpace(lastLine))
+                                    {
+                                        // Fallback : parcourir depuis la fin
+                                        var lines = complete.Split('\n');
+                                        lastLine = "";
+                                        for (int i = lines.Length - 1; i >= 0; i--)
+                                        {
+                                            lastLine = lines[i].Trim('\r', '\n', ' ');
+                                            if (!string.IsNullOrWhiteSpace(lastLine)) break;
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    lastLine = complete.Trim('\r', '\n', ' ');
+                                }
+
+                                if (!string.IsNullOrWhiteSpace(lastLine))
+                                {
+                                    RawDataReceived?.Invoke(lastLine);
+                                    ParseWeight(lastLine);
+                                }
+                            }
+
+                            // Anti-overflow
+                            if (buffer.Length > 64) buffer.Clear();
+                        }
+                    }
+                    else
+                    {
+                        // Pas de données : spin-wait ultra-court
+                        // SpinWait est plus rapide que Thread.Sleep(1) car il ne yield pas au scheduler
+                        Thread.SpinWait(500);
+                        // Puis yield léger pour pas brûler le CPU
+                        Thread.Sleep(0); // Yield uniquement si un autre thread attend
+                    }
+                }
+                catch (TimeoutException) { } // Normal
+                catch (InvalidOperationException)
+                {
+                    if (_running)
+                    {
+                        _running = false;
+                        StatusChanged?.Invoke("Déconnecté");
+                    }
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    if (_running)
+                    {
+                        StatusChanged?.Invoke($"Erreur: {ex.Message}");
+                        Thread.Sleep(50);
+                    }
+                }
+            }
+        }
+
+        /// <summary>Ferme le port et arrête le thread.</summary>
         public void Stop()
         {
+            _running = false;
+
+            if (_readThread != null && _readThread.IsAlive)
+            {
+                _readThread.Join(150);
+                _readThread = null;
+            }
+
             if (_serialPort != null)
             {
                 try
                 {
-                    _serialPort.DataReceived -= OnDataReceived;
-                    _serialPort.ErrorReceived -= OnErrorReceived;
-
                     if (_serialPort.IsOpen)
                     {
+                        _serialPort.DiscardInBuffer();
                         _serialPort.Close();
                     }
-
                     _serialPort.Dispose();
                 }
-                catch { /* Ignore errors during cleanup */ }
+                catch { }
                 finally
                 {
                     _serialPort = null;
-                    _buffer = string.Empty;
                     StatusChanged?.Invoke("Déconnecté");
                 }
             }
         }
 
-        /// <summary>
-        /// Envoie une commande à la balance (P, T ou Z).
-        /// Adam Equipment SWZ : Toutes les commandes doivent être en majuscules + CR LF.
-        /// </summary>
+        /// <summary>Envoie une commande à la balance.</summary>
         public void SendCommand(string command)
+        {
+            if (_serialPort?.IsOpen == true)
+            {
+                try { _serialPort.Write(command.ToUpper() + "\r\n"); }
+                catch (Exception ex) { StatusChanged?.Invoke($"Erreur envoi: {ex.Message}"); }
+            }
+        }
+
+        public void Tare() => SendCommand("T");
+        public void Zero() => SendCommand("Z");
+        public void RequestWeight() => SendCommand("P");
+
+        /// <summary>
+        /// Envoie le prix unitaire à l'afficheur de la balance.
+        /// Format Adam Equipment SWZ : "$XXXX.XX" suivi de CR LF.
+        /// La balance calcule automatiquement PRICE TO PAY = UNIT PRICE × poids.
+        /// </summary>
+        public void SendUnitPrice(decimal unitPrice)
         {
             if (_serialPort?.IsOpen == true)
             {
                 try
                 {
-                    _serialPort.Write(command.ToUpper() + "\r\n");
+                    // Format avec point décimal, max 6 chiffres + 2 décimales
+                    string priceStr = unitPrice.ToString("F2", CultureInfo.InvariantCulture);
+                    _serialPort.Write($"${priceStr}\r\n");
                 }
                 catch (Exception ex)
                 {
-                    StatusChanged?.Invoke($"Erreur envoi: {ex.Message}");
+                    StatusChanged?.Invoke($"Erreur envoi prix: {ex.Message}");
                 }
             }
         }
 
-        /// <summary>Envoie la commande Tare (T) à la balance.</summary>
-        public void Tare() => SendCommand("T");
-
-        /// <summary>Envoie la commande Zéro (Z) à la balance.</summary>
-        public void Zero() => SendCommand("Z");
-
-        /// <summary>Demande le poids actuel (P) en mode Commande.</summary>
-        public void RequestWeight() => SendCommand("P");
-
         /// <summary>
-        /// Teste la connexion en ouvrant le port brièvement.
-        /// Retourne true si le port peut être ouvert.
+        /// Teste la connexion. Si le port est déjà ouvert par ce service, retourne true.
+        /// Sinon tente d'ouvrir brièvement le port.
         /// </summary>
-        public static bool TestConnection(string portName, int baudRate = 9600)
+        public static bool TestConnection(string portName, int baudRate = 9600, SerialScaleService? activeService = null)
         {
+            // Si le service courant utilise déjà ce port, il est connecté → succès
+            if (activeService != null && activeService.IsConnected 
+                && string.Equals(activeService.ActivePortName, portName, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
             try
             {
-                using var testPort = new SerialPort(portName, baudRate, Parity.None, 8, StopBits.One);
-                testPort.ReadTimeout = 1000;
-                testPort.Open();
-                // Try to send a Print command and wait for response
-                testPort.Write("P\r\n");
-                Thread.Sleep(500);
-                bool hasData = testPort.BytesToRead > 0;
-                testPort.Close();
-                return true; // Port opens successfully
+                using var tp = new SerialPort(portName, baudRate, Parity.None, 8, StopBits.One);
+                tp.ReadTimeout = 500;
+                tp.DtrEnable = true;
+                tp.RtsEnable = true;
+                tp.Open();
+                tp.DiscardInBuffer();
+                tp.Write("P\r\n");
+                Thread.Sleep(200);
+                tp.Close();
+                return true;
             }
-            catch
-            {
-                return false;
-            }
+            catch { return false; }
         }
 
-        /// <summary>
-        /// Retourne la liste des ports COM disponibles sur le système.
-        /// </summary>
         public static string[] GetAvailablePorts() => SerialPort.GetPortNames();
 
-        private void OnDataReceived(object sender, SerialDataReceivedEventArgs e)
-        {
-            if (_serialPort == null || !_serialPort.IsOpen) return;
-
-            try
-            {
-                string data = _serialPort.ReadExisting();
-                
-                lock (_lock)
-                {
-                    _buffer += data;
-
-                    // Traiter chaque ligne complète (terminée par \r\n ou \n)
-                    while (_buffer.Contains('\n'))
-                    {
-                        int idx = _buffer.IndexOf('\n');
-                        string line = _buffer.Substring(0, idx).Trim('\r', '\n', ' ');
-                        _buffer = _buffer.Substring(idx + 1);
-
-                        if (!string.IsNullOrWhiteSpace(line))
-                        {
-                            RawDataReceived?.Invoke(line);
-                            ParseWeight(line);
-                        }
-                    }
-
-                    // Prevent buffer overflow
-                    if (_buffer.Length > 1024)
-                    {
-                        _buffer = _buffer.Substring(_buffer.Length - 256);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                StatusChanged?.Invoke($"Erreur lecture: {ex.Message}");
-            }
-        }
-
-        private void OnErrorReceived(object sender, SerialErrorReceivedEventArgs e)
-        {
-            StatusChanged?.Invoke($"Erreur série: {e.EventType}");
-        }
-
-        /// <summary>
-        /// Parse le poids depuis une ligne de données de la balance.
-        /// Supporte multiples formats Adam Equipment SWZ :
-        /// - Format 3 simple : "+ 0.200kg" ou "- 1.500kg"
-        /// - Format avec statut : "ST,GS,+  0.200  kg"
-        /// - Poids brut numérique : "0.200"
-        /// </summary>
+        /// <summary>Parse rapide du poids. Format SWZ : "+ 0.200kg"</summary>
         private void ParseWeight(string line)
         {
-            decimal weight = 0;
-            bool parsed = false;
+            var match = WeightRegex.Match(line);
+            if (!match.Success) return;
 
-            // ===== Format 3 Adam Equipment SWZ : "+ 0.200kg" ou "+0.200 kg" =====
-            // Regex: optional sign, spaces, decimal number, optional spaces, optional unit
-            var match = Regex.Match(line, @"([+-])?\s*(\d+\.?\d*)\s*(kg|g|lb|oz)?", RegexOptions.IgnoreCase);
-            if (match.Success)
-            {
-                string numStr = match.Groups[2].Value;
-                if (decimal.TryParse(numStr, NumberStyles.Any, CultureInfo.InvariantCulture, out weight))
-                {
-                    // Apply sign
-                    if (match.Groups[1].Value == "-")
-                        weight = -weight;
+            if (!decimal.TryParse(match.Groups[2].Value, NumberStyles.Any,
+                CultureInfo.InvariantCulture, out decimal weight)) return;
 
-                    // Convert grams to kg if unit is 'g'
-                    if (match.Groups[3].Success && match.Groups[3].Value.Equals("g", StringComparison.OrdinalIgnoreCase))
-                        weight /= 1000m;
+            if (match.Groups[1].Value == "-") weight = -weight;
+            if (match.Groups[3].Success &&
+                match.Groups[3].Value.Equals("g", StringComparison.OrdinalIgnoreCase))
+                weight /= 1000m;
 
-                    parsed = true;
-                }
-            }
-
-            if (parsed)
-            {
-                CurrentWeight = weight;
-                WeightChanged?.Invoke(weight);
-            }
+            CurrentWeight = weight;
+            WeightChanged?.Invoke(weight);
         }
 
         public void Dispose()
         {
-            if (!_disposed)
-            {
-                _disposed = true;
-                Stop();
-            }
+            if (!_disposed) { _disposed = true; Stop(); }
         }
     }
 }
