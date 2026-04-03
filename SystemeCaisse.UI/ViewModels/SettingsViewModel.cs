@@ -108,7 +108,193 @@ namespace SystemeCaisse.UI.ViewModels
             _scaleSettingsChanged = true;
         }
 
+        // === Price Format Testing ===
+        [ObservableProperty]
+        private string _selectedPriceFormat = "$XX.XX";
+
+        [ObservableProperty]
+        private string _testPriceValue = "5.90";
+
+        [ObservableProperty]
+        private string _priceTestResult = "";
+
+        [ObservableProperty]
+        private string _customScaleCommand = "";
+
+        public List<string> AvailablePriceFormats { get; } = new()
+        {
+            "$XX.XX",
+            "U XX.XX",
+            "UP XX.XX",
+            "UXXXX (centimes)",
+            "C1 XX.XX",
+            "F XX.XX",
+            "XX.XX (brut)",
+            "STX $ XX.XX ETX",
+            "ESC P XX.XX",
+            "W1 XX.XX",
+            "S XX.XX",
+            "N XX.XX",
+            "PLU XX.XX",
+            "01XXXXXX (8 chiffres)"
+        };
+
+        public string PriceFormatDescription => SelectedPriceFormat switch
+        {
+            "$XX.XX" => "Envoi : $5.90\\r\\n — Format dollar courant Adam Equipment",
+            "U XX.XX" => "Envoi : U 5.90\\r\\n — Commande Unit price avec espace",
+            "UP XX.XX" => "Envoi : UP 5.90\\r\\n — Commande Unit Price préfixe",
+            "UXXXX (centimes)" => "Envoi : U0590\\r\\n — Prix en centimes sans point décimal",
+            "C1 XX.XX" => "Envoi : C1 5.90\\r\\n — Canal 1 prix",
+            "F XX.XX" => "Envoi : F 5.90\\r\\n — Format F (certains modèles)",
+            "XX.XX (brut)" => "Envoi : 5.90\\r\\n — Juste la valeur numérique",
+            "STX $ XX.XX ETX" => "Envoi : \\x02$5.90\\x03 — Encapsulé STX/ETX",
+            "ESC P XX.XX" => "Envoi : \\x1BP5.90\\r\\n — Séquence Escape + P",
+            "W1 XX.XX" => "Envoi : W1 5.90\\r\\n — Write register 1",
+            "S XX.XX" => "Envoi : S 5.90\\r\\n — Set price",
+            "N XX.XX" => "Envoi : N 5.90\\r\\n — Numeric input",
+            "PLU XX.XX" => "Envoi : PLU 5.90\\r\\n — Product Look Up prix",
+            "01XXXXXX (8 chiffres)" => "Envoi : 01000590\\r\\n — Code 01 + 6 chiffres centimes",
+            _ => ""
+        };
+
+        public string TestPricePreview
+        {
+            get
+            {
+                if (!decimal.TryParse(TestPriceValue?.Replace(',', '.'), System.Globalization.NumberStyles.Any, 
+                    System.Globalization.CultureInfo.InvariantCulture, out decimal price))
+                    return "⚠️ Prix invalide";
+                return $"Aperçu : \"{FormatPriceCommand(SelectedPriceFormat, price)}\\r\\n\"";
+            }
+        }
+
+        partial void OnSelectedPriceFormatChanged(string value)
+        {
+            OnPropertyChanged(nameof(PriceFormatDescription));
+            OnPropertyChanged(nameof(TestPricePreview));
+        }
+
+        partial void OnTestPriceValueChanged(string value)
+        {
+            OnPropertyChanged(nameof(TestPricePreview));
+        }
+
+        private string FormatPriceCommand(string format, decimal price)
+        {
+            string priceStr = price.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+            int centimes = (int)(price * 100);
+
+            return format switch
+            {
+                "$XX.XX" => $"${priceStr}",
+                "U XX.XX" => $"U {priceStr}",
+                "UP XX.XX" => $"UP {priceStr}",
+                "UXXXX (centimes)" => $"U{centimes:D4}",
+                "C1 XX.XX" => $"C1 {priceStr}",
+                "F XX.XX" => $"F {priceStr}",
+                "XX.XX (brut)" => priceStr,
+                "STX $ XX.XX ETX" => $"\x02${priceStr}\x03",
+                "ESC P XX.XX" => $"\x1BP{priceStr}",
+                "W1 XX.XX" => $"W1 {priceStr}",
+                "S XX.XX" => $"S {priceStr}",
+                "N XX.XX" => $"N {priceStr}",
+                "PLU XX.XX" => $"PLU {priceStr}",
+                "01XXXXXX (8 chiffres)" => $"01{centimes:D6}",
+                _ => priceStr
+            };
+        }
+
+        private SerialScaleService? GetActiveScaleService()
+        {
+            var mainWin = Application.Current.MainWindow;
+            if (mainWin?.DataContext is MainViewModel mainVM)
+                return mainVM.ScaleService;
+            return null;
+        }
+
+        [RelayCommand]
+        private void SendTestPrice()
+        {
+            var service = GetActiveScaleService();
+            if (service == null || !service.IsConnected)
+            {
+                PriceTestResult = "❌ Balance non connectée. Activez et redémarrez d'abord.";
+                return;
+            }
+
+            if (!decimal.TryParse(TestPriceValue?.Replace(',', '.'), System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out decimal price))
+            {
+                PriceTestResult = "❌ Prix invalide.";
+                return;
+            }
+
+            string cmd = FormatPriceCommand(SelectedPriceFormat, price);
+            service.SendCommand(cmd);
+            PriceTestResult = $"✅ Envoyé [{SelectedPriceFormat}] : \"{cmd}\\r\\n\" — Vérifiez l'afficheur !";
+        }
+
+        [RelayCommand]
+        private async Task SendAllPriceFormats()
+        {
+            var service = GetActiveScaleService();
+            if (service == null || !service.IsConnected)
+            {
+                PriceTestResult = "❌ Balance non connectée.";
+                return;
+            }
+
+            if (!decimal.TryParse(TestPriceValue?.Replace(',', '.'), System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out decimal price))
+            {
+                PriceTestResult = "❌ Prix invalide.";
+                return;
+            }
+
+            PriceTestResult = "⏳ Test de tous les formats en cours...";
+
+            foreach (var format in AvailablePriceFormats)
+            {
+                string cmd = FormatPriceCommand(format, price);
+                service.SendCommand(cmd);
+                PriceTestResult = $"📤 [{format}] : \"{cmd}\" — Vérifiez l'afficheur !";
+                await Task.Delay(2500); // 2.5s entre chaque pour observer
+            }
+
+            PriceTestResult = "✅ Tous les formats ont été testés. Si aucun n'a fonctionné, essayez la commande personnalisée.";
+        }
+
+        [RelayCommand]
+        private void SendCustomCommand()
+        {
+            var service = GetActiveScaleService();
+            if (service == null || !service.IsConnected)
+            {
+                PriceTestResult = "❌ Balance non connectée.";
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(CustomScaleCommand))
+            {
+                PriceTestResult = "❌ Saisissez une commande.";
+                return;
+            }
+
+            // Interpréter les séquences d'échappement
+            string cmd = CustomScaleCommand
+                .Replace("\\x02", "\x02")
+                .Replace("\\x03", "\x03")
+                .Replace("\\x1B", "\x1B")
+                .Replace("\\r", "\r")
+                .Replace("\\n", "\n");
+
+            service.SendCommand(cmd);
+            PriceTestResult = $"✅ Envoyé : \"{CustomScaleCommand}\\r\\n\"";
+        }
+
         public ObservableCollection<DisplayPromotionItem> AvailableDisplayPromotions { get; set; } = new ObservableCollection<DisplayPromotionItem>();
+
 
         public SettingsViewModel(IDbContextFactory<AppDbContext> contextFactory, IDataMigrationService migrationService)
         {
