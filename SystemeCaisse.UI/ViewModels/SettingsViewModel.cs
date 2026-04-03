@@ -57,6 +57,9 @@ namespace SystemeCaisse.UI.ViewModels
 
         [ObservableProperty]
         private bool _isTrainingMode;
+
+        [ObservableProperty]
+        private int _topProductsCount = 20;
         
         [ObservableProperty]
         private bool _isCustomerDisplayEnabled = true;
@@ -429,6 +432,9 @@ namespace SystemeCaisse.UI.ViewModels
             var scaleBaud = context.Configuration.Find("scale_baud_rate");
             if (scaleBaud != null && int.TryParse(scaleBaud.Valeur, out int sb)) ScaleBaudRate = sb;
 
+            var topCount = context.Configuration.Find("top_products_count");
+            if (topCount != null && int.TryParse(topCount.Valeur, out int tc)) TopProductsCount = tc;
+
             // Load Display Promotions for selection
             LoadDisplayPromotionsSelection(context);
         }
@@ -466,6 +472,12 @@ namespace SystemeCaisse.UI.ViewModels
                 string name = $"Écran {i + 1} {(s.IsPrimary ? "(Principal)" : "")} - {s.Bounds.Width}x{s.Bounds.Height}";
                 AvailableScreens.Add(name);
             }
+        }
+
+        [RelayCommand]
+        private void RefreshScreens()
+        {
+            LoadScreens();
         }
 
         private void LoadPrinters()
@@ -569,6 +581,7 @@ namespace SystemeCaisse.UI.ViewModels
                 UpdateConfig(context, "customer_display_screen_index", SelectedScreenIndex.ToString());
                 UpdateConfig(context, "customer_display_show_promotions", ShowCustomerDisplayPromotions.ToString());
                 UpdateConfig(context, "customer_display_compact", IsCompactCustomerDisplay.ToString());
+                UpdateConfig(context, "top_products_count", TopProductsCount.ToString());
 
                 // Save Scale settings
                 UpdateConfig(context, "scale_enabled", IsScaleEnabled.ToString());

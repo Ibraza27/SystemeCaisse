@@ -164,10 +164,18 @@
                                 <CheckBox Content="Activer l'affichage client" IsChecked="{Binding IsCustomerDisplayEnabled}" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
                                 
                                 <Label Content="Sélectionner l'écran d'affichage"/>
-                                <ComboBox ItemsSource="{Binding AvailableScreens}" 
-                                          SelectedIndex="{Binding SelectedScreenIndex}" 
-                                          IsEnabled="{Binding IsCustomerDisplayEnabled}"
-                                          Padding="5" Margin="0,0,0,10"/>
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox ItemsSource="{Binding AvailableScreens}" 
+                                              SelectedIndex="{Binding SelectedScreenIndex}" 
+                                              IsEnabled="{Binding IsCustomerDisplayEnabled}"
+                                              Padding="5" Margin="0,0,10,0"/>
+                                    <Button Grid.Column="1" Content="🔄" Command="{Binding RefreshScreensCommand}" 
+                                            Width="35" Height="30" ToolTip="Rafraîchir les écrans détectés"/>
+                                </Grid>
 
                                 <Button Content="Appliquer immédiatement" 
                                         Command="{Binding ApplyCustomerDisplayCommand}"
@@ -221,6 +229,23 @@
                 <!-- Promotions Tab -->
                 <TabItem Header="🏷️ Promotions">
                     <views:PromotionsView DataContext="{Binding DataContext.PromotionsVM, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                </TabItem>
+
+                <!-- Caisse Tab -->
+                <TabItem Header="🛒 Caisse">
+                    <StackPanel Margin="20" MaxWidth="600" HorizontalAlignment="Left">
+                        <GroupBox Header="Interface de Vente" Padding="15">
+                            <StackPanel>
+                                <Label Content="Nombre de Top Produits à afficher"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Slider Value="{Binding TopProductsCount}" Minimum="5" Maximum="50" Width="200" TickFrequency="5" IsSnapToTickEnabled="True" Margin="0,0,10,0"/>
+                                    <TextBlock Text="{Binding TopProductsCount}" VerticalAlignment="Center" FontWeight="Bold"/>
+                                    <TextBlock Text=" produits" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBlock Text="Mettez à jour le nombre d'articles les plus vendus affichés dans l'onglet des favoris." Foreground="#666" FontSize="11" FontStyle="Italic" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
                 </TabItem>
 
                 <!-- System Tab -->

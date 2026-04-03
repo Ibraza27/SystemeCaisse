@@ -849,7 +849,11 @@ namespace SystemeCaisse.UI.ViewModels
                     p.ValidatedSalesCount = stat?.Count ?? 0;
                 }
 
-                // Update Top 20 (Active products only)
+                 // Get top limits from config
+                 var countConfig = context.Configuration.Find("top_products_count");
+                 int topLimit = (countConfig != null && int.TryParse(countConfig.Valeur, out int tc)) ? tc : 20;
+
+                // Update Top Products (Active products only)
                 var top20Items = new List<Produit>();
                 foreach (var stat in salesStats) 
                 {
@@ -857,7 +861,7 @@ namespace SystemeCaisse.UI.ViewModels
                     if (matchingProd != null && !top20Items.Contains(matchingProd))
                     {
                         top20Items.Add(matchingProd);
-                        if (top20Items.Count >= 20) break;
+                        if (top20Items.Count >= topLimit) break;
                     }
                 }
 
