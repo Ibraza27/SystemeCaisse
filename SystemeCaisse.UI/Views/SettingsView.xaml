@@ -236,9 +236,15 @@
                     <StackPanel Margin="20" MaxWidth="600" HorizontalAlignment="Left">
                         <GroupBox Header="Interface de Vente" Padding="15">
                             <StackPanel>
-                                <Label Content="Nombre de Top Produits à afficher"/>
-                                <StackPanel Orientation="Horizontal">
-                                    <Slider Value="{Binding TopProductsCount}" Minimum="5" Maximum="50" Width="200" TickFrequency="5" IsSnapToTickEnabled="True" Margin="0,0,10,0"/>
+                                <CheckBox Content="Afficher tous les produits actifs (sans limite)" 
+                                          IsChecked="{Binding ShowAllTopProducts}" 
+                                          FontSize="14" FontWeight="SemiBold" Margin="0,0,0,15"/>
+
+                                <Label Content="Nombre de Top Produits à afficher" 
+                                       IsEnabled="{Binding ShowAllTopProducts, Converter={StaticResource BoolInverter}}"/>
+                                <StackPanel Orientation="Horizontal" 
+                                            IsEnabled="{Binding ShowAllTopProducts, Converter={StaticResource BoolInverter}}">
+                                    <Slider Value="{Binding TopProductsCount}" Minimum="5" Maximum="100" Width="250" TickFrequency="5" IsSnapToTickEnabled="True" Margin="0,0,10,0"/>
                                     <TextBlock Text="{Binding TopProductsCount}" VerticalAlignment="Center" FontWeight="Bold"/>
                                     <TextBlock Text=" produits" VerticalAlignment="Center"/>
                                 </StackPanel>

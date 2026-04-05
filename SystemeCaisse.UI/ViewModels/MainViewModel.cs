@@ -852,6 +852,9 @@ namespace SystemeCaisse.UI.ViewModels
                  // Get top limits from config
                  var countConfig = context.Configuration.Find("top_products_count");
                  int topLimit = (countConfig != null && int.TryParse(countConfig.Valeur, out int tc)) ? tc : 20;
+                 
+                 var showAllConfig = context.Configuration.Find("show_all_top_products");
+                 bool showAll = (showAllConfig != null && bool.TryParse(showAllConfig.Valeur, out bool sa)) && sa;
 
                 // Update Top Products (Active products only)
                 var top20Items = new List<Produit>();
@@ -861,7 +864,7 @@ namespace SystemeCaisse.UI.ViewModels
                     if (matchingProd != null && !top20Items.Contains(matchingProd))
                     {
                         top20Items.Add(matchingProd);
-                        if (top20Items.Count >= topLimit) break;
+                        if (!showAll && top20Items.Count >= topLimit) break;
                     }
                 }
 

@@ -60,6 +60,9 @@ namespace SystemeCaisse.UI.ViewModels
 
         [ObservableProperty]
         private int _topProductsCount = 20;
+
+        [ObservableProperty]
+        private bool _showAllTopProducts;
         
         [ObservableProperty]
         private bool _isCustomerDisplayEnabled = true;
@@ -435,6 +438,9 @@ namespace SystemeCaisse.UI.ViewModels
             var topCount = context.Configuration.Find("top_products_count");
             if (topCount != null && int.TryParse(topCount.Valeur, out int tc)) TopProductsCount = tc;
 
+            var showAll = context.Configuration.Find("show_all_top_products");
+            if (showAll != null && bool.TryParse(showAll.Valeur, out bool sa)) ShowAllTopProducts = sa;
+
             // Load Display Promotions for selection
             LoadDisplayPromotionsSelection(context);
         }
@@ -582,6 +588,7 @@ namespace SystemeCaisse.UI.ViewModels
                 UpdateConfig(context, "customer_display_show_promotions", ShowCustomerDisplayPromotions.ToString());
                 UpdateConfig(context, "customer_display_compact", IsCompactCustomerDisplay.ToString());
                 UpdateConfig(context, "top_products_count", TopProductsCount.ToString());
+                UpdateConfig(context, "show_all_top_products", ShowAllTopProducts.ToString());
 
                 // Save Scale settings
                 UpdateConfig(context, "scale_enabled", IsScaleEnabled.ToString());
@@ -705,6 +712,9 @@ namespace SystemeCaisse.UI.ViewModels
                     if (confirm == MessageBoxResult.Yes)
                     {
                         File.Copy(openDlg.FileName, dbPath, true);
+
+                        // Réparer les chemins d'images après restauration
+                        try { RepairProductImagePaths(); } catch { }
                         
                         if (MessageBox.Show(mainWin, "Sauvegarde restaurée avec succès !\nL'application doit redémarrer pour appliquer les changements.\n\nRedémarrer maintenant ?", 
                             "Restauration terminée", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
@@ -719,6 +729,65 @@ namespace SystemeCaisse.UI.ViewModels
                 MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur restauration : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
+        /// <summary>
+        /// Après restauration d'une sauvegarde, les chemins d'images dans la BDD
+        /// peuvent ne pas correspondre aux fichiers physiques (timestamps différents).
+        /// Cette méthode scanne le dossier Images/Produits et re-lie chaque image
+        /// au produit correspondant en se basant sur le pattern "produit_{ID}_*.ext".
+        /// </summary>
+        private void RepairProductImagePaths()
+        {
+            try
+            {
+                string imagesDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images", "Produits");
+                if (!Directory.Exists(imagesDir)) return;
+
+                using var context = _contextFactory.CreateDbContext();
+                var produits = context.Produits.ToList();
+                var imageFiles = Directory.GetFiles(imagesDir);
+                int repaired = 0;
+
+                foreach (var produit in produits)
+                {
+                    // Vérifier si le chemin actuel est valide
+                    if (!string.IsNullOrWhiteSpace(produit.ImagePath))
+                    {
+                        string fullPath = Path.IsPathRooted(produit.ImagePath) 
+                            ? produit.ImagePath 
+                            : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, produit.ImagePath);
+                        
+                        if (File.Exists(fullPath)) continue; // Image OK, rien à réparer
+                    }
+
+                    // Chercher une image correspondante dans le dossier par ID du produit
+                    var matchingFile = imageFiles.FirstOrDefault(f =>
+                    {
+                        var fileName = Path.GetFileNameWithoutExtension(f);
+                        // Pattern: produit_{ID}_ ou produit_{ID}.
+                        return fileName.StartsWith($"produit_{produit.Id}_") || fileName == $"produit_{produit.Id}";
+                    });
+
+                    if (matchingFile != null)
+                    {
+                        var relativePath = Path.Combine("Images", "Produits", Path.GetFileName(matchingFile));
+                        produit.ImagePath = relativePath;
+                        repaired++;
+                    }
+                }
+
+                if (repaired > 0)
+                {
+                    context.SaveChanges();
+                    System.Diagnostics.Debug.WriteLine($"RepairProductImagePaths: {repaired} images réparées.");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"RepairProductImagePaths error: {ex.Message}");
+            }
+        }
+
         [RelayCommand]
         private void ResetDatabase()
         {
