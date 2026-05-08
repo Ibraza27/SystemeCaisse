@@ -92,9 +92,42 @@ namespace SystemeCaisse.UI.ViewModels
         private System.Windows.Threading.DispatcherTimer? _clockTimer;
         private SystemeCaisse.UI.Views.CustomerDisplayWindow? _customerDisplay;
         private SerialScaleService? _scaleService;
+        private VerifonePaymentTerminalService? _tpeService;
 
         /// <summary>Service balance RS-232 actif (peut être null si désactivé).</summary>
         public SerialScaleService? ScaleService => _scaleService;
+
+        /// <summary>Service TPE Verifone actif (peut être null si désactivé).</summary>
+        public VerifonePaymentTerminalService? TPEService => _tpeService;
+
+        // === TPE Properties ===
+        private bool _isTPEConnected;
+        public bool IsTPEConnected
+        {
+            get => _isTPEConnected;
+            set { _isTPEConnected = value; OnPropertyChanged(); OnPropertyChanged(nameof(ShowTPEPayButton)); }
+        }
+
+        private bool _isTPEPaymentInProgress;
+        public bool IsTPEPaymentInProgress
+        {
+            get => _isTPEPaymentInProgress;
+            set { _isTPEPaymentInProgress = value; OnPropertyChanged(); }
+        }
+
+        private string _tpeStatusMessage = "";
+        public string TPEStatusMessage
+        {
+            get => _tpeStatusMessage;
+            set { _tpeStatusMessage = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Le bouton "Payer par TPE" est visible uniquement si :
+        /// - Le mode de paiement est CB ou Mixte
+        /// - Un TPE est connecté
+        /// </summary>
+        public bool ShowTPEPayButton => IsTPEConnected && (SelectedPaiementMode == "CB" || SelectedPaiementMode == "Mixte");
 
         private Produit? _selectedSearchProduct;
         public Produit? SelectedSearchProduct
@@ -246,6 +279,7 @@ namespace SystemeCaisse.UI.ViewModels
             {
                 _selectedPaiementMode = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(ShowTPEPayButton));
                 RecalculateMonnaie();
             }
         }
@@ -367,6 +401,7 @@ namespace SystemeCaisse.UI.ViewModels
         public ICommand CalculateProductPopularityCommand { get; }
         public ICommand ClearSearchCommand { get; }
         public ICommand ViderPanierCommand { get; }
+        public ICommand SendToTPECommand { get; }
 
         private void ReloadProductsFromDb()
         {
@@ -474,6 +509,7 @@ namespace SystemeCaisse.UI.ViewModels
             EditQuantityCommand = new BasicRelayCommand(EditQuantity);
             CalculateProductPopularityCommand = new BasicRelayCommand(async _ => await CalculateProductPopularity());
             ClearSearchCommand = new BasicRelayCommand(_ => SearchText = string.Empty);
+            SendToTPECommand = new BasicRelayCommand(async _ => await SendToTPE(), _ => Panier.Count > 0 && IsTPEConnected && !IsTPEPaymentInProgress);
             
             OpenWeightDialogCommand = new BasicRelayCommand(_ => 
             {
@@ -604,6 +640,50 @@ namespace SystemeCaisse.UI.ViewModels
                 catch (Exception ex)
                 {
                     System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Scale init error: {ex.Message}\n");
+                }
+
+                // 4. Initialize TPE Service
+                try
+                {
+                    using var tpeCtx = _contextFactory.CreateDbContext();
+                    var tpeEnabled = tpeCtx.Configuration.Find("tpe_enabled");
+                    if (tpeEnabled != null && bool.TryParse(tpeEnabled.Valeur, out bool te) && te)
+                    {
+                        var tpePort = tpeCtx.Configuration.Find("tpe_port_name");
+                        var tpeBaud = tpeCtx.Configuration.Find("tpe_baud_rate");
+                        var tpeTimeout = tpeCtx.Configuration.Find("tpe_timeout");
+                        string portName = tpePort?.Valeur ?? "COM1";
+                        int baudRate = 9600;
+                        if (tpeBaud != null) int.TryParse(tpeBaud.Valeur, out baudRate);
+                        int timeout = 60;
+                        if (tpeTimeout != null) int.TryParse(tpeTimeout.Valeur, out timeout);
+
+                        await Application.Current.Dispatcher.InvokeAsync(async () =>
+                        {
+                            try
+                            {
+                                _tpeService = new VerifonePaymentTerminalService();
+                                _tpeService.TransactionTimeoutSeconds = timeout;
+                                _tpeService.StatusChanged += msg =>
+                                {
+                                    Application.Current.Dispatcher.Invoke(() => TPEStatusMessage = msg);
+                                };
+                                bool connected = await _tpeService.InitializeAsync(portName, baudRate);
+                                IsTPEConnected = connected;
+                                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] TPE init: {(connected ? "connected" : "failed")} on {portName} at {baudRate}\n");
+                            }
+                            catch (Exception ex)
+                            {
+                                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] TPE FAILED: {ex.Message}\n");
+                                _tpeService = null;
+                                IsTPEConnected = false;
+                            }
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] TPE init error: {ex.Message}\n");
                 }
             });
         }
@@ -1145,6 +1225,85 @@ namespace SystemeCaisse.UI.ViewModels
             catch (Exception ex)
             {
                 System.Windows.MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur lors de l'enregistrement : {ex.Message}", "Erreur", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// Envoie le montant CB au TPE et gère le résultat.
+        /// Succès → validation automatique du panier.
+        /// Échec → affiche une modale d'erreur avec option de réessayer.
+        /// </summary>
+        private async Task SendToTPE()
+        {
+            if (Panier.Count == 0 || !IsTPEConnected || _tpeService == null) return;
+
+            // Déterminer le montant à envoyer au TPE
+            decimal montantTPE = SelectedPaiementMode == "CB" ? Total : MontantCarte;
+            if (montantTPE <= 0)
+            {
+                MessageBox.Show(Services.WindowHelper.GetAdminWindow(), "Le montant CB est nul ou négatif.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            bool retry = true;
+            while (retry)
+            {
+                retry = false;
+                IsTPEPaymentInProgress = true;
+                TPEStatusMessage = "⏳ En attente du TPE...";
+                StatusMessage = $"Paiement TPE en cours ({montantTPE:C})...";
+
+                try
+                {
+                    var result = await _tpeService.PayAsync(montantTPE);
+
+                    if (result.Success)
+                    {
+                        // Paiement réussi → valider automatiquement le panier
+                        IsTPEPaymentInProgress = false;
+                        TPEStatusMessage = "✅ Paiement accepté";
+                        StatusMessage = "Paiement TPE accepté — validation en cours...";
+
+                        // Appeler Checkout directement
+                        Checkout(null);
+                    }
+                    else
+                    {
+                        // Paiement échoué → modale d'erreur
+                        IsTPEPaymentInProgress = false;
+                        TPEStatusMessage = $"❌ {result.Message}";
+                        StatusMessage = "Paiement TPE refusé";
+
+                        var errorWindow = new SystemeCaisse.UI.Views.TPEPaymentErrorWindow(result.Message, montantTPE);
+                        SetupWindowOwner(errorWindow);
+                        bool? dialogResult = errorWindow.ShowDialog();
+
+                        if (dialogResult == true)
+                        {
+                            // L'utilisateur veut réessayer
+                            retry = true;
+                        }
+                        else
+                        {
+                            StatusMessage = "Paiement TPE annulé";
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    IsTPEPaymentInProgress = false;
+                    TPEStatusMessage = $"❌ Erreur : {ex.Message}";
+                    StatusMessage = "Erreur paiement TPE";
+
+                    var errorWindow = new SystemeCaisse.UI.Views.TPEPaymentErrorWindow($"Erreur de communication : {ex.Message}", montantTPE);
+                    SetupWindowOwner(errorWindow);
+                    bool? dialogResult = errorWindow.ShowDialog();
+
+                    if (dialogResult == true)
+                    {
+                        retry = true;
+                    }
+                }
             }
         }
 

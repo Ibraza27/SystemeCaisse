@@ -159,6 +159,58 @@
                             </StackPanel>
                         </GroupBox>
 
+                        <GroupBox Header="💳 Terminal de Paiement (TPE)" Padding="15" Margin="0,20,0,0">
+                            <StackPanel>
+                                <CheckBox Content="Activer le TPE (Verifone USB)" IsChecked="{Binding IsTPEEnabled}" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                                
+                                <StackPanel IsEnabled="{Binding IsTPEEnabled}">
+                                    <Label Content="Port COM du TPE"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox ItemsSource="{Binding AvailableComPorts}" SelectedItem="{Binding TpePortName}" Padding="5" Margin="0,0,10,0"/>
+                                        <Button Grid.Column="1" Content="🔄" Command="{Binding RefreshComPortsCommand}" Width="35" Height="30" ToolTip="Rafraîchir les ports COM"/>
+                                    </Grid>
+
+                                    <Label Content="Vitesse (Baud Rate)" Margin="0,10,0,0"/>
+                                    <ComboBox ItemsSource="{Binding AvailableBaudRates}" SelectedItem="{Binding TpeBaudRate}" Padding="5" Margin="0,0,0,10"/>
+
+                                    <Label Content="Timeout transaction (secondes)" Margin="0,5,0,0"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                        <Slider Value="{Binding TpeTimeout}" Minimum="15" Maximum="120" Width="250" TickFrequency="5" IsSnapToTickEnabled="True" Margin="0,0,10,0"/>
+                                        <TextBlock Text="{Binding TpeTimeout}" VerticalAlignment="Center" FontWeight="Bold"/>
+                                        <TextBlock Text=" sec" VerticalAlignment="Center"/>
+                                    </StackPanel>
+
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Button Content="🔍 Tester la connexion" Command="{Binding TestTPEConnectionCommand}" 
+                                                Background="#1565C0" Foreground="White" Padding="10,5" Margin="0,0,5,0">
+                                            <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="5"/></Style></Button.Resources>
+                                        </Button>
+                                        <Button Grid.Column="1" Content="🔎 Détection auto" Command="{Binding AutoDetectTPECommand}" 
+                                                Background="#7B1FA2" Foreground="White" Padding="10,5" Margin="5,0,0,0"
+                                                ToolTip="Scanne tous les ports COM pour trouver un TPE">
+                                            <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="5"/></Style></Button.Resources>
+                                        </Button>
+                                    </Grid>
+                                    
+                                    <TextBlock Text="{Binding TpeTestStatus}" FontSize="12" Foreground="#666" FontStyle="Italic" TextWrapping="Wrap"/>
+
+                                    <Separator Margin="0,15,0,10"/>
+                                    <TextBlock Text="ℹ️ Le TPE doit être en mode « Caisse » (intégré) et le driver USB Verifone doit être installé." 
+                                               FontSize="11" Foreground="#888" TextWrapping="Wrap" FontStyle="Italic"/>
+                                    <TextBlock Text="L'application envoie uniquement le montant au TPE. Les données de carte bancaire ne transitent jamais par le logiciel." 
+                                               FontSize="11" Foreground="#2E7D32" TextWrapping="Wrap" FontStyle="Italic" Margin="0,5,0,0"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </GroupBox>
+
                         <GroupBox Header="📺 Affichage Client (2ème Écran)" Padding="15" Margin="0,20,0,0">
                             <StackPanel>
                                 <CheckBox Content="Activer l'affichage client" IsChecked="{Binding IsCustomerDisplayEnabled}" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>

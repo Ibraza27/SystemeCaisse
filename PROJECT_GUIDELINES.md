@@ -148,3 +148,56 @@ L'application supporte une balance connectée via un adaptateur USB-RS232 (FTDI 
 - **Remplacement** : Lors du remplacement d'une image, SUPPRIMER l'ancien fichier avant d'écrire le nouveau.
 - **Suppression** : Quand l'image d'un produit est supprimée, le fichier physique doit aussi être supprimé.
 - **Affichage** : Les images doivent apparaître dans : Panier admin, Panier client, Fenêtre poids, Remise article, Promotions, Écran client, Dashboard, Stocks.
+
+## 12. Intégration TPE Verifone (USB/Série)
+
+L'application supporte un Terminal de Paiement Électronique (TPE) Verifone connecté via USB (port COM virtuel) pour envoyer le montant CB au terminal et recevoir un statut (Accepté/Refusé).
+
+**IMPORTANT** : L'application n'a JAMAIS accès aux données de carte bancaire. Elle envoie uniquement le montant et reçoit un statut.
+
+### Architecture :
+- **Service** : `VerifonePaymentTerminalService.cs` (communication série via `System.IO.Ports.SerialPort`)
+- **UI** : Bouton "Payer par TPE" dans `TicketView`, visible uniquement si mode CB/Mixte + TPE connecté
+- **Erreur** : `TPEPaymentErrorWindow` — modale avec Réessayer/Annuler en cas d'échec
+- **Configuration** : Section "Terminal de Paiement (TPE)" dans l'onglet Périphériques des paramètres
+- **Initialisation** : Le service est démarré dans `MainViewModel.InitializeAsync()` si activé en config
+
+### Configuration :
+
+| Paramètre | Clé Config | Valeur par défaut |
+|-----------|------------|-------------------|
+| **Activer TPE** | `tpe_enabled` | `False` |
+| **Port COM** | `tpe_port_name` | `COM1` |
+| **Baud Rate** | `tpe_baud_rate` | `9600` |
+| **Timeout (sec)** | `tpe_timeout` | `60` |
+
+### Protocole CONCERT simplifié :
+
+| Étape | Caisse | TPE |
+|-------|--------|-----|
+| 1 | ENQ (0x05) | → |
+| 2 | ← | ACK (0x06) |
+| 3 | STX + données + ETX + LRC | → |
+| 4 | ← | ACK (0x06) |
+| 5 | EOT (0x04) | → |
+| 6 | ← | Réponse (STX + statut + ETX + LRC) |
+
+### Codes réponse :
+| Code | Signification |
+|------|---------------|
+| `0` | Paiement accepté |
+| `1` | Refusé par la banque |
+| `2` | Carte invalide |
+| `3` | Erreur communication bancaire |
+| `4` | Annulé par le client |
+| `5` | Code PIN incorrect |
+| `7` | Carte retirée prématurément |
+
+### Règles de code :
+- **Pas de données carte** : JAMAIS de numéro de carte, date d'expiration ou CVV dans l'application.
+- **Bouton "Valider" préservé** : Le bouton de validation classique reste toujours disponible pour valider sans TPE.
+- **Auto-validation** : Dès que le TPE retourne un succès, le panier est validé automatiquement (appel direct à `Checkout`).
+- **Retry loop** : En cas d'échec, la modale d'erreur propose "Réessayer" qui relance le paiement sans perdre le panier.
+- **Timeout configurable** : Le timeout de transaction est configurable (15-120 sec) car le client peut mettre du temps à saisir son code PIN.
+- **Prérequis matériel** : Le driver USB Verifone doit être installé pour que le port COM virtuel apparaisse. Le TPE doit être en mode "Caisse" (intégré).
+

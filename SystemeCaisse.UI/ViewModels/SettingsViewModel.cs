@@ -114,6 +114,44 @@ namespace SystemeCaisse.UI.ViewModels
             _scaleSettingsChanged = true;
         }
 
+        // === TPE Properties ===
+        [ObservableProperty]
+        private bool _isTPEEnabled;
+
+        [ObservableProperty]
+        private string _tpePortName = "COM1";
+
+        [ObservableProperty]
+        private int _tpeBaudRate = 9600;
+
+        [ObservableProperty]
+        private int _tpeTimeout = 60;
+
+        [ObservableProperty]
+        private string _tpeTestStatus = "";
+
+        private bool _tpeSettingsChanged;
+
+        partial void OnIsTPEEnabledChanged(bool value)
+        {
+            _tpeSettingsChanged = true;
+        }
+
+        partial void OnTpePortNameChanged(string value)
+        {
+            _tpeSettingsChanged = true;
+        }
+
+        partial void OnTpeBaudRateChanged(int value)
+        {
+            _tpeSettingsChanged = true;
+        }
+
+        partial void OnTpeTimeoutChanged(int value)
+        {
+            _tpeSettingsChanged = true;
+        }
+
         // === Price Format Testing ===
         [ObservableProperty]
         private string _selectedPriceFormat = "$XX.XX";
@@ -435,6 +473,19 @@ namespace SystemeCaisse.UI.ViewModels
             var scaleBaud = context.Configuration.Find("scale_baud_rate");
             if (scaleBaud != null && int.TryParse(scaleBaud.Valeur, out int sb)) ScaleBaudRate = sb;
 
+            // Load TPE settings
+            var tpeEnabled = context.Configuration.Find("tpe_enabled");
+            if (tpeEnabled != null && bool.TryParse(tpeEnabled.Valeur, out bool tpe)) IsTPEEnabled = tpe;
+
+            var tpePort = context.Configuration.Find("tpe_port_name");
+            if (tpePort != null && !string.IsNullOrWhiteSpace(tpePort.Valeur)) TpePortName = tpePort.Valeur;
+
+            var tpeBaud = context.Configuration.Find("tpe_baud_rate");
+            if (tpeBaud != null && int.TryParse(tpeBaud.Valeur, out int tb)) TpeBaudRate = tb;
+
+            var tpeTimeout = context.Configuration.Find("tpe_timeout");
+            if (tpeTimeout != null && int.TryParse(tpeTimeout.Valeur, out int tt)) TpeTimeout = tt;
+
             var topCount = context.Configuration.Find("top_products_count");
             if (topCount != null && int.TryParse(topCount.Valeur, out int tc)) TopProductsCount = tc;
 
@@ -595,6 +646,12 @@ namespace SystemeCaisse.UI.ViewModels
                 UpdateConfig(context, "scale_port_name", ScalePortName);
                 UpdateConfig(context, "scale_baud_rate", ScaleBaudRate.ToString());
 
+                // Save TPE settings
+                UpdateConfig(context, "tpe_enabled", IsTPEEnabled.ToString());
+                UpdateConfig(context, "tpe_port_name", TpePortName);
+                UpdateConfig(context, "tpe_baud_rate", TpeBaudRate.ToString());
+                UpdateConfig(context, "tpe_timeout", TpeTimeout.ToString());
+
                 // Save Selected Promotions
                 var selectedIds = AvailableDisplayPromotions.Where(p => p.IsSelected).Select(p => p.Promotion.Id);
                 UpdateConfig(context, "customer_display_promotions", string.Join(",", selectedIds));
@@ -612,12 +669,13 @@ namespace SystemeCaisse.UI.ViewModels
 
                 MessageBox.Show(owner, "Paramètres enregistrés avec succès !", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
 
-                // Proposer un redémarrage si les paramètres balance ont changé
-                if (_scaleSettingsChanged)
+                // Proposer un redémarrage si les paramètres balance ou TPE ont changé
+                if (_scaleSettingsChanged || _tpeSettingsChanged)
                 {
                     _scaleSettingsChanged = false;
+                    _tpeSettingsChanged = false;
                     var result = MessageBox.Show(owner,
-                        "Les paramètres de la balance ont été modifiés.\nVoulez-vous redémarrer l'application maintenant pour appliquer les changements ?",
+                        "Les paramètres des périphériques ont été modifiés.\nVoulez-vous redémarrer l'application maintenant pour appliquer les changements ?",
                         "Redémarrage requis",
                         MessageBoxButton.YesNo,
                         MessageBoxImage.Question);
@@ -878,6 +936,70 @@ namespace SystemeCaisse.UI.ViewModels
             ScaleTestStatus = success
                 ? $"✅ Connexion réussie sur {ScalePortName} à {ScaleBaudRate} baud !"
                 : $"❌ Impossible de se connecter sur {ScalePortName}. Vérifiez le branchement et les paramètres.";
+        }
+
+        [RelayCommand]
+        private async Task TestTPEConnection()
+        {
+            if (string.IsNullOrWhiteSpace(TpePortName))
+            {
+                TpeTestStatus = "❌ Veuillez sélectionner un port COM.";
+                return;
+            }
+
+            TpeTestStatus = "⏳ Test de connexion au TPE en cours...";
+
+            // Récupérer le service actif depuis le MainViewModel
+            VerifonePaymentTerminalService? activeService = null;
+            var mainWin = Application.Current.MainWindow;
+            if (mainWin?.DataContext is MainViewModel mainVM)
+            {
+                activeService = mainVM.TPEService;
+            }
+
+            bool success = await Task.Run(() =>
+            {
+                try
+                {
+                    return VerifonePaymentTerminalService.TestConnection(TpePortName, TpeBaudRate, activeService);
+                }
+                catch
+                {
+                    return false;
+                }
+            });
+
+            TpeTestStatus = success
+                ? $"✅ TPE détecté sur {TpePortName} à {TpeBaudRate} baud !"
+                : $"❌ Aucun TPE détecté sur {TpePortName}. Vérifiez le branchement USB et que le TPE est en mode Caisse.";
+        }
+
+        [RelayCommand]
+        private async Task AutoDetectTPE()
+        {
+            TpeTestStatus = "🔎 Recherche de TPE sur tous les ports COM...";
+
+            string? detectedPort = await Task.Run(() =>
+            {
+                try
+                {
+                    return VerifonePaymentTerminalService.DetectTerminal(TpeBaudRate);
+                }
+                catch
+                {
+                    return null;
+                }
+            });
+
+            if (detectedPort != null)
+            {
+                TpePortName = detectedPort;
+                TpeTestStatus = $"✅ TPE trouvé automatiquement sur {detectedPort} !";
+            }
+            else
+            {
+                TpeTestStatus = "❌ Aucun TPE détecté sur les ports COM disponibles. Vérifiez que le driver USB Verifone est installé.";
+            }
         }
     }
 }

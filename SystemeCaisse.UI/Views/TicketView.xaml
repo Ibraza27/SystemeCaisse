@@ -278,13 +278,82 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
             <UniformGrid Columns="3" Margin="0,0,0,10">
                 <Button Content="🗑️ VIDER" Command="{Binding ViderPanierCommand}" Height="45" Margin="0,0,5,0" ToolTip="Vider le panier" Background="#FFEBEE" Foreground="#C62828" FontWeight="Bold"/>
                 <Button Content="🏷️ REMISE" Command="{Binding OpenDiscountDialogCommand}" Height="45" Margin="5,0,5,0" ToolTip="Remise"/>
                 <Button Content="📂 ATTENTE" Command="{Binding SuspendSaleCommand}" Height="45" Margin="5,0,0,0" ToolTip="Attente"/>
             </UniformGrid>
-            <Button Grid.Row="1" Content="VALIDER" Command="{Binding CheckoutCommand}" Height="60" Background="#2E7D32" Foreground="White" FontSize="22" FontWeight="Bold">
+
+            <!-- Bouton Payer par TPE (visible uniquement en mode CB/Mixte + TPE connecté) -->
+            <Button Grid.Row="1" Command="{Binding SendToTPECommand}" Height="55" Margin="0,0,0,8"
+                    Background="#1565C0" Foreground="White" FontSize="18" FontWeight="Bold" Cursor="Hand">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding ShowTPEPayButton}" Value="True">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+                <Button.Resources>
+                    <Style TargetType="Border">
+                        <Setter Property="CornerRadius" Value="10"/>
+                    </Style>
+                </Button.Resources>
+                <Button.Content>
+                    <Grid>
+                        <!-- Texte normal -->
+                        <TextBlock Text="💳 PAYER PAR TPE" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsTPEPaymentInProgress}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <!-- Texte en cours de paiement -->
+                        <TextBlock Text="⏳ En attente du TPE..." HorizontalAlignment="Center" VerticalAlignment="Center" FontStyle="Italic">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsTPEPaymentInProgress}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Grid>
+                </Button.Content>
+            </Button>
+
+            <!-- Statut TPE (visible uniquement si TPE connecté) -->
+            <TextBlock Grid.Row="2" Text="{Binding TPEStatusMessage}" FontSize="11" Foreground="#1565C0" 
+                       FontStyle="Italic" TextAlignment="Center" Margin="0,0,0,5"
+                       TextWrapping="Wrap">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsTPEConnected}" Value="True">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+
+            <Button Grid.Row="3" Content="VALIDER" Command="{Binding CheckoutCommand}" Height="60" Background="#2E7D32" Foreground="White" FontSize="22" FontWeight="Bold">
                 <Button.Resources>
                     <Style TargetType="Border">
                         <Setter Property="CornerRadius" Value="10"/>
