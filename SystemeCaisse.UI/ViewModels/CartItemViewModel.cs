@@ -36,6 +36,14 @@ namespace SystemeCaisse.UI.ViewModels
                 if (_ligneVente.Quantite != value)
                 {
                     _ligneVente.Quantite = value;
+                    // Recalculate price override discount when quantity changes
+                    if (_priceOverridePerUnit > 0)
+                    {
+                        _remiseManuelleFixed = _priceOverridePerUnit * value;
+                        OnPropertyChanged(nameof(RemiseManuelleFixed));
+                        OnPropertyChanged(nameof(RemiseManuelle));
+                        OnPropertyChanged(nameof(RemiseTotale));
+                    }
                     SyncEntity();
                     OnPropertyChanged(nameof(Quantite));
                     OnPropertyChanged(nameof(TotalLigneStandard));
@@ -63,6 +71,18 @@ namespace SystemeCaisse.UI.ViewModels
         {
             get => _remiseManuelleFixed;
             set { _remiseManuelleFixed = value; SyncEntity(); OnPropertyChanged(); OnPropertyChanged(nameof(RemiseTotale)); OnPropertyChanged(nameof(RemiseManuelle)); OnPropertyChanged(nameof(TotalLigne)); OnPropertyChanged(nameof(HasPromotion)); }
+        }
+
+        /// <summary>
+        /// Per-unit price override discount. When > 0, RemiseManuelleFixed is recalculated
+        /// as PriceOverridePerUnit * Quantite whenever quantity changes.
+        /// This allows overriding the sale price in the current cart without affecting the product's base price.
+        /// </summary>
+        private decimal _priceOverridePerUnit;
+        public decimal PriceOverridePerUnit
+        {
+            get => _priceOverridePerUnit;
+            set { _priceOverridePerUnit = value; OnPropertyChanged(); }
         }
 
         public decimal RemiseManuelle => (TotalLigneStandard * (_remiseManuellePercent / 100)) + _remiseManuelleFixed;

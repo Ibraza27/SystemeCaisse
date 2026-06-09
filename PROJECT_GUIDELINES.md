@@ -61,8 +61,43 @@ L'initialisation de l'application (`MainViewModel.InitializeAsync`) doit être *
 
 - **Date de fin** : Une promotion peut avoir une date de fin **indéterminée** (`DateFin = null`). Dans ce cas, elle reste active tant qu'elle n'est pas désactivée manuellement.
 - **Validation** : La logique `ApplyAutomaticPromotions` doit traiter `DateFin == null` comme "toujours valide" (`p.DateFin == null || p.DateFin >= DateTime.Today`).
+- **Anti-double promotion** : Un article ou une famille d'articles dans le panier ne peut recevoir qu'**UNE SEULE promotion automatique** à la fois. Si plusieurs promotions ciblent le même article ou la même catégorie, seule la **première promotion** (dans l'ordre de chargement) s'applique. Cela évite les remises cumulées indésirables.
+  - **Mécanisme** : `ApplyAutomaticPromotions()` utilise un `HashSet<CartItemViewModel>` (`alreadyPromoted`) pour suivre les articles déjà promus. Dès qu'un article reçoit une remise automatique, il est ajouté au set et ignoré par les promotions suivantes.
+  - **Exclusion** : Les promotions de type `remise_total` et `seuil_panier` (remises globales sur le panier) ne sont PAS concernées par cette règle et s'appliquent toujours en complément.
 
-## 8. Hygiène du Code et du Projet
+## 8. Mode de Paiement par Défaut
+
+- **CB par défaut** : Le mode de paiement par défaut est **CB** (Carte Bancaire), et non Espèces.
+  - `_selectedPaiementMode` est initialisé à `"CB"`.
+  - `ResetSale()` remet le mode à `"CB"` après chaque validation de vente.
+
+## 9. Paiement Espèces — Précision et Bouton Somme Exacte
+
+### Bug corrigé :
+- **Comparaison décimale** : La vérification du montant reçu utilise `Math.Round(MontantRecu, 2) < Math.Round(Total, 2)` pour éviter les faux positifs "montant insuffisant" causés par des erreurs de précision décimale (ex: `1000.00` vs `999.9999999...`).
+
+### Bouton "= Exact" :
+- Un bouton **"= Exact"** est affiché à côté du champ "Reçu" dans le TicketView lorsque le mode de paiement est Espèces ou Mixte.
+- Au clic, il remplit automatiquement le champ `MontantRecu` avec la valeur exacte de `Total` via `FillExactAmountCommand`.
+- Cela permet au caissier de valider rapidement lorsque le client paie le montant exact.
+
+## 10. Remise "Prix de Vente" (Price Override)
+
+Permet de modifier le prix de vente d'un article **dans le panier courant uniquement**, sans impacter le prix initial du produit dans la base de données.
+
+### Fonctionnement :
+- Accessible depuis le bouton **REMISE** → **"💰 Prix de vente"** dans `ManualDiscountSelectionWindow`.
+- L'utilisateur sélectionne un article du panier, puis saisit le **nouveau prix de vente** souhaité.
+- La remise est calculée comme `(PrixOriginal - NouveauPrix) × Quantité` et stockée dans `RemiseManuelleFixed`.
+- La propriété `PriceOverridePerUnit` dans `CartItemViewModel` conserve la différence par unité, ce qui permet de **recalculer automatiquement** la remise lorsque la quantité change.
+
+### Règles :
+- Le prix override s'applique **quelle que soit la quantité** — la remise se recalcule proportionnellement.
+- Le prix initial dans l'onglet **Produits** n'est **jamais modifié**.
+- Si l'utilisateur applique ensuite une remise classique (% ou €) sur le même article, le price override est automatiquement effacé (`PriceOverridePerUnit = 0`).
+- Le scope `DiscountScope.PriceOverride` est distinct de `Basket` et `Item` dans l'enum `DiscountScope`.
+
+## 11. Hygiène du Code et du Projet
 
 ### Fichiers interdits dans le dépôt :
 - Aucun `.exe`, `.dll`, `.pdb` (sauf NuGet packages)
@@ -75,7 +110,7 @@ L'initialisation de l'application (`MainViewModel.InitializeAsync`) doit être *
 - **Pas de code dupliqué**. Si un bloc est copié-collé, le refactoriser en méthode.
 - **Pas de `catch { }` vide**. Toujours logger l'erreur au minimum.
 
-## 9. Déploiement et Sécurité (Signature)
+## 12. Déploiement et Sécurité (Signature)
 
 Pour garantir un déploiement fluide et professionnel sans blocages "Éditeur inconnu" ou "Smart App Control" :
 
@@ -93,7 +128,7 @@ Sur chaque nouvel ordinateur, avant de lancer l'installateur pour la première f
 - **Signature** : Toute nouvelle version de `SystemeCaisse.UI.exe` ou de l'installateur DOIT être signée avec le certificat `.pfx` correspondant en utilisant l'outil `signtool.exe`.
 - **Identité** : Ne jamais modifier les métadonnées d'assemblage (Company, Product) sans mettre à jour le certificat, sous peine d'invalidation de la signature.
 
-## 10. Intégration Balance RS-232 (Adam Equipment Swift SWZ)
+## 13. Intégration Balance RS-232 (Adam Equipment Swift SWZ)
 
 L'application supporte une balance connectée via un adaptateur USB-RS232 (FTDI FT232R) pour la pesée automatique des produits.
 
@@ -140,7 +175,7 @@ L'application supporte une balance connectée via un adaptateur USB-RS232 (FTDI 
 - **Port par défaut** : COM3
 - **Trame** : 8 bits, pas de parité, 1 stop bit, pas de contrôle de flux
 
-## 11. Gestion des Images Produits
+## 14. Gestion des Images Produits
 
 ### Règles :
 - **Stockage** : Dossier `Images/Produits/` à la racine de l'exécutable.
@@ -149,7 +184,7 @@ L'application supporte une balance connectée via un adaptateur USB-RS232 (FTDI 
 - **Suppression** : Quand l'image d'un produit est supprimée, le fichier physique doit aussi être supprimé.
 - **Affichage** : Les images doivent apparaître dans : Panier admin, Panier client, Fenêtre poids, Remise article, Promotions, Écran client, Dashboard, Stocks.
 
-## 12. Intégration TPE Verifone (USB/Série)
+## 15. Intégration TPE Verifone (USB/Série)
 
 L'application supporte un Terminal de Paiement Électronique (TPE) Verifone connecté via USB (port COM virtuel) pour envoyer le montant CB au terminal et recevoir un statut (Accepté/Refusé).
 

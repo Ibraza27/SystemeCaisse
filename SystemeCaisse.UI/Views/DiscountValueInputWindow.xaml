@@ -1,7 +1,7 @@
 <Window x:Class="SystemeCaisse.UI.Views.DiscountValueInputWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Saisir la Remise" Height="300" Width="400"
+        Title="Saisir la Remise" Height="320" Width="450"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         Background="#F5F5F7">
     <Grid Margin="20">
@@ -11,7 +11,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock x:Name="TitleTxt" Text="Valeur de la remise" FontSize="20" FontWeight="Bold" Margin="0,0,0,20" HorizontalAlignment="Center"/>
+        <TextBlock x:Name="TitleTxt" Text="Valeur de la remise" FontSize="20" FontWeight="Bold" Margin="0,0,0,20" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"/>
 
         <Grid Grid.Row="1" VerticalAlignment="Center">
             <Grid.ColumnDefinitions>

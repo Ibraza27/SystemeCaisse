@@ -271,7 +271,7 @@ namespace SystemeCaisse.UI.ViewModels
         private decimal _basketRemiseManuelle;
 
         // Payment Properties
-        private string _selectedPaiementMode = "Especes";
+        private string _selectedPaiementMode = "CB";
         public string SelectedPaiementMode
         {
             get => _selectedPaiementMode;
@@ -402,6 +402,7 @@ namespace SystemeCaisse.UI.ViewModels
         public ICommand ClearSearchCommand { get; }
         public ICommand ViderPanierCommand { get; }
         public ICommand SendToTPECommand { get; }
+        public ICommand FillExactAmountCommand { get; }
 
         private void ReloadProductsFromDb()
         {
@@ -510,6 +511,7 @@ namespace SystemeCaisse.UI.ViewModels
             CalculateProductPopularityCommand = new BasicRelayCommand(async _ => await CalculateProductPopularity());
             ClearSearchCommand = new BasicRelayCommand(_ => SearchText = string.Empty);
             SendToTPECommand = new BasicRelayCommand(async _ => await SendToTPE(), _ => Panier.Count > 0 && IsTPEConnected && !IsTPEPaymentInProgress);
+            FillExactAmountCommand = new BasicRelayCommand(_ => MontantRecu = Total);
             
             OpenWeightDialogCommand = new BasicRelayCommand(_ => 
             {
@@ -1129,7 +1131,7 @@ namespace SystemeCaisse.UI.ViewModels
                     Statut = "validee"
                 };
 
-                if (SelectedPaiementMode == "Especes" && MontantRecu < Total && Total > 0)
+                if (SelectedPaiementMode == "Especes" && Total > 0 && Math.Round(MontantRecu, 2) < Math.Round(Total, 2))
                 {
                     MessageBox.Show(Services.WindowHelper.GetAdminWindow(), "Montant reçu insuffisant !", "Erreur", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
@@ -1507,7 +1509,7 @@ namespace SystemeCaisse.UI.ViewModels
             BasketRemiseManuelle = 0;
             UpdateTotal();
             MontantRecu = 0;
-            SelectedPaiementMode = "Especes";
+            SelectedPaiementMode = "CB";
             RecalculateMonnaie();
         }
 
@@ -1540,13 +1542,18 @@ namespace SystemeCaisse.UI.ViewModels
 
             if (_activePromotions == null || !_activePromotions.Any()) return;
 
+            // Track which cart items have already been discounted by a promotion
+            // An article/family should only receive ONE promotion to avoid double discounts
+            var alreadyPromoted = new HashSet<CartItemViewModel>();
+
             foreach (var promo in _activePromotions.Where(p => p.TypePromotion != "remise_total" && p.TypePromotion != "seuil_panier"))
             {
                 var targetItems = promo.TypePromotion == "offre_combine" 
-                    ? Panier.ToList() 
+                    ? Panier.Where(i => !alreadyPromoted.Contains(i)).ToList() 
                     : Panier.Where(i => 
-                        (promo.ProduitId != null && i.Produit.Id == promo.ProduitId) ||
-                        (promo.Categorie != null && i.Produit.Categorie == promo.Categorie)
+                        !alreadyPromoted.Contains(i) &&
+                        ((promo.ProduitId != null && i.Produit.Id == promo.ProduitId) ||
+                        (promo.Categorie != null && i.Produit.Categorie == promo.Categorie))
                     ).ToList();
 
                 if (!targetItems.Any() && promo.TypePromotion != "offre_combine") continue;
@@ -1559,6 +1566,7 @@ namespace SystemeCaisse.UI.ViewModels
                             decimal r = promo.IsPourcentage ? (item.TotalLigneStandard * promo.Valeur / 100) : promo.Valeur;
                             item.RemiseAuto += r;
                             item.PromotionAppliquee = promo.Nom;
+                            alreadyPromoted.Add(item);
                         }
                         break;
 
@@ -1567,13 +1575,13 @@ namespace SystemeCaisse.UI.ViewModels
                         int maxBundles = int.MaxValue;
                         foreach (var bi in promo.BundleItems)
                         {
-                            var cartItems = Panier.Where(i => i.ProduitId == bi.ProduitId).ToList();
+                            var cartItems = Panier.Where(i => !alreadyPromoted.Contains(i) && i.ProduitId == bi.ProduitId).ToList();
                             decimal totalQty = cartItems.Sum(i => i.Quantite);
                             maxBundles = Math.Min(maxBundles, (int)(totalQty / bi.QuantiteRequise));
                         }
                         if (maxBundles <= 0) break;
                         var participantIds = promo.BundleItems.Select(bi => bi.ProduitId).ToList();
-                        var bundleLines = Panier.Where(i => i.ProduitId.HasValue && participantIds.Contains(i.ProduitId.Value)).ToList();
+                        var bundleLines = Panier.Where(i => !alreadyPromoted.Contains(i) && i.ProduitId.HasValue && participantIds.Contains(i.ProduitId.Value)).ToList();
                         decimal originalBundleTotal = 0;
                         foreach (var bi in promo.BundleItems)
                         {
@@ -1594,7 +1602,8 @@ namespace SystemeCaisse.UI.ViewModels
                                 decimal discountedUnitPrice = originalLinePrice * ratio;
                                 decimal discountAmount = qtyToDiscountOnThisLine * (originalLinePrice - discountedUnitPrice);
                                 line.RemiseAuto += discountAmount;
-                                line.PromotionAppliquee = string.IsNullOrEmpty(line.PromotionAppliquee) ? promo.Nom : line.PromotionAppliquee + " + " + promo.Nom;
+                                line.PromotionAppliquee = promo.Nom;
+                                alreadyPromoted.Add(line);
                                 remainingQtyToDiscount -= qtyToDiscountOnThisLine;
                             }
                         }
@@ -1612,6 +1621,7 @@ namespace SystemeCaisse.UI.ViewModels
                                     decimal r = sets * promo.QuantiteOfferte.Value * item.PrixUnitaire;
                                     item.RemiseAuto += r;
                                     item.PromotionAppliquee = $"{promo.Nom} ({sets} offert(s))";
+                                    alreadyPromoted.Add(item);
                                 }
                             }
                         }
@@ -1631,6 +1641,7 @@ namespace SystemeCaisse.UI.ViewModels
                                     item.RemiseAuto += r;
                                     string unit = promo.IsPourcentage ? "%" : "€";
                                     item.PromotionAppliquee = $"{promo.Nom} (-{promo.RemiseSurIeme}{unit} sur {sets})";
+                                    alreadyPromoted.Add(item);
                                 }
                             }
                         }
@@ -1649,6 +1660,7 @@ namespace SystemeCaisse.UI.ViewModels
                                 decimal degressifTotal = bestTier.PrixUnitaire * item.Quantite;
                                 item.RemiseAuto += (standardTotal - degressifTotal);
                                 item.PromotionAppliquee = $"{promo.Nom} ({bestTier.PrixUnitaire:C}/u)";
+                                alreadyPromoted.Add(item);
                             }
                         }
                         break;
@@ -1669,13 +1681,47 @@ namespace SystemeCaisse.UI.ViewModels
                 var type = selectWindow.SelectedType;
                 CartItemViewModel? targetItem = null;
 
-                if (scope == SystemeCaisse.UI.Views.DiscountScope.Item)
+                // "Prix de vente" and Item-level discounts require selecting a cart item
+                if (scope == SystemeCaisse.UI.Views.DiscountScope.Item || scope == SystemeCaisse.UI.Views.DiscountScope.PriceOverride)
                 {
                     if (Panier.Count == 0) return;
                     var itemWindow = new SystemeCaisse.UI.Views.CartItemSelectionWindow(Panier);
                     SetupWindowOwner(itemWindow);
                     if (itemWindow.ShowDialog() != true) return;
                     targetItem = itemWindow.SelectedItem;
+                }
+
+                if (scope == SystemeCaisse.UI.Views.DiscountScope.PriceOverride)
+                {
+                    // Price Override: enter the new sale price directly
+                    if (targetItem == null) return;
+                    string priceTitle = $"Nouveau prix de vente pour {targetItem.ProduitNom}";
+                    var priceWindow = new SystemeCaisse.UI.Views.DiscountValueInputWindow(priceTitle, "€");
+                    SetupWindowOwner(priceWindow);
+                    if (priceWindow.ShowDialog() != true) return;
+
+                    decimal newPrice = priceWindow.DiscountValue;
+                    if (newPrice < 0) newPrice = 0;
+
+                    // Calculate the fixed discount as the difference between original price and new price
+                    // Applied per unit, regardless of quantity
+                    decimal priceDiff = targetItem.PrixUnitaire - newPrice;
+                    if (priceDiff > 0)
+                    {
+                        // Set the fixed discount to the total difference across all units
+                        targetItem.RemiseManuelleFixed = priceDiff * targetItem.Quantite;
+                        targetItem.RemiseManuellePercent = 0;
+                        targetItem.PriceOverridePerUnit = priceDiff;
+                    }
+                    else
+                    {
+                        // New price >= original price, no discount
+                        targetItem.RemiseManuelleFixed = 0;
+                        targetItem.RemiseManuellePercent = 0;
+                        targetItem.PriceOverridePerUnit = 0;
+                    }
+                    UpdateTotal();
+                    return;
                 }
 
                 string title = (scope == SystemeCaisse.UI.Views.DiscountScope.Basket ? "Remise Panier" : $"Remise sur {targetItem?.ProduitNom}");
@@ -1706,6 +1752,7 @@ namespace SystemeCaisse.UI.ViewModels
                         targetItem.RemiseManuelleFixed = val;
                         targetItem.RemiseManuellePercent = 0;
                     }
+                    targetItem.PriceOverridePerUnit = 0; // Clear any price override
                 }
                 UpdateTotal();
             }

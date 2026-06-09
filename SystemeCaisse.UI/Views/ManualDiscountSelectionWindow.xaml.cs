@@ -2,7 +2,7 @@ using System.Windows;
 
 namespace SystemeCaisse.UI.Views
 {
-    public enum DiscountScope { Basket, Item }
+    public enum DiscountScope { Basket, Item, PriceOverride }
     public enum DiscountType { Percentage, Fixed }
 
     public partial class ManualDiscountSelectionWindow : System.Windows.Window
@@ -22,6 +22,7 @@ namespace SystemeCaisse.UI.Views
             else if (btn == BtnBasketFixed) { SelectedScope = DiscountScope.Basket; SelectedType = DiscountType.Fixed; }
             else if (btn == BtnItemPercent) { SelectedScope = DiscountScope.Item; SelectedType = DiscountType.Percentage; }
             else if (btn == BtnItemFixed) { SelectedScope = DiscountScope.Item; SelectedType = DiscountType.Fixed; }
+            else if (btn == BtnPriceOverride) { SelectedScope = DiscountScope.PriceOverride; SelectedType = DiscountType.Fixed; }
 
             DialogResult = true;
             Close();
