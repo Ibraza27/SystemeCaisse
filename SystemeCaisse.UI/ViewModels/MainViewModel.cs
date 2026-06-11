@@ -40,6 +40,7 @@ namespace SystemeCaisse.UI.ViewModels
         public PromotionsViewModel PromotionsVM { get; private set; }
         public InventoryViewModel InventoryVM { get; private set; }
         public AnalysisViewModel AnalysisVM { get; private set; }
+        public CommandesViewModel CommandesVM { get; private set; }
         
         // Aliases for Customer Display Binding
         public ObservableCollection<CartItemViewModel> LignesVente => Panier;
@@ -457,7 +458,7 @@ namespace SystemeCaisse.UI.ViewModels
             {
                 _lastIndex = value;
 
-                if (value == 5)
+                if (value == 6)
                 {
                     // Analysis disabled temporarily due to build issues
                 }
@@ -472,7 +473,13 @@ namespace SystemeCaisse.UI.ViewModels
                     UpdateTotal();
                 }
 
-                if (value == 4)
+                if (value == 2)
+                {
+                    // Auto-refresh commandes data when switching to Commandes tab
+                    _ = CommandesVM?.LoadDataAsync();
+                }
+
+                if (value == 5)
                 {
                     // Auto-refresh history data when switching to Ventes tab
                     _ = HistoryVM?.LoadDataAsync();
@@ -501,6 +508,8 @@ namespace SystemeCaisse.UI.ViewModels
             PromotionsVM = new PromotionsViewModel(contextFactory);
             InventoryVM = new InventoryViewModel(contextFactory);
             AnalysisVM = new AnalysisViewModel(contextFactory);
+            CommandesVM = new CommandesViewModel(contextFactory, _printService);
+            CommandesVM.SetMainViewModel(this);
             RemoveItemCommand = new BasicRelayCommand(RemoveItem);
             CheckoutCommand = new BasicRelayCommand(Checkout, _ => Panier.Count > 0);
             PaymentModeCommand = new BasicRelayCommand(SetPaymentMode);
@@ -607,6 +616,7 @@ namespace SystemeCaisse.UI.ViewModels
                 await SafeInitAsync("PromotionsVM", () => PromotionsVM.InitializeAsync());
                 await SafeInitAsync("InventoryVM", () => InventoryVM.InitializeAsync());
                 await SafeInitAsync("AnalysisVM", () => AnalysisVM.InitializeAsync());
+                await SafeInitAsync("CommandesVM", () => CommandesVM.InitializeAsync());
                 
                 System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Sub-VM execution end\n");
 

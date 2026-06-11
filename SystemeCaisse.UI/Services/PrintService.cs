@@ -370,6 +370,200 @@ namespace SystemeCaisse.UI.Services
 
             return doc;
         }
+
+        public void PrintCommandeTicket(Commande commande, Entreprise entreprise)
+        {
+            try
+            {
+                double width = GetTicketWidth();
+                var doc = GenerateCommandeTicketDocument(commande, entreprise, width);
+                var pd = new PrintDialog();
+                doc.PageWidth = width;
+                doc.PageHeight = double.NaN;
+                IDocumentPaginatorSource idp = doc;
+                pd.PrintDocument(idp.DocumentPaginator, $"Commande {commande.NumeroCommande}");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(WindowHelper.GetAdminWindow(), $"Erreur d'impression : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        public FlowDocument GenerateCommandeTicketDocument(Commande commande, Entreprise entreprise, double width)
+        {
+            var doc = new FlowDocument
+            {
+                PageWidth = width,
+                PagePadding = new Thickness(5),
+                FontFamily = new FontFamily("Consolas, Courier New, Monospace"),
+                FontSize = 11,
+                Background = BrushesWpf.White
+            };
+
+            // 1. Header (Logo + Enterprise Info)
+            var headerPara = new Paragraph { TextAlignment = TextAlignment.Center };
+
+            string? finalLogoPath = null;
+            if (!string.IsNullOrEmpty(entreprise.LogoPath))
+            {
+                if (File.Exists(entreprise.LogoPath)) finalLogoPath = entreprise.LogoPath;
+                else
+                {
+                    string relativePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, Path.GetFileName(entreprise.LogoPath));
+                    if (File.Exists(relativePath)) finalLogoPath = relativePath;
+                }
+            }
+
+            if (finalLogoPath != null)
+            {
+                try
+                {
+                    var bitmap = new BitmapImage();
+                    bitmap.BeginInit();
+                    bitmap.UriSource = new Uri(finalLogoPath);
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                    bitmap.EndInit();
+                    var image = new ImageWpf { Source = bitmap, Width = 100, Height = 100, Stretch = Stretch.Uniform };
+                    headerPara.Inlines.Add(new InlineUIContainer(image));
+                    headerPara.Inlines.Add(new LineBreak());
+                }
+                catch { }
+            }
+
+            headerPara.Inlines.Add(new Bold(new Run(entreprise.Nom ?? "Magasin")) { FontSize = 14 });
+            headerPara.Inlines.Add(new LineBreak());
+            headerPara.Inlines.Add(new Run(entreprise.Adresse ?? ""));
+            headerPara.Inlines.Add(new LineBreak());
+            headerPara.Inlines.Add(new Run(entreprise.Telephone ?? ""));
+            headerPara.Inlines.Add(new LineBreak());
+            headerPara.Inlines.Add(new LineBreak());
+
+            // 2. COMMANDE Header
+            headerPara.Inlines.Add(new Bold(new Run("═══ COMMANDE ═══")) { FontSize = 14 });
+            headerPara.Inlines.Add(new LineBreak());
+            headerPara.Inlines.Add(new Bold(new Run(commande.NumeroCommande)) { FontSize = 13 });
+            headerPara.Inlines.Add(new LineBreak());
+            headerPara.Inlines.Add(new LineBreak());
+
+            // Client info
+            headerPara.Inlines.Add(new Bold(new Run($"{commande.Prenom} {commande.Nom}")));
+            headerPara.Inlines.Add(new LineBreak());
+            headerPara.Inlines.Add(new Run($"Tél: {commande.Telephone}"));
+            headerPara.Inlines.Add(new LineBreak());
+            if (!string.IsNullOrWhiteSpace(commande.Adresse))
+            {
+                headerPara.Inlines.Add(new Run(commande.Adresse));
+                headerPara.Inlines.Add(new LineBreak());
+            }
+            if (!string.IsNullOrWhiteSpace(commande.VilleCodePostal))
+            {
+                headerPara.Inlines.Add(new Run(commande.VilleCodePostal));
+                headerPara.Inlines.Add(new LineBreak());
+            }
+            headerPara.Inlines.Add(new LineBreak());
+
+            // Date
+            headerPara.Inlines.Add(new Run(commande.CreatedAt.ToString("dd/MM/yy HH:mm", CultureInfo.InvariantCulture)));
+            headerPara.Inlines.Add(new LineBreak());
+            doc.Blocks.Add(headerPara);
+
+            // 3. Products
+            doc.Blocks.Add(new Paragraph(new Run(new string('-', 35))) { Margin = new Thickness(0, 5, 0, 5) });
+
+            var table = new Table { CellSpacing = 0 };
+            table.Columns.Add(new TableColumn { Width = new GridLength(1, GridUnitType.Star) });
+            var rowGroup = new TableRowGroup();
+
+            foreach (var line in commande.Lignes)
+            {
+                var row1 = new TableRow();
+                row1.Cells.Add(new TableCell(new Paragraph(new Run(line.ProduitNom)) { Margin = new Thickness(0) }));
+                rowGroup.Rows.Add(row1);
+
+                if (!string.IsNullOrEmpty(line.PromotionAppliquee))
+                {
+                    var promoRow = new TableRow();
+                    promoRow.Cells.Add(new TableCell(new Paragraph(new Run($"   * {line.PromotionAppliquee}"))
+                    {
+                        FontSize = 9, FontStyle = FontStyles.Italic, Foreground = BrushesWpf.DarkGreen, Margin = new Thickness(0)
+                    }));
+                    rowGroup.Rows.Add(promoRow);
+                }
+
+                var row2 = new TableRow();
+                var detailStack = new DockPanel { LastChildFill = true };
+                string qtyStr = line.Quantite % 1 == 0 ? $"{line.Quantite:0}" : $"{line.Quantite:0.000}";
+                string detailStr = $"   {qtyStr} X {line.PrixUnitaire:0.00}€";
+                var detailText = new TextBlock { Text = detailStr, FontSize = 10, Foreground = BrushesWpf.DimGray };
+                DockPanel.SetDock(detailText, Dock.Left);
+                detailStack.Children.Add(detailText);
+                var priceText = new TextBlock { Text = $"{line.TotalLigne:0.00}", FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Right };
+                DockPanel.SetDock(priceText, Dock.Right);
+                detailStack.Children.Add(priceText);
+                row2.Cells.Add(new TableCell(new BlockUIContainer(detailStack)));
+                rowGroup.Rows.Add(row2);
+            }
+            table.RowGroups.Add(rowGroup);
+            doc.Blocks.Add(table);
+
+            // 4. Totals
+            doc.Blocks.Add(new Paragraph(new Run(new string('-', 35))) { TextAlignment = TextAlignment.Right, Margin = new Thickness(0, 10, 0, 5) });
+
+            var totalGrid = new Grid();
+            totalGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            totalGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100) });
+            int rowIdx = 0;
+
+            void AddRow(string label, string value, bool isBold = false, double fontSize = 11)
+            {
+                totalGrid.RowDefinitions.Add(new RowDefinition());
+                var lbl = new TextBlock { Text = label, FontSize = fontSize };
+                if (isBold) lbl.FontWeight = FontWeights.Bold;
+                Grid.SetRow(lbl, rowIdx); Grid.SetColumn(lbl, 0);
+                totalGrid.Children.Add(lbl);
+                var val = new TextBlock { Text = value, FontSize = fontSize, HorizontalAlignment = HorizontalAlignment.Right };
+                if (isBold) val.FontWeight = FontWeights.Bold;
+                Grid.SetRow(val, rowIdx); Grid.SetColumn(val, 1);
+                totalGrid.Children.Add(val);
+                rowIdx++;
+            }
+
+            AddRow($"Total {commande.NbArticles} articles", $"{commande.Total:0.00}", true);
+            if (commande.TotalRemise > 0)
+                AddRow("Économies", $"-{commande.TotalRemise:0.00}");
+            if (commande.AvecLivraison)
+                AddRow("🚚 Livraison", $"{commande.MontantLivraison:0.00}");
+            AddRow("TOTAL À PAYER", $"{commande.TotalAvecLivraison:0.00}", true, 14);
+            AddRow("Montant Payé", $"{commande.MontantPaye:0.00}");
+            AddRow("RESTANT", $"{commande.Restant:0.00}", true, 12);
+
+            doc.Blocks.Add(new BlockUIContainer(totalGrid));
+
+            // 5. Payment status
+            doc.Blocks.Add(new Paragraph(new Run(new string('-', 35))) { Margin = new Thickness(0, 10, 0, 5) });
+
+            var statusPara = new Paragraph { TextAlignment = TextAlignment.Center, Margin = new Thickness(0, 10, 0, 10) };
+            if (commande.Restant <= 0)
+            {
+                statusPara.Inlines.Add(new Bold(new Run("═══ RÉGLÉ ═══")) { FontSize = 16 });
+            }
+            else
+            {
+                statusPara.Inlines.Add(new Bold(new Run("═══ NON RÉGLÉ ═══")) { FontSize = 16 });
+                statusPara.Inlines.Add(new LineBreak());
+                statusPara.Inlines.Add(new Bold(new Run($"Restant : {commande.Restant:0.00}€")) { FontSize = 12 });
+            }
+            doc.Blocks.Add(statusPara);
+
+            // 6. Footer
+            var footerPara = new Paragraph { TextAlignment = TextAlignment.Center, Margin = new Thickness(0, 10, 0, 0) };
+            footerPara.Inlines.Add(new Run("Merci pour votre commande !"));
+            footerPara.Inlines.Add(new LineBreak());
+            footerPara.Inlines.Add(new Run("À bientôt chez " + (entreprise.Nom ?? "nous")));
+            doc.Blocks.Add(footerPara);
+
+            return doc;
+        }
     }
 }
 

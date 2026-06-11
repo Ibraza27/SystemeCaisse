@@ -240,3 +240,66 @@ L'application supporte un Terminal de Paiement Électronique (TPE) Verifone conn
 - **Timeout configurable** : Le timeout de transaction est configurable (15-120 sec) car le client peut mettre du temps à saisir son code PIN.
 - **Prérequis matériel** : Le driver USB Verifone doit être installé pour que le port COM virtuel apparaisse. Le TPE doit être en mode "Caisse" (intégré).
 
+## 16. Module Commandes
+
+L'onglet **📋 Commandes** (index 2, entre Caisse et Produits) permet de gérer des commandes clients avec paiement partiel, livraison optionnelle et promotions.
+
+### Architecture :
+- **Entités** : `Commande` (client + montants + statuts) et `LigneCommande` (miroir de `LigneVente`)
+- **ViewModel** : `CommandesViewModel` — gère la liste, les filtres, la création, et les actions CRUD. Reçoit le `MainViewModel` via `SetMainViewModel()` pour accéder aux TopProducts et au ScaleService.
+- **Vues** : `CommandesView` (liste + détail), mode création intégré (catalogue + panier), `CommandeClientInfoWindow` (modale client avec TextBox+ListBox filtrable)
+- **Services** : `CommuneService` (chargement communes.json), `PrintService.GenerateCommandeTicketDocument()`
+
+### Interface Nouvelle Commande (identique à la Caisse) :
+- **Barre de recherche** : ComboBox éditable avec `Loaded` handler anti-auto-sélection (même code que SalesView)
+- **Top Produits** : Délégués au `MainViewModel.TopProducts` — mêmes produits, même ordre, mêmes photos
+- **Produits au poids** : Ouverture de `WeightInputWindow` avec `ScaleService` partagé
+- **Panier** : Colonnes Image, Produit, P.U (/u ou /kg), Qté (+/-, double-clic → `QuantityInputWindow`), Total (barré si promo), ❌
+- **Remise** : Même flux complet que la Caisse — `ManualDiscountSelectionWindow` → `CartItemSelectionWindow` → `DiscountValueInputWindow`
+- **Attente** : Système `SuspendedCommande` avec ComboBox + bouton 📂 dans le coin haut droit du panier (même pattern que `TicketView`/`SuspendedSale`). Le panier est vidé mais on reste en mode nouvelle commande.
+
+### Modification de commande :
+- **Édition** : La commande originale n'est PAS supprimée. L'ID est stocké dans `_editingCommandeId`. Si l'utilisateur valide, la commande est mise à jour en BDD (UPDATE). Si l'utilisateur annule ("Retour à la liste"), la commande est restaurée intacte.
+
+### Filtres Liste :
+- **Recherche** : Par nom, prénom, téléphone, numéro de commande
+- **Statut** : Tous / En attente / Traitée / Annulée
+- **Paiement** : Tous / Réglé / Partiel / Non réglé
+- **Ville/CP** : `VilleCPFilterWindow` — affiche par défaut les villes existantes des commandes pour sélection rapide + recherche dans la base communes. Multi-sélection avec pills (tags).
+- **Effacer filtres** : Remet tous les filtres à zéro
+- **Récap Produits** : `CommandeRecapWindow` — agrège les articles de la liste filtrée avec impression ticket
+
+### Index des onglets (après ajout) :
+| Index | Onglet |
+|-------|--------|
+| 0 | Tableau de Bord |
+| 1 | Caisse |
+| 2 | **Commandes** |
+| 3 | Produits |
+| 4 | Stocks |
+| 5 | Ventes |
+| 6 | Analyses |
+| 7 | Configuration |
+
+### Statuts :
+- **Commande** : `en_attente` (défaut), `traitee`, `annulee`
+- **Paiement** (calculé) : `regle` (Restant ≤ 0), `partiel` (MontantPaye > 0), `non_regle`
+
+### Règles de stock :
+- **Création** : Le stock n'est PAS décrémenté à la création.
+- **Passage en "traitée"** : Le stock EST décrémenté et un `MouvementStock` est créé.
+- **Annulation** : Le stock n'est PAS restauré (à gérer manuellement si nécessaire).
+
+### Numéro de commande :
+- Format : `CMD-{YYYYMMDD}-{NNN}` (ex: `CMD-20260611-001`)
+- Compteur journalier basé sur `COUNT(NumeroCommande LIKE 'CMD-{date}%') + 1`
+
+### Ticket commande :
+- Même structure que le ticket vente mais avec en haut : N° Commande, Nom, Prénom, Téléphone, Adresse (si dispo), Ville/CP
+- En bas : **"RÉGLÉ"** ou **"NON RÉGLÉ — Restant : XX.XX€"** en gras
+
+### Données villes/CP :
+- Fichier `Data/communes.json` (~3 Mo) embarqué depuis `geo.api.gouv.fr`
+- Chargé au démarrage par `CommuneService.Load()`
+- Recherche par CP (préfixe) ou nom de ville (contient)
+

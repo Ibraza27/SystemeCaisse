@@ -30,6 +30,12 @@
     </None>
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="Data\communes.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows10.0.19041</TargetFramework>

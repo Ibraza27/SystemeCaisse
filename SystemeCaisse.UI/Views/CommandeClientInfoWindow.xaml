@@ -1,0 +1,78 @@
+<Window x:Class="SystemeCaisse.UI.Views.CommandeClientInfoWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Informations Client" Width="520" Height="650"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Background="#F5F5F5">
+    <Grid Margin="25">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Text="📋 Informations du Client" FontSize="20" FontWeight="Bold" Foreground="#1565C0" Margin="0,0,0,20"/>
+
+        <StackPanel Grid.Row="1">
+            <!-- Nom -->
+            <TextBlock Text="Nom *" FontWeight="SemiBold" Margin="0,0,0,3"/>
+            <TextBox x:Name="tbNom" FontSize="14" Padding="8,6" Margin="0,0,0,12"/>
+
+            <!-- Prénom -->
+            <TextBlock Text="Prénom *" FontWeight="SemiBold" Margin="0,0,0,3"/>
+            <TextBox x:Name="tbPrenom" FontSize="14" Padding="8,6" Margin="0,0,0,12"/>
+
+            <!-- Téléphone -->
+            <TextBlock Text="Téléphone *" FontWeight="SemiBold" Margin="0,0,0,3"/>
+            <TextBox x:Name="tbTelephone" FontSize="14" Padding="8,6" Margin="0,0,0,12"/>
+
+            <!-- Adresse -->
+            <TextBlock Text="Adresse" FontWeight="SemiBold" Foreground="#666" Margin="0,0,0,3"/>
+            <TextBox x:Name="tbAdresse" FontSize="14" Padding="8,6" Margin="0,0,0,12"/>
+
+            <!-- Ville / Code Postal -->
+            <TextBlock Text="Ville / Code Postal *" FontWeight="SemiBold" Margin="0,0,0,3"/>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBox x:Name="tbVilleSearch" FontSize="14" Padding="8,6" 
+                         TextChanged="TbVilleSearch_TextChanged"
+                         ToolTip="Tapez un code postal ou un nom de ville"/>
+                <ListBox x:Name="lbVilleSuggestions" Grid.Row="1" MaxHeight="160" 
+                         SelectionChanged="LbVilleSuggestions_SelectionChanged"
+                         BorderBrush="#DDD" BorderThickness="1" Margin="0,2,0,0"
+                         Visibility="Collapsed">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Display}" FontSize="13" Padding="4,3"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+        </StackPanel>
+
+        <!-- Buttons -->
+        <Grid Grid.Row="2" Margin="0,20,0,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <UniformGrid Columns="2" Margin="0,0,0,8">
+                <Button Content="✅ Confirmer la Commande" Click="Confirm_Click" Height="48" Margin="0,0,5,0"
+                        Background="#1565C0" Foreground="White" FontSize="14" FontWeight="Bold" Cursor="Hand">
+                    <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                </Button>
+                <Button Content="◀ Retour au Panier" Click="Back_Click" Height="48" Margin="5,0,0,0"
+                        Background="#EEE" Foreground="#333" FontSize="14" FontWeight="SemiBold" Cursor="Hand">
+                    <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                </Button>
+            </UniformGrid>
+            <Button Grid.Row="1" Content="❌ Annuler tout" Click="Cancel_Click" Height="38"
+                    Background="#FFEBEE" Foreground="#C62828" FontWeight="SemiBold" Cursor="Hand">
+                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+            </Button>
+        </Grid>
+    </Grid>
+</Window>

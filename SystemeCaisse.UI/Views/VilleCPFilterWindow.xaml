@@ -1,0 +1,88 @@
+<Window x:Class="SystemeCaisse.UI.Views.VilleCPFilterWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Filtre Ville / Code Postal" Width="520" Height="650"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Background="#F5F5F5">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Text="📍 Filtrer par Ville / Code Postal" FontSize="18" FontWeight="Bold" Foreground="#1565C0" Margin="0,0,0,15"/>
+
+        <!-- Search -->
+        <TextBox x:Name="tbSearch" Grid.Row="1" FontSize="14" Padding="8,6" Margin="0,0,0,10"
+                 TextChanged="TbSearch_TextChanged" 
+                 Tag="Tapez un code postal ou un nom de ville..."/>
+        
+        <!-- Selected pills -->
+        <Border Grid.Row="2" Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,0,0,10"
+                MinHeight="40" MaxHeight="100">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="selectedPills" ItemsSource="{Binding SelectedVillesCPs}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="#E3F2FD" CornerRadius="12" Padding="8,3" Margin="3">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding}" FontSize="12" Foreground="#1565C0" VerticalAlignment="Center"/>
+                                    <Button Content="✕" Click="RemovePill_Click" Tag="{Binding}" 
+                                            Background="Transparent" BorderThickness="0" Foreground="#999" 
+                                            FontSize="12" Cursor="Hand" Margin="5,0,0,0" Padding="2,0"/>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Existing cities from commandes (quick select) -->
+        <TextBlock Grid.Row="3" Text="📋 Villes des commandes :" FontSize="13" FontWeight="SemiBold" Foreground="#666" Margin="0,0,0,5"/>
+        <ListBox x:Name="lbExisting" Grid.Row="4" BorderBrush="#DDD" BorderThickness="1" Margin="0,0,0,10"
+                 MaxHeight="120" PreviewMouseLeftButtonUp="LbExisting_PreviewMouseLeftButtonUp" SelectionMode="Single">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <TextBlock Text="{Binding}" FontSize="13" Padding="5,3" Foreground="#1565C0" FontWeight="SemiBold"/>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!-- Search Results -->
+        <ListBox x:Name="lbResults" Grid.Row="5" BorderBrush="#DDD" BorderThickness="1" Margin="0,0,0,10"
+                 PreviewMouseLeftButtonUp="LbResults_PreviewMouseLeftButtonUp" SelectionMode="Single">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <TextBlock Text="{Binding}" FontSize="13" Padding="5,4"/>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!-- Buttons -->
+        <UniformGrid Grid.Row="6" Columns="3">
+            <Button Content="✅ Appliquer" Click="Apply_Click" Height="42" Margin="0,0,5,0"
+                    Background="#1565C0" Foreground="White" FontWeight="Bold" FontSize="14" Cursor="Hand">
+                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+            </Button>
+            <Button Content="🗑 Tout effacer" Click="Clear_Click" Height="42" Margin="5,0,5,0"
+                    Background="#FFF3E0" Foreground="#E65100" FontWeight="SemiBold" FontSize="14" Cursor="Hand">
+                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+            </Button>
+            <Button Content="Annuler" Click="Cancel_Click" Height="42" Margin="5,0,0,0"
+                    Background="#EEE" Foreground="#333" FontWeight="SemiBold" FontSize="14" Cursor="Hand">
+                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+            </Button>
+        </UniformGrid>
+    </Grid>
+</Window>

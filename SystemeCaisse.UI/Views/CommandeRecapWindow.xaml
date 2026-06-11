@@ -1,0 +1,39 @@
+<Window x:Class="SystemeCaisse.UI.Views.CommandeRecapWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Récapitulatif Produits" Width="550" Height="700"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
+        Background="White">
+    <Grid Margin="15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Margin="0,0,0,15">
+            <TextBlock Text="📊 Récapitulatif des Produits" FontSize="20" FontWeight="Bold" Foreground="#1565C0"/>
+            <TextBlock x:Name="tbSubtitle" FontSize="12" Foreground="#666" Margin="0,5,0,0"/>
+        </StackPanel>
+
+        <DataGrid Grid.Row="1" x:Name="dgRecap" AutoGenerateColumns="False" IsReadOnly="True"
+                  GridLinesVisibility="Horizontal" HeadersVisibility="Column" Background="White"
+                  BorderBrush="#DDD" BorderThickness="1" RowHeight="35">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Produit" Binding="{Binding ProduitNom}" Width="*" FontWeight="SemiBold"/>
+                <DataGridTextColumn Header="Quantité" Binding="{Binding QuantiteTotale, StringFormat=N2}" Width="100" FontWeight="Bold"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,15,0,0">
+            <Button Content="🖨 Imprimer" Click="Print_Click" Width="150" Height="45" Margin="0,0,10,0"
+                    Background="#4CAF50" Foreground="White" FontWeight="Bold" FontSize="14" Cursor="Hand">
+                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+            </Button>
+            <Button Content="Fermer" Click="Close_Click" Width="150" Height="45"
+                    Background="#EEE" Foreground="#333" FontWeight="SemiBold" FontSize="14" Cursor="Hand">
+                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+            </Button>
+        </StackPanel>
+    </Grid>
+</Window>

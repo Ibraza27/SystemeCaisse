@@ -20,6 +20,8 @@ namespace SystemeCaisse.Infrastructure.Data
         public DbSet<CommandeFournisseur> CommandesFournisseurs { get; set; }
         public DbSet<HistoriqueAction> HistoriqueActions { get; set; }
         public DbSet<PlanningPromotion> PlanningPromotions { get; set; }
+        public DbSet<Commande> Commandes { get; set; }
+        public DbSet<LigneCommande> LignesCommande { get; set; }
 
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
         {

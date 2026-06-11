@@ -110,6 +110,10 @@
             <TabItem Header="🛒 Caisse">
                 <views:SalesView/>
             </TabItem>
+
+            <TabItem Header="📋 Commandes">
+                <views:CommandesView DataContext="{Binding CommandesVM}"/>
+            </TabItem>
             
             <TabItem Header="📦 Produits">
                 <views:ProductsView DataContext="{Binding ProductsVM}"/>
