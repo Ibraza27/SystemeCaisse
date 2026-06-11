@@ -1532,6 +1532,24 @@ namespace SystemeCaisse.UI.ViewModels
             }
         }
 
+        /// <summary>
+        /// Returns the number of available (not yet consumed by promotions) units for a cart line.
+        /// </summary>
+        private decimal GetAvailableQty(CartItemViewModel item, Dictionary<CartItemViewModel, decimal> consumedQty)
+        {
+            consumedQty.TryGetValue(item, out decimal used);
+            return item.Quantite - used;
+        }
+
+        /// <summary>
+        /// Marks a number of units as consumed by a promotion for the given cart line.
+        /// </summary>
+        private void ConsumeQty(CartItemViewModel item, decimal qty, Dictionary<CartItemViewModel, decimal> consumedQty)
+        {
+            consumedQty.TryGetValue(item, out decimal used);
+            consumedQty[item] = used + qty;
+        }
+
         private void ApplyAutomaticPromotions()
         {
             foreach (var item in Panier)
@@ -1542,46 +1560,50 @@ namespace SystemeCaisse.UI.ViewModels
 
             if (_activePromotions == null || !_activePromotions.Any()) return;
 
-            // Track which cart items have already been discounted by a promotion
-            // An article/family should only receive ONE promotion to avoid double discounts
-            var alreadyPromoted = new HashSet<CartItemViewModel>();
+            // Track how many units of each cart line have been consumed by promotions.
+            // Remaining units (Quantite - consumed) are still available for other promos.
+            var consumedQty = new Dictionary<CartItemViewModel, decimal>();
 
             foreach (var promo in _activePromotions.Where(p => p.TypePromotion != "remise_total" && p.TypePromotion != "seuil_panier"))
             {
-                var targetItems = promo.TypePromotion == "offre_combine" 
-                    ? Panier.Where(i => !alreadyPromoted.Contains(i)).ToList() 
-                    : Panier.Where(i => 
-                        !alreadyPromoted.Contains(i) &&
-                        ((promo.ProduitId != null && i.Produit.Id == promo.ProduitId) ||
-                        (promo.Categorie != null && i.Produit.Categorie == promo.Categorie))
-                    ).ToList();
-
-                if (!targetItems.Any() && promo.TypePromotion != "offre_combine") continue;
-
                 switch (promo.TypePromotion)
                 {
                     case "remise_produit":
+                    {
+                        var targetItems = Panier.Where(i =>
+                            GetAvailableQty(i, consumedQty) > 0 &&
+                            ((promo.ProduitId != null && i.Produit.Id == promo.ProduitId) ||
+                             (promo.Categorie != null && i.Produit.Categorie == promo.Categorie))
+                        ).ToList();
+
                         foreach (var item in targetItems)
                         {
-                            decimal r = promo.IsPourcentage ? (item.TotalLigneStandard * promo.Valeur / 100) : promo.Valeur;
+                            decimal available = GetAvailableQty(item, consumedQty);
+                            decimal availableTotal = item.PrixUnitaire * available;
+                            decimal r = promo.IsPourcentage ? (availableTotal * promo.Valeur / 100) : promo.Valeur;
                             item.RemiseAuto += r;
-                            item.PromotionAppliquee = promo.Nom;
-                            alreadyPromoted.Add(item);
+                            item.PromotionAppliquee = AppendPromoLabel(item.PromotionAppliquee, promo.Nom);
+                            ConsumeQty(item, available, consumedQty);
                         }
                         break;
+                    }
 
                     case "offre_combine":
+                    {
                         if (promo.BundleItems == null || !promo.BundleItems.Any()) break;
+
+                        // Calculate how many complete bundles we can form from available units
                         int maxBundles = int.MaxValue;
                         foreach (var bi in promo.BundleItems)
                         {
-                            var cartItems = Panier.Where(i => !alreadyPromoted.Contains(i) && i.ProduitId == bi.ProduitId).ToList();
-                            decimal totalQty = cartItems.Sum(i => i.Quantite);
-                            maxBundles = Math.Min(maxBundles, (int)(totalQty / bi.QuantiteRequise));
+                            decimal totalAvailable = Panier
+                                .Where(i => i.ProduitId == bi.ProduitId)
+                                .Sum(i => GetAvailableQty(i, consumedQty));
+                            maxBundles = Math.Min(maxBundles, (int)(totalAvailable / bi.QuantiteRequise));
                         }
                         if (maxBundles <= 0) break;
-                        var participantIds = promo.BundleItems.Select(bi => bi.ProduitId).ToList();
-                        var bundleLines = Panier.Where(i => !alreadyPromoted.Contains(i) && i.ProduitId.HasValue && participantIds.Contains(i.ProduitId.Value)).ToList();
+
+                        // Calculate original bundle total for ratio-based discount distribution
                         decimal originalBundleTotal = 0;
                         foreach (var bi in promo.BundleItems)
                         {
@@ -1589,83 +1611,138 @@ namespace SystemeCaisse.UI.ViewModels
                             originalBundleTotal += (prod?.PrixVente ?? 0) * bi.QuantiteRequise;
                         }
                         if (originalBundleTotal <= 0) break;
+
+                        // Apply discount and consume only the required units
+                        var participantIds = promo.BundleItems.Select(bi => bi.ProduitId).ToList();
+                        var bundleLines = Panier
+                            .Where(i => i.ProduitId.HasValue && participantIds.Contains(i.ProduitId.Value))
+                            .ToList();
+
                         foreach (var bi in promo.BundleItems)
                         {
                             decimal remainingQtyToDiscount = maxBundles * bi.QuantiteRequise;
-                            var itemsForThisProd = bundleLines.Where(l => l.ProduitId == bi.ProduitId).OrderByDescending(l => l.Quantite).ToList();
+                            var itemsForThisProd = bundleLines
+                                .Where(l => l.ProduitId == bi.ProduitId && GetAvailableQty(l, consumedQty) > 0)
+                                .OrderByDescending(l => GetAvailableQty(l, consumedQty))
+                                .ToList();
+
                             foreach (var line in itemsForThisProd)
                             {
                                 if (remainingQtyToDiscount <= 0) break;
-                                decimal qtyToDiscountOnThisLine = Math.Min(line.Quantite, remainingQtyToDiscount);
+                                decimal available = GetAvailableQty(line, consumedQty);
+                                decimal qtyToDiscountOnThisLine = Math.Min(available, remainingQtyToDiscount);
                                 decimal originalLinePrice = line.PrixUnitaire;
                                 decimal ratio = promo.Valeur / originalBundleTotal;
                                 decimal discountedUnitPrice = originalLinePrice * ratio;
                                 decimal discountAmount = qtyToDiscountOnThisLine * (originalLinePrice - discountedUnitPrice);
                                 line.RemiseAuto += discountAmount;
-                                line.PromotionAppliquee = promo.Nom;
-                                alreadyPromoted.Add(line);
+                                line.PromotionAppliquee = AppendPromoLabel(line.PromotionAppliquee, promo.Nom);
+                                ConsumeQty(line, qtyToDiscountOnThisLine, consumedQty);
                                 remainingQtyToDiscount -= qtyToDiscountOnThisLine;
                             }
                         }
                         break;
+                    }
 
                     case "quantite_offerte":
+                    {
                         if (promo.SeuilQuantite > 0 && promo.QuantiteOfferte > 0)
                         {
+                            var targetItems = Panier.Where(i =>
+                                GetAvailableQty(i, consumedQty) > 0 &&
+                                ((promo.ProduitId != null && i.Produit.Id == promo.ProduitId) ||
+                                 (promo.Categorie != null && i.Produit.Categorie == promo.Categorie))
+                            ).ToList();
+
                             foreach (var item in targetItems)
                             {
+                                decimal available = GetAvailableQty(item, consumedQty);
                                 decimal fullSetSize = promo.SeuilQuantite.Value + promo.QuantiteOfferte.Value;
-                                int sets = (int)(item.Quantite / fullSetSize);
+                                int sets = (int)(available / fullSetSize);
                                 if (sets > 0)
                                 {
+                                    decimal consumedByPromo = sets * fullSetSize;
                                     decimal r = sets * promo.QuantiteOfferte.Value * item.PrixUnitaire;
                                     item.RemiseAuto += r;
-                                    item.PromotionAppliquee = $"{promo.Nom} ({sets} offert(s))";
-                                    alreadyPromoted.Add(item);
+                                    item.PromotionAppliquee = AppendPromoLabel(item.PromotionAppliquee, $"{promo.Nom} ({sets} offert(s))");
+                                    ConsumeQty(item, consumedByPromo, consumedQty);
                                 }
                             }
                         }
                         break;
+                    }
 
                     case "remise_ieme":
+                    {
                         if (promo.IemeArticle > 0 && promo.RemiseSurIeme > 0)
                         {
+                            var targetItems = Panier.Where(i =>
+                                GetAvailableQty(i, consumedQty) > 0 &&
+                                ((promo.ProduitId != null && i.Produit.Id == promo.ProduitId) ||
+                                 (promo.Categorie != null && i.Produit.Categorie == promo.Categorie))
+                            ).ToList();
+
                             foreach (var item in targetItems)
                             {
-                                int sets = (int)(item.Quantite / promo.IemeArticle.Value);
+                                decimal available = GetAvailableQty(item, consumedQty);
+                                int sets = (int)(available / promo.IemeArticle.Value);
                                 if (sets > 0)
                                 {
+                                    decimal consumedByPromo = sets * promo.IemeArticle.Value;
                                     decimal r = sets * (promo.IsPourcentage 
                                         ? (item.PrixUnitaire * (promo.RemiseSurIeme.Value / 100))
                                         : promo.RemiseSurIeme.Value);
                                     item.RemiseAuto += r;
                                     string unit = promo.IsPourcentage ? "%" : "€";
-                                    item.PromotionAppliquee = $"{promo.Nom} (-{promo.RemiseSurIeme}{unit} sur {sets})";
-                                    alreadyPromoted.Add(item);
+                                    item.PromotionAppliquee = AppendPromoLabel(item.PromotionAppliquee, $"{promo.Nom} (-{promo.RemiseSurIeme}{unit} sur {sets})");
+                                    ConsumeQty(item, consumedByPromo, consumedQty);
                                 }
                             }
                         }
                         break;
+                    }
 
                     case "prix_degressif":
+                    {
+                        var targetItems = Panier.Where(i =>
+                            GetAvailableQty(i, consumedQty) > 0 &&
+                            ((promo.ProduitId != null && i.Produit.Id == promo.ProduitId) ||
+                             (promo.Categorie != null && i.Produit.Categorie == promo.Categorie))
+                        ).ToList();
+
                         foreach (var item in targetItems)
                         {
+                            decimal available = GetAvailableQty(item, consumedQty);
                             var bestTier = promo.Tiers
-                                .Where(t => item.Quantite >= t.QuantiteMin)
+                                .Where(t => available >= t.QuantiteMin)
                                 .OrderByDescending(t => t.QuantiteMin)
                                 .FirstOrDefault();
                             if (bestTier != null && bestTier.PrixUnitaire < item.PrixUnitaire)
                             {
-                                decimal standardTotal = item.TotalLigneStandard;
-                                decimal degressifTotal = bestTier.PrixUnitaire * item.Quantite;
+                                // Only discount the tier quantity, leave remaining units for other promos
+                                decimal tierQty = bestTier.QuantiteMin;
+                                decimal remainingQty = available - tierQty;
+                                decimal standardTotal = item.PrixUnitaire * tierQty;
+                                decimal degressifTotal = bestTier.PrixUnitaire * tierQty;
                                 item.RemiseAuto += (standardTotal - degressifTotal);
-                                item.PromotionAppliquee = $"{promo.Nom} ({bestTier.PrixUnitaire:C}/u)";
-                                alreadyPromoted.Add(item);
+                                item.PromotionAppliquee = AppendPromoLabel(item.PromotionAppliquee, $"{promo.Nom} ({bestTier.PrixUnitaire:C}/u x{tierQty})");
+                                ConsumeQty(item, tierQty, consumedQty);
+                                // remainingQty units stay available for other promotions
                             }
                         }
                         break;
+                    }
                 }
             }
+        }
+
+        /// <summary>
+        /// Appends a promotion label to an existing label string (supports multiple promos on same line).
+        /// </summary>
+        private static string AppendPromoLabel(string? existing, string newLabel)
+        {
+            if (string.IsNullOrEmpty(existing)) return newLabel;
+            return existing + " + " + newLabel;
         }
         
         private void ApplyManualDiscount()

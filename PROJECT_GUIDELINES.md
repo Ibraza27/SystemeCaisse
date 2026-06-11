@@ -61,8 +61,12 @@ L'initialisation de l'application (`MainViewModel.InitializeAsync`) doit être *
 
 - **Date de fin** : Une promotion peut avoir une date de fin **indéterminée** (`DateFin = null`). Dans ce cas, elle reste active tant qu'elle n'est pas désactivée manuellement.
 - **Validation** : La logique `ApplyAutomaticPromotions` doit traiter `DateFin == null` comme "toujours valide" (`p.DateFin == null || p.DateFin >= DateTime.Today`).
-- **Anti-double promotion** : Un article ou une famille d'articles dans le panier ne peut recevoir qu'**UNE SEULE promotion automatique** à la fois. Si plusieurs promotions ciblent le même article ou la même catégorie, seule la **première promotion** (dans l'ordre de chargement) s'applique. Cela évite les remises cumulées indésirables.
-  - **Mécanisme** : `ApplyAutomaticPromotions()` utilise un `HashSet<CartItemViewModel>` (`alreadyPromoted`) pour suivre les articles déjà promus. Dès qu'un article reçoit une remise automatique, il est ajouté au set et ignoré par les promotions suivantes.
+- **Anti-double promotion par unité** : Un même **article (par ID produit)** ne peut PAS recevoir de double remise sur la **même unité**. Si un article a une quantité de 3 et qu'une promo en consomme 2, l'unité restante reste disponible pour d'autres promotions.
+  - **Mécanisme** : `ApplyAutomaticPromotions()` utilise un `Dictionary<CartItemViewModel, decimal>` (`consumedQty`) pour suivre combien d'unités de chaque ligne ont été consommées par les promos. Les helpers `GetAvailableQty()` et `ConsumeQty()` gèrent le suivi.
+  - **Multi-label** : Si une ligne panier bénéficie de plusieurs promos (sur des unités différentes), les noms de promos sont concaténés avec ` + ` via `AppendPromoLabel()`.
+  - **Exemple validé** :
+    - 3 CUISSES + 1 AILES → Phase 1 (`prix_degressif`) : 2 CUISSES → 45€ (1 restante) → Phase 2 (`offre_combine`) : 1 CUISSE + 1 AILES → 45€ → **Total = 90€**
+    - 3 CUISSES seuls → 2 CUISSES → 45€ + 1 CUISSE au prix normal (25.90€) → **Total = 70.90€**
   - **Exclusion** : Les promotions de type `remise_total` et `seuil_panier` (remises globales sur le panier) ne sont PAS concernées par cette règle et s'appliquent toujours en complément.
 
 ## 8. Mode de Paiement par Défaut
