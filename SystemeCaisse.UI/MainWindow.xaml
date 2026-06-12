@@ -57,6 +57,9 @@
                                 <DataTrigger Binding="{Binding ElementName=mainTabs, Path=SelectedIndex}" Value="1">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                 </DataTrigger>
+                                <DataTrigger Binding="{Binding ElementName=mainTabs, Path=SelectedIndex}" Value="2">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </StackPanel.Style>
@@ -179,6 +182,21 @@
                 </Style>
             </Border.Style>
             <ContentControl x:Name="TicketPlaceholder" />
+        </Border>
+
+        <!-- Commandes Sidebar Panel (Visible only in Commandes tab) -->
+        <Border Grid.Column="1" Background="White" Width="520" BorderBrush="#DDD" BorderThickness="1,0,0,0">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding ElementName=mainTabs, Path=SelectedIndex}" Value="2">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <ContentControl x:Name="CommandesSidebarPlaceholder" />
         </Border>
     </Grid>
 </Window>

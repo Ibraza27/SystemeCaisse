@@ -16,11 +16,11 @@
         <StackPanel Grid.Row="1">
             <!-- Nom -->
             <TextBlock Text="Nom *" FontWeight="SemiBold" Margin="0,0,0,3"/>
-            <TextBox x:Name="tbNom" FontSize="14" Padding="8,6" Margin="0,0,0,12"/>
+            <TextBox x:Name="tbNom" FontSize="14" Padding="8,6" Margin="0,0,0,12" CharacterCasing="Upper"/>
 
             <!-- Prénom -->
             <TextBlock Text="Prénom *" FontWeight="SemiBold" Margin="0,0,0,3"/>
-            <TextBox x:Name="tbPrenom" FontSize="14" Padding="8,6" Margin="0,0,0,12"/>
+            <TextBox x:Name="tbPrenom" FontSize="14" Padding="8,6" Margin="0,0,0,12" CharacterCasing="Upper"/>
 
             <!-- Téléphone -->
             <TextBlock Text="Téléphone *" FontWeight="SemiBold" Margin="0,0,0,3"/>

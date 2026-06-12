@@ -5,6 +5,7 @@ namespace SystemeCaisse.UI.Views
     public partial class AddPaymentWindow : Window
     {
         public decimal MontantAjoute { get; private set; }
+        public string ModePaiement { get; private set; } = "espece";
         private readonly decimal _restant;
 
         public AddPaymentWindow(decimal restant)
@@ -34,6 +35,11 @@ namespace SystemeCaisse.UI.Views
                     return;
                 }
                 MontantAjoute = montant;
+                ModePaiement = rbVirement.IsChecked == true ? "virement" 
+                    : rbWero.IsChecked == true ? "wero" 
+                    : rbCB.IsChecked == true ? "cb" 
+                    : rbEnLigne.IsChecked == true ? "en_ligne" 
+                    : "espece";
                 DialogResult = true;
                 Close();
             }

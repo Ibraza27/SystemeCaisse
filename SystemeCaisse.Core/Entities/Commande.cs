@@ -58,6 +58,9 @@ namespace SystemeCaisse.Core.Entities
         [MaxLength(20)]
         public string Statut { get; set; } = "en_attente";
 
+        [MaxLength(20)]
+        public string? ModePaiement { get; set; } // "espece", "virement", "wero"
+
         public DateTime CreatedAt { get; set; } = DateTime.Now;
         public DateTime UpdatedAt { get; set; } = DateTime.Now;
 
@@ -115,5 +118,16 @@ namespace SystemeCaisse.Core.Entities
         [NotMapped]
         public string VilleCodePostal => 
             string.IsNullOrWhiteSpace(CodePostal) ? (Ville ?? "") : $"{CodePostal} {Ville}";
+
+        [NotMapped]
+        public string ModePaiementDisplay => ModePaiement switch
+        {
+            "espece" => "Espèce",
+            "virement" => "Virement",
+            "wero" => "Wero",
+            "cb" => "CB",
+            "en_ligne" => "En ligne",
+            _ => ModePaiement ?? "—"
+        };
     }
 }

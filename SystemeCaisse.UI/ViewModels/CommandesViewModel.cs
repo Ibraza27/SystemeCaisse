@@ -85,6 +85,13 @@ namespace SystemeCaisse.UI.ViewModels
         private string _clientVille = string.Empty;
         private string _clientCodePostal = string.Empty;
 
+        private string _commandeModePaiement = "en_ligne";
+        public string CommandeModePaiement
+        {
+            get => _commandeModePaiement;
+            set { _commandeModePaiement = value; OnPropertyChanged(); }
+        }
+
         private bool _avecLivraison;
         public bool AvecLivraison
         {
@@ -366,15 +373,25 @@ namespace SystemeCaisse.UI.ViewModels
                 // Ville/CP filter
                 if (VilleCPFilterList.Count > 0)
                 {
-                    var villeCpValues = VilleCPFilterList.Select(v =>
-                    {
-                        var parts = v.Split('—');
-                        return parts.Length >= 2 ? parts[0].Trim() : v.Trim();
-                    }).ToList();
-
                     commandesList = commandesList.Where(c =>
-                        villeCpValues.Any(v => (c.CodePostal ?? "").StartsWith(v) || (c.Ville ?? "").ToUpper().Contains(v.ToUpper()))
-                    ).ToList();
+                    {
+                        string cp = (c.CodePostal ?? "").Trim().ToUpper();
+                        string ville = (c.Ville ?? "").Trim().ToUpper();
+                        string villeCP = (c.VilleCodePostal ?? "").Trim().ToUpper();
+
+                        return VilleCPFilterList.Any(filter =>
+                        {
+                            string f = filter.Trim().ToUpper();
+                            // Direct match on VilleCodePostal display
+                            if (villeCP == f) return true;
+                            // Match on ville name or CP contained in the filter
+                            if (!string.IsNullOrEmpty(cp) && f.Contains(cp)) return true;
+                            if (!string.IsNullOrEmpty(ville) && f.Contains(ville)) return true;
+                            // Also check if commande's villeCP contains the filter
+                            if (!string.IsNullOrEmpty(villeCP) && villeCP.Contains(f)) return true;
+                            return false;
+                        });
+                    }).ToList();
                 }
 
                 // Search filter
@@ -425,6 +442,7 @@ namespace SystemeCaisse.UI.ViewModels
             MontantPaye = 0;
             AvecLivraison = false;
             MontantLivraison = 0;
+            CommandeModePaiement = "en_ligne";
             _ = LoadDataAsync();
         }
 
@@ -783,6 +801,7 @@ namespace SystemeCaisse.UI.ViewModels
                         existing.MontantLivraison = AvecLivraison ? MontantLivraison : 0;
                         existing.AvecLivraison = AvecLivraison;
                         existing.NbArticles = (int)CommandePanier.Sum(i => i.Quantite);
+                        existing.ModePaiement = CommandeModePaiement;
                         existing.UpdatedAt = DateTime.Now;
 
                         ctx.LignesCommande.RemoveRange(existing.Lignes);
@@ -839,6 +858,7 @@ namespace SystemeCaisse.UI.ViewModels
                     AvecLivraison = AvecLivraison,
                     NbArticles = (int)CommandePanier.Sum(i => i.Quantite),
                     Statut = "en_attente",
+                    ModePaiement = CommandeModePaiement,
                     CreatedAt = DateTime.Now,
                     UpdatedAt = DateTime.Now
                 };
@@ -997,6 +1017,7 @@ namespace SystemeCaisse.UI.ViewModels
                     if (cmd != null)
                     {
                         cmd.MontantPaye += win.MontantAjoute;
+                        cmd.ModePaiement = win.ModePaiement;
                         cmd.UpdatedAt = DateTime.Now;
                         ctx.SaveChanges();
                     }
@@ -1030,6 +1051,7 @@ namespace SystemeCaisse.UI.ViewModels
             AvecLivraison = SelectedCommande.AvecLivraison;
             MontantLivraison = SelectedCommande.MontantLivraison;
             MontantPaye = SelectedCommande.MontantPaye;
+            CommandeModePaiement = SelectedCommande.ModePaiement ?? "espece";
 
             CommandePanier.Clear();
             foreach (var ligne in SelectedCommande.Lignes)
@@ -1239,6 +1261,7 @@ namespace SystemeCaisse.UI.ViewModels
                 ClientAdresse = _clientAdresse,
                 ClientVille = _clientVille,
                 ClientCodePostal = _clientCodePostal,
+                ModePaiement = _commandeModePaiement,
                 Total = CommandeTotalAvecLivraison
             };
             suspended.Label = $"⏸ {suspended.Date:HH:mm} — {suspended.Items.Count} art. — {suspended.Total:C}";
@@ -1251,6 +1274,7 @@ namespace SystemeCaisse.UI.ViewModels
             AvecLivraison = false;
             MontantLivraison = 0;
             _clientNom = _clientPrenom = _clientTelephone = _clientAdresse = _clientVille = _clientCodePostal = string.Empty;
+            CommandeModePaiement = "en_ligne";
             UpdateCommandeTotal();
         }
 
@@ -1285,6 +1309,7 @@ namespace SystemeCaisse.UI.ViewModels
             _clientAdresse = suspended.ClientAdresse;
             _clientVille = suspended.ClientVille;
             _clientCodePostal = suspended.ClientCodePostal;
+            CommandeModePaiement = suspended.ModePaiement;
 
             SuspendedCommandes.Remove(suspended);
             OnPropertyChanged(nameof(HasSuspendedCommandes));
@@ -1325,6 +1350,7 @@ namespace SystemeCaisse.UI.ViewModels
         public string ClientAdresse { get; set; } = string.Empty;
         public string ClientVille { get; set; } = string.Empty;
         public string ClientCodePostal { get; set; } = string.Empty;
+        public string ModePaiement { get; set; } = "en_ligne";
         public decimal Total { get; set; }
         public string Label { get; set; } = string.Empty;
         public override string ToString() => Label;

@@ -23,6 +23,9 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = viewModel;
         TicketPlaceholder.Content = new Views.TicketView();
+        var commandesSidebar = new Views.CommandesSidebarView();
+        commandesSidebar.DataContext = viewModel.CommandesVM;
+        CommandesSidebarPlaceholder.Content = commandesSidebar;
         Loaded += (s, e) => viewModel.InitializeCustomerDisplay();
     }
 

@@ -535,6 +535,8 @@ namespace SystemeCaisse.UI.Services
                 AddRow("🚚 Livraison", $"{commande.MontantLivraison:0.00}");
             AddRow("TOTAL À PAYER", $"{commande.TotalAvecLivraison:0.00}", true, 14);
             AddRow("Montant Payé", $"{commande.MontantPaye:0.00}");
+            if (!string.IsNullOrWhiteSpace(commande.ModePaiement))
+                AddRow("Mode paiement", commande.ModePaiementDisplay);
             AddRow("RESTANT", $"{commande.Restant:0.00}", true, 12);
 
             doc.Blocks.Add(new BlockUIContainer(totalGrid));

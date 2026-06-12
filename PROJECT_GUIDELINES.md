@@ -245,10 +245,21 @@ L'application supporte un Terminal de Paiement Électronique (TPE) Verifone conn
 L'onglet **📋 Commandes** (index 2, entre Caisse et Produits) permet de gérer des commandes clients avec paiement partiel, livraison optionnelle et promotions.
 
 ### Architecture :
-- **Entités** : `Commande` (client + montants + statuts) et `LigneCommande` (miroir de `LigneVente`)
+- **Entités** : `Commande` (client + montants + statuts + mode paiement) et `LigneCommande` (miroir de `LigneVente`)
 - **ViewModel** : `CommandesViewModel` — gère la liste, les filtres, la création, et les actions CRUD. Reçoit le `MainViewModel` via `SetMainViewModel()` pour accéder aux TopProducts et au ScaleService.
-- **Vues** : `CommandesView` (liste + détail), mode création intégré (catalogue + panier), `CommandeClientInfoWindow` (modale client avec TextBox+ListBox filtrable)
+- **Vues** :
+  - `CommandesView` (liste filtrable + catalogue nouvelle commande) — contient uniquement la partie gauche
+  - `CommandesSidebarView` (détail commande en mode liste + panier commande en mode création) — panneau latéral droit pleine hauteur
+  - `CommandeClientInfoWindow` (modale client avec TextBox+ListBox filtrable)
+  - `AddPaymentWindow` (modale ajout paiement avec sélection mode)
 - **Services** : `CommuneService` (chargement communes.json), `PrintService.GenerateCommandeTicketDocument()`
+
+### Layout Sidebar Pleine Hauteur (même pattern que la Caisse) :
+- Le panneau droit (détail/panier) est un `UserControl` séparé (`CommandesSidebarView`) injecté dans `Grid.Column="1"` du `MainWindow.xaml`, **en dehors du TabControl**.
+- Le `DataContext` est partagé : `commandesSidebar.DataContext = viewModel.CommandesVM` (dans `MainWindow.xaml.cs`).
+- La visibilité est contrôlée par un `DataTrigger` sur `mainTabs.SelectedIndex == 2`.
+- Le header et la barre de statut sont masqués quand l'onglet Commandes est actif (même comportement que l'onglet Caisse).
+- **Règle** : Ne JAMAIS remettre le panneau droit dans le `CommandesView.xaml` — il doit rester dans le sidebar du MainWindow pour prendre toute la hauteur.
 
 ### Interface Nouvelle Commande (identique à la Caisse) :
 - **Barre de recherche** : ComboBox éditable avec `Loaded` handler anti-auto-sélection (même code que SalesView)
@@ -257,6 +268,21 @@ L'onglet **📋 Commandes** (index 2, entre Caisse et Produits) permet de gérer
 - **Panier** : Colonnes Image, Produit, P.U (/u ou /kg), Qté (+/-, double-clic → `QuantityInputWindow`), Total (barré si promo), ❌
 - **Remise** : Même flux complet que la Caisse — `ManualDiscountSelectionWindow` → `CartItemSelectionWindow` → `DiscountValueInputWindow`
 - **Attente** : Système `SuspendedCommande` avec ComboBox + bouton 📂 dans le coin haut droit du panier (même pattern que `TicketView`/`SuspendedSale`). Le panier est vidé mais on reste en mode nouvelle commande.
+
+### Types de paiement :
+Les commandes supportent 5 modes de paiement, stockés en BDD comme strings :
+
+| Mode | Clé BDD | Affichage Ticket |
+|------|---------|-----------------|
+| Espèce | `espece` | 💵 Espèce |
+| Virement | `virement` | 🏦 Virement |
+| Wero | `wero` | 📱 Wero |
+| Carte Bancaire | `cb` | 💳 CB |
+| En ligne | `en_ligne` | 🌐 En ligne |
+
+- **Mode par défaut** : `en_ligne` — initialisé dans `_commandeModePaiement`, `ResetCommandeForm()`, et `SuspendedCommande.ModePaiement`.
+- **Ajout paiement** : La fenêtre `AddPaymentWindow` propose aussi les 5 modes avec `en_ligne` coché par défaut.
+- **Affichage** : Le mode de paiement apparaît sur le détail de commande, le ticket imprimé, et le panier commande.
 
 ### Modification de commande :
 - **Édition** : La commande originale n'est PAS supprimée. L'ID est stocké dans `_editingCommandeId`. Si l'utilisateur valide, la commande est mise à jour en BDD (UPDATE). Si l'utilisateur annule ("Retour à la liste"), la commande est restaurée intacte.
@@ -297,9 +323,32 @@ L'onglet **📋 Commandes** (index 2, entre Caisse et Produits) permet de gérer
 ### Ticket commande :
 - Même structure que le ticket vente mais avec en haut : N° Commande, Nom, Prénom, Téléphone, Adresse (si dispo), Ville/CP
 - En bas : **"RÉGLÉ"** ou **"NON RÉGLÉ — Restant : XX.XX€"** en gras
+- **Mode de paiement** affiché sur le ticket (ex: "Mode : 🌐 En ligne")
 
 ### Données villes/CP :
 - Fichier `Data/communes.json` (~3 Mo) embarqué depuis `geo.api.gouv.fr`
 - Chargé au démarrage par `CommuneService.Load()`
 - Recherche par CP (préfixe) ou nom de ville (contient)
+
+## 17. Sauvegarde et Restauration de la Base de Données
+
+La sauvegarde/restauration fonctionne par **copie binaire intégrale** du fichier `caisse.db` (SQLite). Cela garantit que **toutes les tables** sont incluses, y compris les commandes.
+
+### Tables sauvegardées (exhaustif) :
+- `Entreprise`, `Configuration`, `Produits`, `Categories`
+- `Ventes`, `LignesVente`, `Paiements`
+- `MouvementsStock`, `CommandesFournisseurs`
+- **`Commandes`**, **`LignesCommande`** (module Commandes)
+- `Promotions`
+
+### Fonctionnement :
+- **Sauvegarde** : `File.Copy(dbPath, saveDlg.FileName, true)` — copie complète du fichier `.db`
+- **Restauration** : `File.Copy(openDlg.FileName, dbPath, true)` — remplacement du fichier `.db` + réparation automatique des chemins d'images (`RepairProductImagePaths`) + redémarrage proposé
+- **Réinitialisation** : `EnsureDeleted()` + `Migrate()` — efface TOUT et recrée le schéma vide
+
+### Règles :
+- La restauration remplace **toutes** les données sans exception.
+- Un message d'avertissement est affiché avant restauration.
+- Le redémarrage est fortement recommandé après restauration.
+- Les images produits ne sont PAS incluses dans le fichier `.db` — elles restent dans le dossier `Images/Produits/`.
 
