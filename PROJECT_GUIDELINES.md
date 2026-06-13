@@ -398,3 +398,101 @@ La sauvegarde/restauration fonctionne par **copie binaire intégrale** du fichie
 - Le redémarrage est fortement recommandé après restauration.
 - Les images produits ne sont PAS incluses dans le fichier `.db` — elles restent dans le dossier `Images/Produits/`.
 
+## 18. Mode Multi-Poste — Partage Base de Données Réseau (Tailscale/SMB)
+
+L'application supporte un fonctionnement multi-poste où plusieurs ordinateurs partagent la même base de données SQLite via un partage réseau SMB (ex: Tailscale VPN).
+
+### Architecture :
+- **Service** : `NetworkDatabaseService.cs` — détecte et gère le basculement entre BDD locale et réseau
+- **Configuration** : Fichier `network_db_config.json` (à côté de l'exécutable), **non** en BDD pour rester indépendant
+- **UI Config** : Section « Base de données partagée » dans l'onglet Configuration
+- **Flag statique** : `AppDbContext.IsNetworkDatabaseMode` — propagé au démarrage pour adapter le comportement EF Core
+
+### Modes de fonctionnement :
+
+| Poste | Mode | BDD | Config réseau |
+|-------|------|-----|---------------|
+| **Principal** (serveur) | LOCAL | `caisse.db` local | Désactivé |
+| **Secondaire** (client) | RÉSEAU | `\\100.113.56.25\SystemeCaisse\caisse.db` | Activé |
+
+### Configuration réseau :
+```json
+{
+  "Enabled": true,
+  "NetworkDbPath": "\\\\100.113.56.25\\SystemeCaisse\\caisse.db"
+}
+```
+
+- **Chemin par défaut** pré-rempli : `\\100.113.56.25\SystemeCaisse\caisse.db`
+- **Bouton "Tester"** : Vérifie l'accessibilité du chemin réseau avant activation
+- **Indicateur** : Pastille verte/rouge + texte "Mode RÉSEAU" / "Mode LOCAL" visible en permanence
+
+### Contraintes SQLite sur SMB :
+
+> **CRITIQUE** : Le mode WAL (Write-Ahead Logging) est **INTERDIT** sur les partages SMB.
+
+| Mode Journal | Compatible SMB | Raison |
+|--------------|---------------|--------|
+| `WAL` | ❌ NON | Utilise `mmap()` (memory-mapped I/O) — incompatible avec SMB |
+| `DELETE` | ✅ OUI | Verrouillage fichier classique — fonctionne sur SMB |
+
+- **PRAGMA obligatoire** : `journal_mode=DELETE` est forcé dans le constructeur `AppDbContext` pour TOUS les postes (local ET réseau).
+- **busy_timeout** : `PRAGMA busy_timeout=10000` (10 secondes d'attente si la BDD est verrouillée par un autre poste).
+- **Fermeture connexion** : Après l'exécution des PRAGMAs dans le constructeur, `connection.Close()` est **OBLIGATOIRE** pour libérer le verrou fichier. Sans cela, le poste principal bloque les écritures des secondaires.
+- **Nettoyage WAL** : `CleanupWalFiles()` dans `NetworkDatabaseService` supprime automatiquement les fichiers `-wal` (si vide) et `-shm` résiduels au démarrage en mode réseau.
+
+### Permissions NTFS et partage SMB :
+
+> **CRITIQUE** : Le dossier partagé doit accorder les droits **Modifier** (pas juste Lecture) aux utilisateurs réseau.
+
+**Erreur typique** : `SQLite Error 8: 'attempt to write a readonly database'` → permissions insuffisantes.
+
+**Fix (sur l'ordi principal, en admin)** :
+```cmd
+icacls "C:\chemin\vers\SystemeCaisse" /grant "Tout le monde:(OI)(CI)M" /T
+```
+
+Deux niveaux de permissions doivent être configurés :
+1. **Partage SMB** : Clic droit → Propriétés → Partage → Partage avancé → Autorisations → Tout le monde → Contrôle total
+2. **NTFS** : Clic droit → Propriétés → Sécurité → Modifier → Tout le monde → Modifier
+
+### Images partagées :
+- Le dossier `Images` est aussi résolu depuis le partage réseau : `\\100.113.56.25\SystemeCaisse\Images`
+- `NetworkDatabaseService.ImagesBasePath` pointe vers le dossier réseau si disponible, sinon fallback local
+- `Produit.FullImagePath` utilise `ImagesBasePath` pour construire le chemin absolu
+
+### Démarrage en mode réseau (postes secondaires) :
+- **Pas de migration** : `MigrateAsync()` et `EnsureCreated()` ne sont PAS exécutés (la BDD est gérée par le principal)
+- **Pas de seed** : Les données initiales (Entreprise, Configuration) ne sont PAS créées
+- **Lecture entreprise** : Les infos entreprise (nom, adresse, logo) sont lues en lecture seule depuis la BDD réseau pour initialiser l'UI
+- **Fallback** : Si le chemin réseau est inaccessible au démarrage, l'application bascule automatiquement en mode local
+
+### Vérification connexion :
+- Vérification périodique toutes les 30 secondes (`DispatcherTimer` dans `MainWindow`)
+- Alerte visuelle si la connexion réseau est perdue en cours d'utilisation
+- `NetworkDatabaseService.TestNetworkPath()` teste l'accessibilité du fichier BDD
+
+### Synchronisation paramètres :
+- Les postes secondaires partagent automatiquement les paramètres entreprise du poste principal
+- Toute modification de l'entreprise sur le principal est visible sur les secondaires au prochain chargement
+
+### Connection string :
+```csharp
+// CORRECT — simple, sans options problématiques
+builder.DataSource = resolvedDbPath;
+
+// INTERDIT — Cache=Shared cause des conflits de verrous sur SMB
+builder.Cache = SqliteCacheMode.Shared; // ❌
+```
+
+### Règles de code :
+- **Connection.Close()** : TOUJOURS fermer la connexion après les PRAGMAs dans le constructeur AppDbContext
+- **InnerException** : TOUJOURS afficher `ex.InnerException?.Message ?? ex.Message` dans les catch de SaveChanges — EF Core encapsule l'erreur SQLite réelle dans une outer exception générique
+- **Pas de migration réseau** : Les postes secondaires ne doivent JAMAIS tenter de migrer ou seeder la BDD réseau
+- **Config hors BDD** : La config réseau est stockée en JSON local, pas en BDD (sinon problème d'œuf et poule)
+
+## 19. Bouton Actualiser (Onglet Produits)
+
+- **Bouton** : « 🔄 Actualiser » dans le footer de `ProductsView`, à côté de « Nouveau »
+- **Command** : `RefreshProductsCommand` dans `ProductsViewModel` — appelle `LoadDataInternalAsync()` pour recharger la liste depuis la BDD
+- **Usage** : Utile en mode multi-poste pour voir les produits ajoutés/modifiés depuis un autre poste

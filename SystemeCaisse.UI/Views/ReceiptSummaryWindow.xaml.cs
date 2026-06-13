@@ -55,7 +55,7 @@ namespace SystemeCaisse.UI.Views
                 }
                 catch (System.Exception ex)
                 {
-                    MessageBox.Show(this, $"Erreur lors de l'enregistrement : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show(this, $"Erreur lors de l'enregistrement : {ex.InnerException?.Message ?? ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
         }

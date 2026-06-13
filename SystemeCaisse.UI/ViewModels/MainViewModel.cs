@@ -348,6 +348,31 @@ namespace SystemeCaisse.UI.ViewModels
             set { _statusMessage = value; OnPropertyChanged(); }
         }
 
+        // === Network Database Mode Properties ===
+        private bool _isNetworkMode;
+        public bool IsNetworkMode
+        {
+            get => _isNetworkMode;
+            set { _isNetworkMode = value; OnPropertyChanged(); OnPropertyChanged(nameof(DatabaseModeDisplay)); OnPropertyChanged(nameof(DatabaseModeColor)); }
+        }
+
+        private bool _isNetworkDisconnected;
+        public bool IsNetworkDisconnected
+        {
+            get => _isNetworkDisconnected;
+            set { _isNetworkDisconnected = value; OnPropertyChanged(); OnPropertyChanged(nameof(DatabaseModeDisplay)); OnPropertyChanged(nameof(DatabaseModeColor)); }
+        }
+
+        private string _databasePath = "";
+        public string DatabasePath
+        {
+            get => _databasePath;
+            set { _databasePath = value; OnPropertyChanged(); }
+        }
+
+        public string DatabaseModeDisplay => IsNetworkDisconnected ? "⚠ Réseau perdu" : (IsNetworkMode ? "🟢 Réseau" : "🔴 Local");
+        public string DatabaseModeColor => IsNetworkDisconnected ? "#E65100" : (IsNetworkMode ? "#2E7D32" : "#C62828");
+
         private Entreprise? _currentEntreprise;
         public Entreprise? CurrentEntreprise
         {
@@ -698,6 +723,42 @@ namespace SystemeCaisse.UI.ViewModels
                     System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] TPE init error: {ex.Message}\n");
                 }
             });
+
+            // 5. Initialize Network Database monitoring
+            try
+            {
+                var networkService = NetworkDatabaseService.Instance;
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    IsNetworkMode = networkService.IsNetworkMode;
+                    DatabasePath = networkService.CurrentDbPath;
+
+                    // Subscribe to network status changes
+                    networkService.NetworkStatusChanged += isConnected =>
+                    {
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            IsNetworkDisconnected = !isConnected;
+                            if (!isConnected)
+                            {
+                                StatusMessage = "⚠ Connexion réseau perdue ! Les données ne sont plus synchronisées.";
+                            }
+                            else
+                            {
+                                StatusMessage = "✅ Connexion réseau rétablie.";
+                                IsNetworkDisconnected = false;
+                            }
+                        });
+                    };
+
+                    // Start periodic check (every 30 seconds)
+                    networkService.StartPeriodicCheck();
+                });
+            }
+            catch (Exception ex)
+            {
+                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] NetworkDB init error: {ex.Message}\n");
+            }
         }
 
         private async Task SafeInitAsync(string name, Func<Task> init)
@@ -1236,7 +1297,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur lors de l'enregistrement : {ex.Message}", "Erreur", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                System.Windows.MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur lors de l'enregistrement : {ex.InnerException?.Message ?? ex.Message}", "Erreur", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
             }
         }
 

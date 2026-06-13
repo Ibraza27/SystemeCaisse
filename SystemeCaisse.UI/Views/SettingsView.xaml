@@ -331,6 +331,50 @@
                                 <Button Command="{Binding ResetDatabaseCommand}" Content="🗑️ Réinitialiser la Base de Données" Width="250" Height="40" HorizontalAlignment="Left" Background="#FF3B30" Foreground="White"/>
                             </StackPanel>
                         </GroupBox>
+
+                        <!-- Network Database Section -->
+                        <GroupBox Header="🌐 Base de Données Réseau (Multi-Postes)" Padding="15" Margin="0,20,0,0" BorderBrush="#1565C0">
+                            <StackPanel>
+                                <!-- Current mode display -->
+                                <Border Background="#E8F5E9" Padding="10" CornerRadius="5" Margin="0,0,0,15">
+                                    <TextBlock Text="{Binding CurrentDbModeDisplay}" FontWeight="SemiBold" FontSize="13" TextWrapping="Wrap"/>
+                                </Border>
+
+                                <TextBlock Text="Connectez plusieurs ordinateurs à la même base de données via Tailscale ou un réseau local. L'ordinateur principal n'a pas besoin d'activer cette option." 
+                                           TextWrapping="Wrap" Margin="0,0,0,15" Foreground="#666" FontSize="11"/>
+
+                                <CheckBox Content="Activer le mode réseau" IsChecked="{Binding IsNetworkDbEnabled}" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,15"/>
+                                
+                                <StackPanel IsEnabled="{Binding IsNetworkDbEnabled}">
+                                    <Label Content="Chemin réseau de la base de données"/>
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Text="{Binding NetworkDbPath, UpdateSourceTrigger=PropertyChanged}" Padding="5" FontFamily="Consolas" FontSize="12"/>
+                                        <Button Grid.Column="1" Content="📂" Command="{Binding BrowseNetworkDbCommand}" Width="35" Height="30" Margin="5,0,0,0" ToolTip="Parcourir"/>
+                                    </Grid>
+
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                        <Button Content="🔍 Tester la connexion" Command="{Binding TestNetworkDbCommand}" 
+                                                Background="#FF9800" Foreground="White" Padding="10,5" Margin="0,0,10,0">
+                                            <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="5"/></Style></Button.Resources>
+                                        </Button>
+                                        <Button Content="💾 Sauvegarder et Redémarrer" Command="{Binding SaveNetworkDbCommand}" 
+                                                Background="#1565C0" Foreground="White" Padding="10,5">
+                                            <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="5"/></Style></Button.Resources>
+                                        </Button>
+                                    </StackPanel>
+
+                                    <TextBlock Text="{Binding NetworkDbTestStatus}" FontSize="12" Foreground="#666" FontStyle="Italic" TextWrapping="Wrap" Margin="0,0,0,5"/>
+                                </StackPanel>
+
+                                <Separator Margin="0,10"/>
+                                <TextBlock Text="ℹ️ Le dossier Images sera aussi partagé automatiquement depuis l'emplacement réseau. Après modification, un redémarrage est nécessaire." 
+                                           FontSize="11" Foreground="#888" TextWrapping="Wrap" FontStyle="Italic"/>
+                            </StackPanel>
+                        </GroupBox>
                     </StackPanel>
                 </TabItem>
             </TabControl>

@@ -303,7 +303,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show(mainWin, $"Erreur lors de l'enregistrement du mouvement : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(mainWin, $"Erreur lors de l'enregistrement du mouvement : {ex.InnerException?.Message ?? ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

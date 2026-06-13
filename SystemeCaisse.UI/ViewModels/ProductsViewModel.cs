@@ -72,6 +72,9 @@ namespace SystemeCaisse.UI.ViewModels
         [RelayCommand]
         private async Task LoadData() => await LoadDataInternalAsync();
 
+        [RelayCommand]
+        private async Task RefreshProducts() => await LoadDataInternalAsync();
+
         private async Task LoadDataInternalAsync()
         {
             try
@@ -279,7 +282,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur lors de l'enregistrement : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur lors de l'enregistrement : {ex.InnerException?.Message ?? ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

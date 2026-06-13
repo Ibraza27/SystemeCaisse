@@ -10,6 +10,7 @@ using SystemeCaisse.Infrastructure.Services;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Runtime.InteropServices;
+using Microsoft.Data.Sqlite;
 
 namespace SystemeCaisse.UI
 {
@@ -47,12 +48,20 @@ namespace SystemeCaisse.UI
             // we eliminate all GPU deadlocks, driver crashes, and "switching shocks" that freeze the UI.
             RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
 
+            // Resolve database path (network or local) BEFORE creating Host
+            var networkDbService = new NetworkDatabaseService();
+            string dbPath = networkDbService.ResolveDbPath();
+
+            // Set the static flag BEFORE any DbContext is created
+            AppDbContext.IsNetworkDatabaseMode = networkDbService.IsNetworkMode;
+
+            // Simple connection string for all modes (WAL removed, no shared cache needed)
+            string connectionString = $"Data Source={dbPath}";
+
             _host = Host.CreateDefaultBuilder()
                 .ConfigureServices((context, services) =>
                 {
-                    // Use a path relative to the application executable
-                    string dbPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "caisse.db");
-                    string connectionString = $"Data Source={dbPath}";
+                    services.AddSingleton(networkDbService);
 
                     services.AddDbContextFactory<AppDbContext>(options =>
                     {
@@ -107,6 +116,10 @@ namespace SystemeCaisse.UI
                 new FrameworkPropertyMetadata(
                     System.Windows.Markup.XmlLanguage.GetLanguage(culture.IetfLanguageTag)));
 
+            // Wire image path resolution for network-shared product images
+            var networkSvc = _host.Services.GetRequiredService<NetworkDatabaseService>();
+            Core.Entities.Produit.ImagePathResolver = networkSvc.ResolveImagePath;
+
             try
             {
                 System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] OnStartup: vérification _host...\n");
@@ -135,77 +148,101 @@ namespace SystemeCaisse.UI
                         }
 
                         System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Task.Run: Migration DB...\n");
+                        var networkSvc = _host.Services.GetRequiredService<NetworkDatabaseService>();
                         // Seed Data if empty
                         var factory = _host.Services.GetRequiredService<IDbContextFactory<AppDbContext>>();
                         using (var context = factory.CreateDbContext())
                         {
-                            await context.Database.MigrateAsync();
-                            System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Task.Run: Migration terminée. Seed...\n");
-                            if (!await context.Produits.AnyAsync())
+                            if (networkSvc.IsNetworkMode)
                             {
-                                context.Produits.AddRange(
-                                    new Core.Entities.Produit { Nom = "Pomme Golden", PrixVente = 1.99m, StockActuel = 100, CodeBarre = "1001" },
-                                    new Core.Entities.Produit { Nom = "Banane Cavendish", PrixVente = 0.99m, StockActuel = 50, CodeBarre = "1002" },
-                                    new Core.Entities.Produit { Nom = "Tomate Grappe", PrixVente = 2.50m, StockActuel = 30, CodeBarre = "1003" },
-                                    new Core.Entities.Produit { Nom = "Courgette Bio", PrixVente = 1.50m, StockActuel = 20, CodeBarre = "1004" },
-                                    new Core.Entities.Produit { Nom = "Poivron Rouge", PrixVente = 3.00m, StockActuel = 40, CodeBarre = "1005" },
-                                    new Core.Entities.Produit { Nom = "Salade Batavia", PrixVente = 1.20m, StockActuel = 15, CodeBarre = "1006" }
-                                );
-                                await context.SaveChangesAsync();
-                            }
-
-                            // Ensure Enterprise data is correct
-                            var entreprise = await context.Entreprise.FirstOrDefaultAsync();
-                            if (entreprise == null)
-                            {
-                                entreprise = new Core.Entities.Entreprise
+                                // Network mode: skip migrations and seeding (main computer manages)
+                                // But DO read enterprise data for splash logo
+                                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Mode RÉSEAU: skip migration, lecture données...\n");
+                                try
                                 {
-                                    Nom = "HIPPOCAMPE",
-                                    Adresse = "5 - 7 Rue Pascal 33370 Tresses, France",
-                                    Telephone = "06 00 00 00 00"
-                                };
-                                context.Entreprise.Add(entreprise);
+                                    var entreprise = await context.Entreprise.FirstOrDefaultAsync();
+                                    if (entreprise != null)
+                                    {
+                                        var logoPath = !string.IsNullOrEmpty(entreprise.LogoPath) && System.IO.File.Exists(entreprise.LogoPath) 
+                                            ? entreprise.LogoPath : null;
+                                        await Application.Current.Dispatcher.InvokeAsync(() => {
+                                            try { splash.SetLogo(logoPath); } catch { }
+                                        });
+                                    }
+                                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Mode RÉSEAU: lecture OK\n");
+                                }
+                                catch (Exception netEx)
+                                {
+                                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Mode RÉSEAU: erreur lecture: {netEx.Message}\n");
+                                }
+                            }
+                            else
+                            {
+                                // Local mode: run migrations normally
+                                await context.Database.MigrateAsync();
+                                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Task.Run: Migration terminée. Seed...\n");
+                                if (!await context.Produits.AnyAsync())
+                                {
+                                    context.Produits.AddRange(
+                                        new Core.Entities.Produit { Nom = "Pomme Golden", PrixVente = 1.99m, StockActuel = 100, CodeBarre = "1001" },
+                                        new Core.Entities.Produit { Nom = "Banane Cavendish", PrixVente = 0.99m, StockActuel = 50, CodeBarre = "1002" },
+                                        new Core.Entities.Produit { Nom = "Tomate Grappe", PrixVente = 2.50m, StockActuel = 30, CodeBarre = "1003" },
+                                        new Core.Entities.Produit { Nom = "Courgette Bio", PrixVente = 1.50m, StockActuel = 20, CodeBarre = "1004" },
+                                        new Core.Entities.Produit { Nom = "Poivron Rouge", PrixVente = 3.00m, StockActuel = 40, CodeBarre = "1005" },
+                                        new Core.Entities.Produit { Nom = "Salade Batavia", PrixVente = 1.20m, StockActuel = 15, CodeBarre = "1006" }
+                                    );
+                                    await context.SaveChangesAsync();
+                                }
+
+                                // Ensure Enterprise data is correct
+                                var entreprise = await context.Entreprise.FirstOrDefaultAsync();
+                                if (entreprise == null)
+                                {
+                                    entreprise = new Core.Entities.Entreprise
+                                    {
+                                        Nom = "HIPPOCAMPE",
+                                        Adresse = "5 - 7 Rue Pascal 33370 Tresses, France",
+                                        Telephone = "06 00 00 00 00"
+                                    };
+                                    context.Entreprise.Add(entreprise);
+                                    await context.SaveChangesAsync();
+                                }
+                            
+                                // Update Splash Logo on UI Thread safely
+                                var logoPath = !string.IsNullOrEmpty(entreprise.LogoPath) && System.IO.File.Exists(entreprise.LogoPath) 
+                                    ? entreprise.LogoPath : null;
+                            
+                                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Task.Run: Splash Logo Update...\n");
+                                await Application.Current.Dispatcher.InvokeAsync(() => {
+                                    try { splash.SetLogo(logoPath); } catch { }
+                                });
+                                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Task.Run: Divers data fix...\n");
+                                var diversLines = await context.LignesVente
+                                    .Where(l => l.CategorieNom == "Divers" || string.IsNullOrWhiteSpace(l.CategorieNom))
+                                    .ToListAsync();
+                            
+                                foreach (var line in diversLines)
+                                {
+                                    line.CategorieNom = "Autre";
+                                }
+
+                                var diversProds = await context.Produits
+                                    .Where(p => p.Categorie == "Divers" || string.IsNullOrWhiteSpace(p.Categorie))
+                                    .ToListAsync();
+                            
+                                foreach (var prod in diversProds)
+                                {
+                                    prod.Categorie = "Autre";
+                                }
+
+                                var tomateProd = await context.Produits.FirstOrDefaultAsync(p => p.Nom == "Tomates" && !p.Actif);
+                                if (tomateProd != null)
+                                {
+                                    tomateProd.Actif = true;
+                                }
+
                                 await context.SaveChangesAsync();
                             }
-                            
-                            // v4.4: Removed hardcoded overwrite of entreprise data to respect user settings.
-                            
-                            // Update Splash Logo on UI Thread safely
-                            var logoPath = !string.IsNullOrEmpty(entreprise.LogoPath) && System.IO.File.Exists(entreprise.LogoPath) 
-                                ? entreprise.LogoPath 
-                                : null;
-                            
-                            System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Task.Run: Splash Logo Update...\n");
-                            await Application.Current.Dispatcher.InvokeAsync(() => {
-                                try { splash.SetLogo(logoPath); } catch { /* Ignore splash errors */ }
-                            });
-                            System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Task.Run: Divers data fix...\n");
-                            var diversLines = await context.LignesVente
-                                .Where(l => l.CategorieNom == "Divers" || string.IsNullOrWhiteSpace(l.CategorieNom))
-                                .ToListAsync();
-                            
-                            foreach (var line in diversLines)
-                            {
-                                line.CategorieNom = "Autre";
-                            }
-
-                            var diversProds = await context.Produits
-                                .Where(p => p.Categorie == "Divers" || string.IsNullOrWhiteSpace(p.Categorie))
-                                .ToListAsync();
-                            
-                            foreach (var prod in diversProds)
-                            {
-                                prod.Categorie = "Autre";
-                            }
-
-                            // Specific Fix: Reactivate "Tomates" if it's the top product but inactive
-                            var tomateProd = await context.Produits.FirstOrDefaultAsync(p => p.Nom == "Tomates" && !p.Actif);
-                            if (tomateProd != null)
-                            {
-                                tomateProd.Actif = true;
-                            }
-
-                            await context.SaveChangesAsync();
                         }
                     }
                     catch (Exception innerEx)

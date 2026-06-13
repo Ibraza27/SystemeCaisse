@@ -79,6 +79,19 @@ namespace SystemeCaisse.UI.ViewModels
         [ObservableProperty]
         private ObservableCollection<string> _availableScreens = new();
 
+        // === Network Database Properties ===
+        [ObservableProperty]
+        private bool _isNetworkDbEnabled;
+
+        [ObservableProperty]
+        private string _networkDbPath = @"\\100.113.56.25\SystemeCaisse\caisse.db";
+
+        [ObservableProperty]
+        private string _networkDbTestStatus = "";
+
+        [ObservableProperty]
+        private string _currentDbModeDisplay = "";
+
         // === Scale Properties ===
         [ObservableProperty]
         private bool _isScaleEnabled;
@@ -492,6 +505,22 @@ namespace SystemeCaisse.UI.ViewModels
             var showAll = context.Configuration.Find("show_all_top_products");
             if (showAll != null && bool.TryParse(showAll.Valeur, out bool sa)) ShowAllTopProducts = sa;
 
+            // Load Network DB config from local JSON file (not from DB)
+            try
+            {
+                var networkService = NetworkDatabaseService.Instance;
+                var networkConfig = networkService.LoadConfig();
+                IsNetworkDbEnabled = networkConfig.Enabled;
+                NetworkDbPath = networkConfig.NetworkDbPath;
+                CurrentDbModeDisplay = networkService.IsNetworkMode 
+                    ? $"🟢 Mode Réseau — {networkService.CurrentDbPath}" 
+                    : $"🔴 Mode Local — {networkService.CurrentDbPath}";
+            }
+            catch
+            {
+                CurrentDbModeDisplay = "🔴 Mode Local (par défaut)";
+            }
+
             // Load Display Promotions for selection
             LoadDisplayPromotionsSelection(context);
         }
@@ -688,7 +717,7 @@ namespace SystemeCaisse.UI.ViewModels
             catch (Exception ex)
             {
                 var owner = Services.WindowHelper.GetAdminWindow();
-                MessageBox.Show(owner, $"Erreur lors de l'enregistrement : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(owner, $"Erreur lors de l'enregistrement : {ex.InnerException?.Message ?? ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -881,6 +910,84 @@ namespace SystemeCaisse.UI.ViewModels
             {
                 Process.Start(processPath);
                 Application.Current.Shutdown();
+            }
+        }
+
+        // === Network Database Commands ===
+
+        [RelayCommand]
+        private void TestNetworkDb()
+        {
+            if (string.IsNullOrWhiteSpace(NetworkDbPath))
+            {
+                NetworkDbTestStatus = "❌ Veuillez saisir un chemin réseau.";
+                return;
+            }
+
+            NetworkDbTestStatus = "⏳ Test en cours...";
+            bool accessible = NetworkDatabaseService.TestNetworkPath(NetworkDbPath);
+            NetworkDbTestStatus = accessible
+                ? $"✅ Chemin accessible : {NetworkDbPath}"
+                : $"❌ Chemin inaccessible : {NetworkDbPath}. Vérifiez le réseau et le partage.";
+        }
+
+        [RelayCommand]
+        private void BrowseNetworkDb()
+        {
+            var openDlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "SQLite Database (*.db)|*.db|All Files (*.*)|*.*",
+                Title = "Sélectionner la base de données réseau",
+                FileName = "caisse.db"
+            };
+
+            // Try to set initial directory to the network share
+            try
+            {
+                string? dir = Path.GetDirectoryName(NetworkDbPath);
+                if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
+                    openDlg.InitialDirectory = dir;
+            }
+            catch { }
+
+            if (openDlg.ShowDialog(Services.WindowHelper.GetAdminWindow()) == true)
+            {
+                NetworkDbPath = openDlg.FileName;
+                TestNetworkDb();
+            }
+        }
+
+        [RelayCommand]
+        private void SaveNetworkDb()
+        {
+            try
+            {
+                var networkService = NetworkDatabaseService.Instance;
+                networkService.SaveConfig(new NetworkDbConfig
+                {
+                    Enabled = IsNetworkDbEnabled,
+                    NetworkDbPath = NetworkDbPath
+                });
+
+                var owner = Services.WindowHelper.GetAdminWindow();
+                var result = MessageBox.Show(owner,
+                    $"Configuration réseau sauvegardée !\n\n" +
+                    $"Mode : {(IsNetworkDbEnabled ? "Réseau activé" : "Local uniquement")}\n" +
+                    $"Chemin : {NetworkDbPath}\n\n" +
+                    "L'application doit redémarrer pour appliquer les changements.\nRedémarrer maintenant ?",
+                    "Configuration Réseau",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    RestartApplication();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(Services.WindowHelper.GetAdminWindow(),
+                    $"Erreur : {ex.InnerException?.Message ?? ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

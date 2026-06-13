@@ -129,6 +129,9 @@
             <!-- Footer Actions -->
             <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,0">
                 <Button Command="{Binding AddCommand}" Content="Nouveau" Width="100" Padding="8" Background="#DDD" Margin="0,0,10,0" FontWeight="Bold"/>
+                <Button Command="{Binding RefreshProductsCommand}" Content="🔄 Actualiser" Padding="8,8" Background="#1565C0" Foreground="White" Margin="0,0,10,0" FontWeight="SemiBold" ToolTip="Recharger les produits depuis la base de données">
+                    <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></Button.Resources>
+                </Button>
 
                 <TextBlock Text="{Binding ProductsCollectionView.Count, StringFormat='{}{0} produits'}" VerticalAlignment="Center" Margin="10,0,0,0" Foreground="#666"/>
             </StackPanel>

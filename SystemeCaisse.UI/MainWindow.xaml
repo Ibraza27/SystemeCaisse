@@ -145,6 +145,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="{Binding StatusMessage}" Foreground="Green" FontWeight="SemiBold"/>
@@ -153,7 +154,27 @@
                     <TextBlock Text="{Binding StocksVM.NombreAlertes}" Foreground="Red" FontWeight="Bold"/>
                 </StackPanel>
                 
-                <TextBlock Grid.Column="1" Text="v1.0.0" Foreground="#999">
+                <!-- Network DB indicator -->
+                <Border Grid.Column="1" Padding="8,2" CornerRadius="3" Margin="10,0"
+                        ToolTip="{Binding DatabasePath}">
+                    <TextBlock Text="{Binding DatabaseModeDisplay}" FontWeight="SemiBold" FontSize="11">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="#2E7D32"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsNetworkMode}" Value="False">
+                                        <Setter Property="Foreground" Value="#999"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsNetworkDisconnected}" Value="True">
+                                        <Setter Property="Foreground" Value="#E65100"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Border>
+
+                <TextBlock Grid.Column="2" Text="v1.0.0" Foreground="#999">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
                             <Setter Property="Visibility" Value="Visible"/>

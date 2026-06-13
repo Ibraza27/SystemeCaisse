@@ -59,15 +59,26 @@ namespace SystemeCaisse.Core.Entities
         [MaxLength(255)]
         public string? ImagePath { get; set; }
 
+        /// <summary>
+        /// Static delegate for resolving image paths. Set by the UI layer at startup
+        /// to support network-shared images without coupling Core to UI.
+        /// </summary>
+        [NotMapped]
+        public static Func<string?, string?>? ImagePathResolver { get; set; }
+
         [NotMapped]
         public string? FullImagePath
         {
             get
             {
                 if (string.IsNullOrWhiteSpace(ImagePath)) return null;
-                // If already absolute, return as-is
+                
+                // Use the delegate if set (supports network images)
+                if (ImagePathResolver != null)
+                    return ImagePathResolver(ImagePath);
+
+                // Fallback: resolve locally
                 if (Path.IsPathRooted(ImagePath)) return File.Exists(ImagePath) ? ImagePath : null;
-                // Resolve relative to app directory
                 var fullPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ImagePath);
                 return File.Exists(fullPath) ? fullPath : null;
             }
