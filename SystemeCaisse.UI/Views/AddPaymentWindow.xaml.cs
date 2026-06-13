@@ -20,7 +20,7 @@ namespace SystemeCaisse.UI.Views
 
         private void FillExact_Click(object sender, RoutedEventArgs e)
         {
-            tbMontant.Text = _restant.ToString("N2");
+            tbMontant.Text = Math.Round(_restant, 2).ToString("N2");
         }
 
         private void Confirm_Click(object sender, RoutedEventArgs e)
@@ -29,7 +29,8 @@ namespace SystemeCaisse.UI.Views
                 System.Globalization.NumberStyles.Any, 
                 System.Globalization.CultureInfo.InvariantCulture, out decimal montant) && montant > 0)
             {
-                if (montant > _restant)
+                montant = Math.Round(montant, 2);
+                if (montant > Math.Round(_restant, 2))
                 {
                     MessageBox.Show(this, $"Le montant ne peut pas dépasser le restant ({_restant:C}).", "Attention", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;

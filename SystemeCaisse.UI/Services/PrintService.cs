@@ -441,14 +441,14 @@ namespace SystemeCaisse.UI.Services
             // 2. COMMANDE Header
             headerPara.Inlines.Add(new Bold(new Run("═══ COMMANDE ═══")) { FontSize = 14 });
             headerPara.Inlines.Add(new LineBreak());
-            headerPara.Inlines.Add(new Bold(new Run(commande.NumeroCommande)) { FontSize = 13 });
+            headerPara.Inlines.Add(new Bold(new Run(commande.NumeroCommande)) { FontSize = 16 });
             headerPara.Inlines.Add(new LineBreak());
             headerPara.Inlines.Add(new LineBreak());
 
             // Client info
-            headerPara.Inlines.Add(new Bold(new Run($"{commande.Prenom} {commande.Nom}")));
+            headerPara.Inlines.Add(new Bold(new Run($"{commande.Prenom} {commande.Nom}")) { FontSize = 14 });
             headerPara.Inlines.Add(new LineBreak());
-            headerPara.Inlines.Add(new Run($"Tél: {commande.Telephone}"));
+            headerPara.Inlines.Add(new Bold(new Run($"Tél: {FormatPhone(commande.Telephone)}")) { FontSize = 12 });
             headerPara.Inlines.Add(new LineBreak());
             if (!string.IsNullOrWhiteSpace(commande.Adresse))
             {
@@ -565,6 +565,29 @@ namespace SystemeCaisse.UI.Services
             doc.Blocks.Add(footerPara);
 
             return doc;
+        }
+
+        /// <summary>
+        /// Formats a phone number with spaces between digit pairs for readability.
+        /// Example: "0612345678" → "06 12 34 56 78"
+        /// </summary>
+        private static string FormatPhone(string? phone)
+        {
+            if (string.IsNullOrWhiteSpace(phone)) return phone ?? "";
+            var digits = new System.Text.StringBuilder();
+            foreach (char c in phone)
+            {
+                if (char.IsDigit(c) || c == '+') digits.Append(c);
+            }
+            string clean = digits.ToString();
+            if (clean.Length < 4) return clean;
+            var result = new System.Text.StringBuilder();
+            for (int i = 0; i < clean.Length; i++)
+            {
+                if (i > 0 && i % 2 == 0) result.Append(' ');
+                result.Append(clean[i]);
+            }
+            return result.ToString();
         }
     }
 }

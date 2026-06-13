@@ -64,6 +64,46 @@ namespace SystemeCaisse.UI.ViewModels
 
         public bool IsDetailVisible => SelectedCommande != null;
 
+        // ─── Multi-select ───
+        public bool HasSelection => Commandes.Any(c => c.IsSelected);
+        public int SelectionCount => Commandes.Count(c => c.IsSelected);
+        public List<Commande> SelectedCommandes => Commandes.Where(c => c.IsSelected).ToList();
+
+        private bool _isAllSelected;
+        public bool IsAllSelected
+        {
+            get => _isAllSelected;
+            set
+            {
+                _isAllSelected = value;
+                foreach (var c in Commandes) c.IsSelected = value;
+                OnPropertyChanged();
+                NotifySelectionChanged();
+            }
+        }
+
+        // ─── Recap Summary (bottom bar) ───
+        private int _commandesCount;
+        public int CommandesCount { get => _commandesCount; set { _commandesCount = value; OnPropertyChanged(); } }
+        private int _commandesRegleCount;
+        public int CommandesRegleCount { get => _commandesRegleCount; set { _commandesRegleCount = value; OnPropertyChanged(); } }
+        private int _commandesPartielCount;
+        public int CommandesPartielCount { get => _commandesPartielCount; set { _commandesPartielCount = value; OnPropertyChanged(); } }
+        private int _commandesNonRegleCount;
+        public int CommandesNonRegleCount { get => _commandesNonRegleCount; set { _commandesNonRegleCount = value; OnPropertyChanged(); } }
+        private decimal _totalCB;
+        public decimal TotalCB { get => _totalCB; set { _totalCB = value; OnPropertyChanged(); } }
+        private decimal _totalEspece;
+        public decimal TotalEspece { get => _totalEspece; set { _totalEspece = value; OnPropertyChanged(); } }
+        private decimal _totalEnLigne;
+        public decimal TotalEnLigne { get => _totalEnLigne; set { _totalEnLigne = value; OnPropertyChanged(); } }
+        private decimal _totalWero;
+        public decimal TotalWero { get => _totalWero; set { _totalWero = value; OnPropertyChanged(); } }
+        private decimal _totalVirement;
+        public decimal TotalVirement { get => _totalVirement; set { _totalVirement = value; OnPropertyChanged(); } }
+        private decimal _totalGeneral;
+        public decimal TotalGeneral { get => _totalGeneral; set { _totalGeneral = value; OnPropertyChanged(); } }
+
         // ─── New Commande mode ───
         private bool _isNewCommandeMode;
         public bool IsNewCommandeMode
@@ -216,6 +256,17 @@ namespace SystemeCaisse.UI.ViewModels
         public ICommand SuspendCommandeCommand { get; }
         public ICommand ResumeCommandeCommand { get; }
 
+        // Batch selection commands
+        public ICommand SelectAllCommand { get; }
+        public ICommand DeselectAllCommand { get; }
+        public ICommand BatchMarkTraiteeCommand { get; }
+        public ICommand BatchMarkEnAttenteCommand { get; }
+        public ICommand BatchAnnulerCommand { get; }
+        public ICommand BatchDeleteCommand { get; }
+        public ICommand BatchPrintCommand { get; }
+        public ICommand BatchRecapCommand { get; }
+        public ICommand PrintClientRecapCommand { get; }
+
         public CommandesViewModel(IDbContextFactory<AppDbContext> contextFactory, PrintService printService)
         {
             _contextFactory = contextFactory;
@@ -231,7 +282,7 @@ namespace SystemeCaisse.UI.ViewModels
             AddToCommandePanierCommand = new BasicRelayCommand(p => { if (p is Produit prod) AddToCommandePanier(prod); });
             RemoveCommandeItemCommand = new BasicRelayCommand(p => { if (p is CartItemViewModel item) { CommandePanier.Remove(item); UpdateCommandeTotal(); } });
             ViderCommandePanierCommand = new BasicRelayCommand(_ => { CommandePanier.Clear(); MontantPaye = 0; AvecLivraison = false; MontantLivraison = 0; UpdateCommandeTotal(); });
-            FillExactAmountCommand = new BasicRelayCommand(_ => MontantPaye = CommandeTotalAvecLivraison);
+            FillExactAmountCommand = new BasicRelayCommand(_ => MontantPaye = Math.Round(CommandeTotalAvecLivraison, 2));
             ScanNewCommandeCommand = new BasicRelayCommand(_ => HandleNewCommandeScan());
             ClearNewCommandeSearchCommand = new BasicRelayCommand(_ => NewCommandeSearchText = string.Empty);
             OpenVilleCPFilterCommand = new BasicRelayCommand(_ => OpenVilleCPFilter());
@@ -241,6 +292,17 @@ namespace SystemeCaisse.UI.ViewModels
             EditCommandeQuantityCommand = new BasicRelayCommand(p => EditCommandeQuantity(p));
             SuspendCommandeCommand = new BasicRelayCommand(_ => SuspendCommande(), _ => CommandePanier.Count > 0);
             ResumeCommandeCommand = new BasicRelayCommand(p => ResumeCommande(p));
+
+            // Batch selection commands
+            SelectAllCommand = new BasicRelayCommand(_ => { foreach (var c in Commandes) c.IsSelected = true; NotifySelectionChanged(); });
+            DeselectAllCommand = new BasicRelayCommand(_ => { foreach (var c in Commandes) c.IsSelected = false; NotifySelectionChanged(); });
+            BatchMarkTraiteeCommand = new BasicRelayCommand(_ => BatchChangeStatus("traitee"), _ => HasSelection);
+            BatchMarkEnAttenteCommand = new BasicRelayCommand(_ => BatchChangeStatus("en_attente"), _ => HasSelection);
+            BatchAnnulerCommand = new BasicRelayCommand(_ => BatchChangeStatus("annulee"), _ => HasSelection);
+            BatchDeleteCommand = new BasicRelayCommand(_ => BatchDelete(), _ => HasSelection);
+            BatchPrintCommand = new BasicRelayCommand(_ => BatchPrint(), _ => HasSelection);
+            BatchRecapCommand = new BasicRelayCommand(_ => BatchRecap(), _ => HasSelection);
+            PrintClientRecapCommand = new BasicRelayCommand(_ => PrintClientRecap(), _ => Commandes.Count > 0);
 
             ViewTicketCommand = new BasicRelayCommand(_ => ViewCommandeTicket(), _ => SelectedCommande != null);
             PrintTicketCommand = new BasicRelayCommand(_ => PrintCommandeTicket(), _ => SelectedCommande != null);
@@ -410,8 +472,13 @@ namespace SystemeCaisse.UI.ViewModels
                 {
                     Commandes.Clear();
                     foreach (var c in commandesList)
+                    {
+                        c.PropertyChanged += Commande_IsSelectedChanged;
                         Commandes.Add(c);
+                    }
                     OnPropertyChanged(nameof(Commandes));
+                    UpdateRecapSummary();
+                    NotifySelectionChanged();
                 });
             });
         }
@@ -549,8 +616,8 @@ namespace SystemeCaisse.UI.ViewModels
             CommandeTotalRemise = CommandePanier.Sum(i => i.RemiseAuto + i.RemiseManuelle);
             CommandeTotal = CommandeTotalSansRemise - CommandeTotalRemise;
             if (CommandeTotal < 0) CommandeTotal = 0;
-            CommandeTotalAvecLivraison = CommandeTotal + (AvecLivraison ? MontantLivraison : 0);
-            CommandeRestant = CommandeTotalAvecLivraison - MontantPaye;
+            CommandeTotalAvecLivraison = Math.Round(CommandeTotal + (AvecLivraison ? MontantLivraison : 0), 2);
+            CommandeRestant = Math.Round(CommandeTotalAvecLivraison - MontantPaye, 2);
             if (CommandeRestant < 0) CommandeRestant = 0;
         }
 
@@ -978,8 +1045,13 @@ namespace SystemeCaisse.UI.ViewModels
         private void DeleteCommande()
         {
             if (SelectedCommande == null) return;
+
+            string displayName = string.IsNullOrWhiteSpace(SelectedCommande.NumeroCommande)
+                ? $"(commande sans données, ID={SelectedCommande.Id})"
+                : SelectedCommande.NumeroCommande;
+
             if (MessageBox.Show(WindowHelper.GetAdminWindow(),
-                $"Supprimer définitivement la commande {SelectedCommande.NumeroCommande} ?",
+                $"Supprimer définitivement la commande {displayName} ?",
                 "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
                 return;
 
@@ -992,6 +1064,18 @@ namespace SystemeCaisse.UI.ViewModels
                     ctx.LignesCommande.RemoveRange(cmd.Lignes);
                     ctx.Commandes.Remove(cmd);
                     ctx.SaveChanges();
+                }
+                else
+                {
+                    // Fallback: try by NumeroCommande if Id lookup failed
+                    var cmdByNum = ctx.Commandes.Include(c => c.Lignes)
+                        .FirstOrDefault(c => c.NumeroCommande == SelectedCommande.NumeroCommande);
+                    if (cmdByNum != null)
+                    {
+                        ctx.LignesCommande.RemoveRange(cmdByNum.Lignes);
+                        ctx.Commandes.Remove(cmdByNum);
+                        ctx.SaveChanges();
+                    }
                 }
                 SelectedCommande = null;
                 _ = LoadDataAsync();
@@ -1016,7 +1100,7 @@ namespace SystemeCaisse.UI.ViewModels
                     var cmd = ctx.Commandes.FirstOrDefault(c => c.Id == SelectedCommande.Id);
                     if (cmd != null)
                     {
-                        cmd.MontantPaye += win.MontantAjoute;
+                        cmd.MontantPaye = Math.Round(cmd.MontantPaye + win.MontantAjoute, 2);
                         cmd.ModePaiement = win.ModePaiement;
                         cmd.UpdatedAt = DateTime.Now;
                         ctx.SaveChanges();
@@ -1328,6 +1412,170 @@ namespace SystemeCaisse.UI.ViewModels
                 return ctx.Entreprise.FirstOrDefault() ?? new Entreprise { Nom = "Inconnu" };
             }
             catch { return new Entreprise { Nom = "Inconnu" }; }
+        }
+
+        // ─── Multi-select helpers ───
+        private void Commande_IsSelectedChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(Commande.IsSelected))
+                NotifySelectionChanged();
+        }
+
+        private void NotifySelectionChanged()
+        {
+            OnPropertyChanged(nameof(HasSelection));
+            OnPropertyChanged(nameof(SelectionCount));
+            OnPropertyChanged(nameof(SelectedCommandes));
+            // Update IsAllSelected without triggering the setter loop
+            _isAllSelected = Commandes.Count > 0 && Commandes.All(c => c.IsSelected);
+            OnPropertyChanged(nameof(IsAllSelected));
+        }
+
+        private void BatchChangeStatus(string newStatus)
+        {
+            var selected = SelectedCommandes;
+            if (selected.Count == 0) return;
+
+            string displayStatus = newStatus switch
+            {
+                "traitee" => "Traitée",
+                "en_attente" => "En attente",
+                "annulee" => "Annulée",
+                _ => newStatus
+            };
+
+            if (MessageBox.Show(WindowHelper.GetAdminWindow(),
+                $"Passer {selected.Count} commande(s) en \"{displayStatus}\" ?",
+                "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                return;
+
+            try
+            {
+                using var ctx = _contextFactory.CreateDbContext();
+                foreach (var sel in selected)
+                {
+                    var cmd = ctx.Commandes.Include(c => c.Lignes).FirstOrDefault(c => c.Id == sel.Id);
+                    if (cmd == null) continue;
+
+                    // Decrement stock only when changing to "traitee"
+                    if (newStatus == "traitee" && cmd.Statut != "traitee")
+                    {
+                        foreach (var ligne in cmd.Lignes)
+                        {
+                            if (ligne.ProduitId.HasValue)
+                            {
+                                var product = ctx.Produits.FirstOrDefault(p => p.Id == ligne.ProduitId);
+                                if (product != null)
+                                {
+                                    product.StockActuel -= ligne.Quantite;
+                                    ctx.MouvementsStock.Add(new MouvementStock
+                                    {
+                                        ProduitId = ligne.ProduitId.Value,
+                                        TypeMouvement = "sortie",
+                                        Quantite = ligne.Quantite,
+                                        PrixUnitaire = ligne.PrixUnitaire,
+                                        DateMouvement = DateTime.Now,
+                                        Commentaire = $"Commande {cmd.NumeroCommande}",
+                                        ProduitNomSnapshot = ligne.ProduitNom
+                                    });
+                                }
+                            }
+                        }
+                    }
+
+                    cmd.Statut = newStatus;
+                    cmd.UpdatedAt = DateTime.Now;
+                }
+                ctx.SaveChanges();
+                _ = LoadDataAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(WindowHelper.GetAdminWindow(), $"Erreur : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void BatchDelete()
+        {
+            var selected = SelectedCommandes;
+            if (selected.Count == 0) return;
+
+            if (MessageBox.Show(WindowHelper.GetAdminWindow(),
+                $"Supprimer définitivement {selected.Count} commande(s) ?",
+                "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+                return;
+
+            try
+            {
+                using var ctx = _contextFactory.CreateDbContext();
+                foreach (var sel in selected)
+                {
+                    var cmd = ctx.Commandes.Include(c => c.Lignes).FirstOrDefault(c => c.Id == sel.Id);
+                    if (cmd != null)
+                    {
+                        ctx.LignesCommande.RemoveRange(cmd.Lignes);
+                        ctx.Commandes.Remove(cmd);
+                    }
+                }
+                ctx.SaveChanges();
+                SelectedCommande = null;
+                _ = LoadDataAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(WindowHelper.GetAdminWindow(), $"Erreur : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void BatchPrint()
+        {
+            var selected = SelectedCommandes;
+            if (selected.Count == 0) return;
+            var entreprise = GetEntreprise();
+            foreach (var cmd in selected)
+            {
+                _printService.PrintCommandeTicket(cmd, entreprise);
+            }
+        }
+
+        private void BatchRecap()
+        {
+            var selected = SelectedCommandes;
+            if (selected.Count == 0) return;
+            var entreprise = GetEntreprise();
+            var win = new Views.CommandeRecapWindow(selected, _printService, entreprise);
+            win.Owner = WindowHelper.GetAdminWindow();
+            win.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            win.ShowDialog();
+        }
+
+        // ─── Recap Summary (bottom bar) ───
+        private void UpdateRecapSummary()
+        {
+            var list = Commandes.ToList();
+            CommandesCount = list.Count;
+            CommandesRegleCount = list.Count(c => c.StatutPaiement == "regle");
+            CommandesPartielCount = list.Count(c => c.StatutPaiement == "partiel");
+            CommandesNonRegleCount = list.Count(c => c.StatutPaiement == "non_regle");
+
+            // Amounts by payment mode
+            TotalCB = list.Where(c => c.ModePaiement == "cb").Sum(c => c.MontantPaye);
+            TotalEspece = list.Where(c => c.ModePaiement == "espece").Sum(c => c.MontantPaye);
+            TotalEnLigne = list.Where(c => c.ModePaiement == "en_ligne").Sum(c => c.MontantPaye);
+            TotalWero = list.Where(c => c.ModePaiement == "wero").Sum(c => c.MontantPaye);
+            TotalVirement = list.Where(c => c.ModePaiement == "virement").Sum(c => c.MontantPaye);
+            TotalGeneral = list.Sum(c => c.TotalAvecLivraison);
+        }
+
+        // ─── Client Recap ───
+        private void PrintClientRecap()
+        {
+            if (Commandes.Count == 0) return;
+            var entreprise = GetEntreprise();
+            var win = new Views.CommandeClientRecapWindow(Commandes.ToList(), _printService, entreprise);
+            win.Owner = WindowHelper.GetAdminWindow();
+            win.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            win.ShowDialog();
         }
 
         // INotifyPropertyChanged

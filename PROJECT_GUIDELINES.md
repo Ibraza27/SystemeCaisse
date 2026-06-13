@@ -328,7 +328,53 @@ Les commandes supportent 5 modes de paiement, stockés en BDD comme strings :
 ### Données villes/CP :
 - Fichier `Data/communes.json` (~3 Mo) embarqué depuis `geo.api.gouv.fr`
 - Chargé au démarrage par `CommuneService.Load()`
-- Recherche par CP (préfixe) ou nom de ville (contient)
+- Recherche combinée CP + nom de ville (la requête est testée à la fois comme préfixe de code postal ET comme sous-chaîne du nom de ville, ce qui couvre les cas où une ville est difficile à trouver par nom seul)
+- `maxResults` : 25 résultats maximum
+
+### Sélection multiple et actions batch :
+- Chaque ligne de commande possède une case à cocher (`IsSelected`, `[NotMapped]`, `INotifyPropertyChanged`).
+- Le header du DataGrid contient une case "Tout sélectionner / Désélectionner" gérée via `Click` en code-behind (`SelectAllCheckBox_Click` dans `CommandesView.xaml.cs`).
+- **Important** : Ne PAS utiliser de binding WPF pour la checkbox du header DataGrid — le DataContext du header ne résout pas correctement les `RelativeSource` dans WPF. Utiliser un handler `Click` en code-behind.
+- `CanUserAddRows="False"` est obligatoire sur le DataGrid pour éviter une ligne fantôme vide en bas de la liste.
+- Barre d'actions batch (visible quand sélection active) :
+  - ✅ Traitée — marque les commandes sélectionnées comme traitées
+  - ⏳ En attente — remet en attente
+  - ❌ Annuler — annule la sélection
+  - 🗑 Supprimer — supprime avec confirmation
+  - 🖨 Imprimer — imprime tous les tickets de la sélection
+  - 📊 Récap — affiche le récapitulatif des produits de la sélection
+
+### Récap Clients :
+- Fenêtre `CommandeClientRecapWindow` accessible via le bouton "👥 Récap Clients" dans le header.
+- Agrège les commandes par client (Nom + Prénom + Téléphone).
+- **Groupé par Ville** (pas par code postal) — une grande ville avec plusieurs codes postaux est regroupée sous un seul en-tête.
+- Le DataGrid utilise `CollectionViewSource.GetDefaultView` + `PropertyGroupDescription("Ville")` pour le groupement visuel.
+- Le ticket imprimé est aussi organisé par sections ville avec en-têtes `📍 VILLE`.
+- Colonnes : Client, Téléphone, Nb Commandes, Total, Payé, Restant (coloré vert/rouge).
+
+### Barre récapitulative en bas :
+- Bandeau vert en bas de la liste (même style que `HistoryView`).
+- Ligne 1 : Compteurs — total commandes, réglées, partielles, non réglées + Total général.
+- Ligne 2 : Ventilation par mode de paiement — 💳 CB, 💵 Espèce, 🌐 En ligne, 📱 Wero, 🏦 Virement.
+- Propriétés calculées dans `CommandesViewModel` : `CommandesCount`, `CommandesRegleCount`, `CommandesPartielCount`, `CommandesNonRegleCount`, `TotalGeneral`, `TotalCB`, `TotalEspece`, `TotalEnLigne`, `TotalWero`, `TotalVirement`.
+
+### Formatage et affichage :
+- **Téléphone espacé** : `PhoneSpacingConverter` (enregistré globalement dans `App.xaml` sous clé `PhoneSpacing`). Formate `0612345678` → `06 12 34 56 78`. Appliqué dans la colonne téléphone de la liste, le détail sidebar, et le ticket imprimé (via `PrintService.FormatPhone()`).
+- **Mise en évidence texte** : Dans le détail sidebar, N° commande en 22px Bold, nom client en 17px Bold, téléphone en 15px SemiBold, statut paiement en 15px. Dans le ticket imprimé, N° commande en 16px, nom en 14px Bold, téléphone en 12px Bold.
+- **Symbole Euro** : Les montants affichés dans les `Run` bindings du récap bar et de la sidebar utilisent `StringFormat='{}{0:0.00} €'` au lieu de `StringFormat=C` pour garantir le symbole € (le `StringFormat=C` dans les `Run` WPF ignore parfois la culture `FrameworkElement.Language`).
+
+### Précision décimale (fix bouton "= Exact") :
+- `Math.Round(..., 2)` appliqué systématiquement dans :
+  - `Commande.Restant` et `Commande.StatutPaiement` (entité)
+  - `FillExactAmountCommand` (ViewModel)
+  - `UpdateCommandeTotal()` — arrondit `CommandeTotalAvecLivraison` et `CommandeRestant`
+  - `AddPayment()` — arrondit `MontantPaye` après ajout
+  - `AddPaymentWindow` — `FillExact_Click` et `Confirm_Click` utilisent des comparaisons arrondies
+- **Règle** : Toute opération qui compare ou assigne un montant de paiement DOIT arrondir à 2 décimales pour éviter les faux statuts "Non réglé" causés par les erreurs de virgule flottante.
+
+### Suppression de commande :
+- `DeleteCommande()` gère les commandes fantômes (sans données) : affiche le nom ou `(commande sans données, ID=X)` dans la confirmation.
+- Fallback : si la recherche par `Id` échoue en BDD, tente une recherche par `NumeroCommande`.
 
 ## 17. Sauvegarde et Restauration de la Base de Données
 

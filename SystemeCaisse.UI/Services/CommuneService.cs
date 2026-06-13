@@ -64,27 +64,21 @@ namespace SystemeCaisse.UI.Services
             }
         }
 
-        public static List<CommuneEntry> Search(string query, int maxResults = 15)
+        public static List<CommuneEntry> Search(string query, int maxResults = 25)
         {
             if (string.IsNullOrWhiteSpace(query) || query.Length < 2) return new List<CommuneEntry>();
             if (!_loaded) Load();
 
             string q = query.Trim().ToUpperInvariant();
 
-            // If query starts with a digit, search by postal code prefix
-            if (char.IsDigit(q[0]))
-            {
-                return _communes
-                    .Where(c => c.CodePostal.StartsWith(q))
-                    .Take(maxResults)
-                    .ToList();
-            }
-
-            // Otherwise search by city name
-            return _communes
-                .Where(c => c.Ville.ToUpperInvariant().Contains(q))
+            // Always search BOTH by postal code prefix AND by city name containing the query
+            // This ensures cities only findable by CP are also discovered when typing names and vice versa
+            var results = _communes
+                .Where(c => c.CodePostal.StartsWith(q) || c.Ville.ToUpperInvariant().Contains(q) || c.Display.ToUpperInvariant().Contains(q))
                 .Take(maxResults)
                 .ToList();
+
+            return results;
         }
     }
 }

@@ -1,4 +1,5 @@
 using System.Windows.Controls;
+using SystemeCaisse.UI.ViewModels;
 
 namespace SystemeCaisse.UI.Views
 {
@@ -26,6 +27,16 @@ namespace SystemeCaisse.UI.Views
                         }
                     };
                 }
+            }
+        }
+
+        private void SelectAllCheckBox_Click(object sender, System.Windows.RoutedEventArgs e)
+        {
+            if (DataContext is CommandesViewModel vm && sender is CheckBox cb)
+            {
+                bool isChecked = cb.IsChecked == true;
+                foreach (var c in vm.Commandes)
+                    c.IsSelected = isChecked;
             }
         }
     }

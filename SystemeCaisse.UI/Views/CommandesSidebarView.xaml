@@ -51,21 +51,21 @@
 
                     <!-- Client Info -->
                     <StackPanel Grid.Row="1" Margin="0,0,0,15">
-                        <TextBlock Text="{Binding SelectedCommande.NumeroCommande}" FontSize="16" FontWeight="Bold" Foreground="#1565C0"/>
+                        <TextBlock Text="{Binding SelectedCommande.NumeroCommande}" FontSize="22" FontWeight="Bold" Foreground="#1565C0"/>
                         <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
-                            <TextBlock Text="{Binding SelectedCommande.Prenom}" FontWeight="SemiBold"/>
-                            <TextBlock Text=" "/>
-                            <TextBlock Text="{Binding SelectedCommande.Nom}" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding SelectedCommande.Prenom}" FontWeight="Bold" FontSize="17"/>
+                            <TextBlock Text=" " FontSize="17"/>
+                            <TextBlock Text="{Binding SelectedCommande.Nom}" FontWeight="Bold" FontSize="17"/>
                         </StackPanel>
-                        <TextBlock Text="{Binding SelectedCommande.Telephone}" Foreground="#666"/>
+                        <TextBlock Text="{Binding SelectedCommande.Telephone, Converter={StaticResource PhoneSpacing}}" Foreground="#444" FontSize="15" FontWeight="SemiBold" Margin="0,3,0,0"/>
                         <TextBlock Text="{Binding SelectedCommande.Adresse}" Foreground="#666"
                                    Visibility="{Binding SelectedCommande.Adresse, Converter={StaticResource StringToVisibilityConverter}}"/>
                         <TextBlock Text="{Binding SelectedCommande.VilleCodePostal}" Foreground="#666"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
-                            <TextBlock Text="Statut : " Foreground="#666"/>
-                            <TextBlock Text="{Binding SelectedCommande.StatutDisplay}" FontWeight="SemiBold"/>
-                            <TextBlock Text=" | " Foreground="#CCC" Margin="5,0"/>
-                            <TextBlock Text="{Binding SelectedCommande.StatutPaiementDisplay}" FontWeight="Bold">
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <TextBlock Text="Statut : " Foreground="#666" FontSize="14"/>
+                            <TextBlock Text="{Binding SelectedCommande.StatutDisplay}" FontWeight="Bold" FontSize="14"/>
+                            <TextBlock Text=" | " Foreground="#CCC" Margin="5,0" FontSize="14"/>
+                            <TextBlock Text="{Binding SelectedCommande.StatutPaiementDisplay}" FontWeight="Bold" FontSize="15">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="Foreground" Value="#C62828"/>
@@ -86,7 +86,7 @@
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Produit" Binding="{Binding ProduitNom}" Width="*"/>
                             <DataGridTextColumn Header="Qté" Binding="{Binding Quantite, StringFormat=N2}" Width="50"/>
-                            <DataGridTextColumn Header="Total" Binding="{Binding TotalLigne, StringFormat=C}" Width="70"/>
+                            <DataGridTextColumn Header="Total" Binding="{Binding TotalLigne, StringFormat='{}{0:0.00} €'}" Width="70"/>
                         </DataGrid.Columns>
                     </DataGrid>
 
@@ -99,23 +99,23 @@
                                 </DockPanel>
                                 <DockPanel Margin="0,0,0,5">
                                     <TextBlock Text="Total Articles" Foreground="#666"/>
-                                    <TextBlock Text="{Binding SelectedCommande.Total, StringFormat=C}" FontWeight="Bold" HorizontalAlignment="Right"/>
+                                    <TextBlock Text="{Binding SelectedCommande.Total, StringFormat='{}{0:0.00} €'}" FontWeight="Bold" HorizontalAlignment="Right"/>
                                 </DockPanel>
                                 <DockPanel Margin="0,0,0,5" Visibility="{Binding SelectedCommande.AvecLivraison, Converter={StaticResource BoolToVis}}">
                                     <TextBlock Text="🚚 Livraison" Foreground="#666"/>
-                                    <TextBlock Text="{Binding SelectedCommande.MontantLivraison, StringFormat=C}" FontWeight="Bold" HorizontalAlignment="Right"/>
+                                    <TextBlock Text="{Binding SelectedCommande.MontantLivraison, StringFormat='{}{0:0.00} €'}" FontWeight="Bold" HorizontalAlignment="Right"/>
                                 </DockPanel>
                                 <DockPanel Margin="0,0,0,5">
                                     <TextBlock Text="TOTAL À PAYER" FontWeight="Bold" FontSize="16"/>
-                                    <TextBlock Text="{Binding SelectedCommande.TotalAvecLivraison, StringFormat=C}" FontWeight="Bold" FontSize="16" HorizontalAlignment="Right" Foreground="#1565C0"/>
+                                    <TextBlock Text="{Binding SelectedCommande.TotalAvecLivraison, StringFormat='{}{0:0.00} €'}" FontWeight="Bold" FontSize="16" HorizontalAlignment="Right" Foreground="#1565C0"/>
                                 </DockPanel>
                                 <DockPanel Margin="0,0,0,5">
                                     <TextBlock Text="Montant Payé" Foreground="#2E7D32"/>
-                                    <TextBlock Text="{Binding SelectedCommande.MontantPaye, StringFormat=C}" FontWeight="Bold" HorizontalAlignment="Right" Foreground="#2E7D32"/>
+                                    <TextBlock Text="{Binding SelectedCommande.MontantPaye, StringFormat='{}{0:0.00} €'}" FontWeight="Bold" HorizontalAlignment="Right" Foreground="#2E7D32"/>
                                 </DockPanel>
                                 <DockPanel>
                                     <TextBlock Text="RESTANT" FontWeight="Bold" FontSize="14"/>
-                                    <TextBlock Text="{Binding SelectedCommande.Restant, StringFormat=C}" FontWeight="Bold" FontSize="14" HorizontalAlignment="Right">
+                                    <TextBlock Text="{Binding SelectedCommande.Restant, StringFormat='{}{0:0.00} €'}" FontWeight="Bold" FontSize="14" HorizontalAlignment="Right">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
                                                 <Setter Property="Foreground" Value="#C62828"/>

@@ -16,6 +16,7 @@
         <converters:NullToVisibilityConverter x:Key="NullToVis"/>
         <converters:InvertedNullToVisibilityConverter x:Key="InvertedNullToVis"/>
         <converters:PathToImageConverter x:Key="PathToImage"/>
+        <converters:PhoneSpacingConverter x:Key="PhoneSpacing"/>
 
         <Style x:Key="ToggleButtonStyle" TargetType="RadioButton">
             <Setter Property="Template">

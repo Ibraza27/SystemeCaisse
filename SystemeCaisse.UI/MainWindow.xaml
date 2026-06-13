@@ -185,7 +185,7 @@
         </Border>
 
         <!-- Commandes Sidebar Panel (Visible only in Commandes tab) -->
-        <Border Grid.Column="1" Background="White" Width="520" BorderBrush="#DDD" BorderThickness="1,0,0,0">
+        <Border Grid.Column="1" Background="White" Width="750" BorderBrush="#DDD" BorderThickness="1,0,0,0">
             <Border.Style>
                 <Style TargetType="Border">
                     <Setter Property="Visibility" Value="Collapsed"/>

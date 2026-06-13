@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Runtime.CompilerServices;
 
 namespace SystemeCaisse.Core.Entities
 {
-    public class Commande
+    public class Commande : INotifyPropertyChanged
     {
         [Key]
         public int Id { get; set; }
@@ -67,19 +69,28 @@ namespace SystemeCaisse.Core.Entities
         // Navigation
         public List<LigneCommande> Lignes { get; set; } = new();
 
+        // ─── Multi-select checkbox (not persisted) ───
+        private bool _isSelected;
+        [NotMapped]
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set { _isSelected = value; OnPropertyChanged(); }
+        }
+
         // Computed properties (not mapped to DB)
         [NotMapped]
         public decimal TotalAvecLivraison => Total + MontantLivraison;
 
         [NotMapped]
-        public decimal Restant => TotalAvecLivraison - MontantPaye;
+        public decimal Restant => Math.Round(TotalAvecLivraison - MontantPaye, 2);
 
         [NotMapped]
         public string StatutPaiement
         {
             get
             {
-                if (Restant <= 0) return "regle";
+                if (Math.Round(TotalAvecLivraison - MontantPaye, 2) <= 0) return "regle";
                 if (MontantPaye > 0) return "partiel";
                 return "non_regle";
             }
@@ -129,5 +140,10 @@ namespace SystemeCaisse.Core.Entities
             "en_ligne" => "En ligne",
             _ => ModePaiement ?? "—"
         };
+
+        // INotifyPropertyChanged (for IsSelected binding)
+        public event PropertyChangedEventHandler? PropertyChanged;
+        protected void OnPropertyChanged([CallerMemberName] string? name = null)
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 }
