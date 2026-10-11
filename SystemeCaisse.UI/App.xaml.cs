@@ -11,6 +11,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Runtime.InteropServices;
 using Microsoft.Data.Sqlite;
+using SystemeCaisse.Infrastructure.Configuration;
 
 namespace SystemeCaisse.UI
 {
@@ -53,7 +54,7 @@ namespace SystemeCaisse.UI
             string dbPath = networkDbService.ResolveDbPath();
 
             // Set the static flag BEFORE any DbContext is created
-            AppDbContext.IsNetworkDatabaseMode = networkDbService.IsNetworkMode;
+            // AppDbContext.IsNetworkDatabaseMode is removed.
 
             // Simple connection string for all modes (WAL removed, no shared cache needed)
             string connectionString = $"Data Source={dbPath}";
@@ -67,6 +68,11 @@ namespace SystemeCaisse.UI
                     {
                         options.UseSqlite(connectionString);
                     });
+
+                    // Add LocalSettingsStore and CaisseDbContextFactory
+                    services.AddSingleton<LocalSettingsStore>();
+                    services.AddSingleton<CaisseDbContextFactory>();
+                    services.AddSingleton<CaisseServices>();
 
                     services.AddSingleton<MainWindow>();
                     services.AddSingleton<PrintService>();

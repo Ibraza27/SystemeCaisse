@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Input;
 using SystemeCaisse.Core.Entities;
-using SystemeCaisse.Infrastructure.Data;
+using SystemeCaisse.Infrastructure.Configuration;
 using System.Linq;
 using System;
 using System.Collections.Generic;
@@ -16,10 +16,13 @@ namespace SystemeCaisse.UI.ViewModels
 {
     public class HistoryViewModel : INotifyPropertyChanged
     {
-        private readonly IDbContextFactory<AppDbContext> _contextFactory;
-        private AppDbContext _context;
+        private readonly CaisseServices _services;
+        private int _loadVersion;
 
-        public ObservableCollection<Vente> Sales { get; private set; }
+        /// <summary>Date du dernier chargement réussi.</summary>
+        public DateTime LastLoaded { get; private set; } = DateTime.MinValue;
+
+        public ObservableCollection<Vente> Sales { get; private set; } = new();
 
         // Filters
         private DateTime _startDate = DateTime.Today;
@@ -47,7 +50,7 @@ namespace SystemeCaisse.UI.ViewModels
         public string SearchText
         {
             get => _searchText;
-            set { _searchText = value; OnPropertyChanged(); _ = LoadDataAsync(); }
+            set { _searchText = value; OnPropertyChanged(); _ = LoadDataAsync(debounce: true); }
         }
 
         private Vente _selectedSale;
@@ -95,27 +98,26 @@ namespace SystemeCaisse.UI.ViewModels
         public ICommand SetPeriodCommand { get; }
         private readonly PrintService _printService;
 
-        public HistoryViewModel(IDbContextFactory<AppDbContext> contextFactory, PrintService printService)
+        public HistoryViewModel(CaisseServices services, PrintService printService)
         {
-            _contextFactory = contextFactory;
+            _services = services;
             _printService = printService;
             
             LoadCommand = new BasicRelayCommand(_ => _ = LoadDataAsync());
-            ReprintCommand = new BasicRelayCommand(_ => 
+            ReprintCommand = new BasicRelayCommand(async _ => 
             {
                 if (SelectedSale != null)
                 {
-                    // Ensure Enterprise is loaded
-                    var entreprise = _context.Entreprise.FirstOrDefault() ?? new Entreprise { Nom = "Inconnu" };
+                    var entreprise = await GetEntrepriseAsync();
                     _printService.PrintTicket(SelectedSale, entreprise);
                 }
             }, _ => SelectedSale != null);
 
-            ViewTicketCommand = new BasicRelayCommand(_ => 
+            ViewTicketCommand = new BasicRelayCommand(async _ => 
             {
                 if (SelectedSale != null)
                 {
-                    var entreprise = _context.Entreprise.FirstOrDefault() ?? new Entreprise { Nom = "Inconnu" };
+                    var entreprise = await GetEntrepriseAsync();
                     var win = new Views.ReceiptSummaryWindow(SelectedSale, entreprise, SelectedSale.MonnaieRendue, true);
                     win.Owner = Services.WindowHelper.GetAdminWindow();
                     win.WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -125,6 +127,19 @@ namespace SystemeCaisse.UI.ViewModels
 
             ClearSearchCommand = new BasicRelayCommand(_ => SearchText = string.Empty);
             SetPeriodCommand = new BasicRelayCommand(p => { if (p is string s) SetPeriod(s); });
+        }
+
+        private async Task<Entreprise> GetEntrepriseAsync()
+        {
+            try
+            {
+                return await _services.Catalog.GetEntrepriseAsync() ?? new Entreprise { Nom = "Inconnu" };
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn("Historique", $"Lecture de l'entreprise impossible, utilisation du cache : {ex.Message}");
+                return _services.Cache.Load()?.Entreprise ?? new Entreprise { Nom = "Inconnu" };
+            }
         }
 
         public async Task InitializeAsync()
@@ -162,46 +177,64 @@ namespace SystemeCaisse.UI.ViewModels
             _ = LoadDataAsync();
         }
 
-        public async Task LoadDataAsync()
+        /// <summary>
+        /// Recharge les ventes de la période. Plusieurs appels rapprochés (frappe, changement de dates)
+        /// sont fusionnés : seul le résultat de la DERNIÈRE demande est affiché.
+        /// </summary>
+        public async Task LoadDataAsync(bool debounce = false)
         {
-            await Task.Run(async () => 
-            {
-            _context?.Dispose();
-            _context = _contextFactory.CreateDbContext();
+            int version = Interlocked.Increment(ref _loadVersion);
+            if (debounce) await Task.Delay(300);
+            if (version != _loadVersion) return;
 
-            var query = _context.Ventes
-                .Include(v => v.Lignes)
-                .Where(v => v.CreatedAt.Date >= StartDate.Date && v.CreatedAt.Date <= EndDate.Date);
+            var start = StartDate.Date;
+            var endExclusive = EndDate.Date.AddDays(1);
+            var paymentFilter = PaymentFilter;
+            var search = SearchText?.Trim();
 
-            if (PaymentFilter != "Tous")
+            try
             {
-               string filterKey = PaymentFilter.ToLower();
-               if (filterKey == "espèces" || filterKey == "especes") 
-                   query = query.Where(v => v.MoyenPaiement.ToLower() == "especes");
-               else if (filterKey == "cb")
-                   query = query.Where(v => v.MoyenPaiement.ToLower() == "cb");
-               else if (filterKey == "mixte")
-                   query = query.Where(v => v.MoyenPaiement.ToLower() == "mixte");
-            }
+                await using var db = await _services.Factory.CreateDbContextAsync();
 
-            if (!string.IsNullOrWhiteSpace(SearchText))
-            {
-                query = query.Where(v => v.NumeroTicket.Contains(SearchText));
-            }
+                // Plage [début ; fin+1[ : exploite l'index sur CreatedAt (CreatedAt.Date l'empêchait).
+                var query = db.Ventes.AsNoTracking()
+                    .Include(v => v.Lignes)
+                    .Where(v => v.CreatedAt >= start && v.CreatedAt < endExclusive);
 
-            var salesList = query.OrderByDescending(v => v.CreatedAt).ToList();
-            
-            await System.Windows.Application.Current.Dispatcher.InvokeAsync(() => 
-            {
+                if (paymentFilter != "Tous")
+                {
+                   string filterKey = paymentFilter.ToLower();
+                   if (filterKey == "espèces" || filterKey == "especes") 
+                       query = query.Where(v => v.MoyenPaiement.ToLower() == "especes");
+                   else if (filterKey == "cb")
+                       query = query.Where(v => v.MoyenPaiement.ToLower() == "cb");
+                   else if (filterKey == "mixte")
+                       query = query.Where(v => v.MoyenPaiement.ToLower() == "mixte");
+                }
+
+                if (!string.IsNullOrWhiteSpace(search))
+                {
+                    query = query.Where(v => v.NumeroTicket.Contains(search));
+                }
+
+                var salesList = await query.OrderByDescending(v => v.CreatedAt).AsSplitQuery().ToListAsync();
+                if (version != _loadVersion) return; // une demande plus récente est en cours
+
+                int? selectedId = SelectedSale?.Id;
                 Sales = new ObservableCollection<Vente>(salesList);
                 TotalPeriod = salesList.Sum(v => v.Total);
                 CountPeriod = salesList.Count;
                 TotalCashPeriod = salesList.Sum(v => v.MontantEspeces);
                 TotalCardPeriod = salesList.Sum(v => v.MontantCB);
                 OnPropertyChanged(nameof(Sales));
-            });
-        });
-    }
+                if (selectedId.HasValue) SelectedSale = Sales.FirstOrDefault(v => v.Id == selectedId.Value)!;
+                LastLoaded = DateTime.Now;
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error("Historique", "Chargement des ventes impossible", ex);
+            }
+        }
 
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string name = null) 

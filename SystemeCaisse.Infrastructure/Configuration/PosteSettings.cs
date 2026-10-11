@@ -16,13 +16,13 @@ namespace SystemeCaisse.Infrastructure.Configuration
     /// <summary>Paramètres de connexion à la base de données (propres au poste).</summary>
     public class DatabaseSettings
     {
-        public DatabaseProvider Provider { get; set; } = DatabaseProvider.Sqlite;
+        public DatabaseProvider Provider { get; set; } = DatabaseProvider.PostgreSql;
 
         /// <summary>Chemin du fichier SQLite. Null = emplacement par défaut (ProgramData).</summary>
         public string? SqlitePath { get; set; }
 
         public string Host { get; set; } = "localhost";
-        public int Port { get; set; } = 5432;
+        public int Port { get; set; } = 5433;
         public string Database { get; set; } = "caisse";
         public string Username { get; set; } = "caisse";
 
@@ -33,7 +33,7 @@ namespace SystemeCaisse.Infrastructure.Configuration
         [JsonIgnore]
         public string Password
         {
-            get => Unprotect(PasswordProtected);
+            get => string.IsNullOrEmpty(Unprotect(PasswordProtected)) ? "caisse" : Unprotect(PasswordProtected);
             set => PasswordProtected = Protect(value);
         }
 

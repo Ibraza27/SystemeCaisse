@@ -518,7 +518,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
         }
 
-        public MainViewModel(IDbContextFactory<AppDbContext> contextFactory, PrintService printService, IDataMigrationService migrationService)
+        public MainViewModel(IDbContextFactory<AppDbContext> contextFactory, PrintService printService, IDataMigrationService migrationService, SystemeCaisse.UI.Services.CaisseServices caisseServices)
         {
             _context = contextFactory.CreateDbContext();
             _contextFactory = contextFactory;
@@ -531,15 +531,15 @@ namespace SystemeCaisse.UI.ViewModels
             AddToCartCommand = new BasicRelayCommand(AddToCart);
 
             // Initialize Child ViewModels (instantiation only, no DB load)
-            ProductsVM = new ProductsViewModel(contextFactory);
-            StocksVM = new StocksViewModel(contextFactory);
-            HistoryVM = new HistoryViewModel(contextFactory, _printService);
+            ProductsVM = new ProductsViewModel(caisseServices);
+            StocksVM = new StocksViewModel(caisseServices);
+            HistoryVM = new HistoryViewModel(caisseServices, _printService);
             SettingsVM = new SettingsViewModel(contextFactory, migrationService);
             DashboardVM = new DashboardViewModel(contextFactory);
             PromotionsVM = new PromotionsViewModel(contextFactory);
             InventoryVM = new InventoryViewModel(contextFactory);
             AnalysisVM = new AnalysisViewModel(contextFactory);
-            CommandesVM = new CommandesViewModel(contextFactory, _printService);
+            CommandesVM = new CommandesViewModel(caisseServices, _printService);
             CommandesVM.SetMainViewModel(this);
             RemoveItemCommand = new BasicRelayCommand(RemoveItem);
             CheckoutCommand = new BasicRelayCommand(Checkout, _ => Panier.Count > 0);

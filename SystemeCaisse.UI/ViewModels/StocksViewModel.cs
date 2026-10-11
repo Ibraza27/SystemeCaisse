@@ -1,11 +1,11 @@
-using Microsoft.EntityFrameworkCore;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Input;
 using SystemeCaisse.Core.Entities;
-using SystemeCaisse.Infrastructure.Data;
+using SystemeCaisse.Infrastructure.Configuration;
+using SystemeCaisse.UI.Services;
 using System.Linq;
 using System.Collections.Generic;
 using System;
@@ -15,8 +15,11 @@ namespace SystemeCaisse.UI.ViewModels
 {
     public class StocksViewModel : INotifyPropertyChanged
     {
-        private readonly IDbContextFactory<AppDbContext> _contextFactory;
-        private AppDbContext _context;
+        private readonly CaisseServices _services;
+        private bool _isLoading;
+
+        /// <summary>Date du dernier chargement réussi.</summary>
+        public DateTime LastLoaded { get; private set; } = DateTime.MinValue;
 
         public ObservableCollection<Produit> Produits { get; private set; }
         public ICollectionView OverviewProductsView { get; private set; }
@@ -132,9 +135,9 @@ namespace SystemeCaisse.UI.ViewModels
             set { _commentaireMouvement = value; OnPropertyChanged(); }
         }
 
-        public StocksViewModel(IDbContextFactory<AppDbContext> contextFactory)
+        public StocksViewModel(CaisseServices services)
         {
-            _contextFactory = contextFactory;
+            _services = services;
             
             Produits = new ObservableCollection<Produit>(); // Initialize once
             Alertes = new ObservableCollection<Produit>();
@@ -152,61 +155,50 @@ namespace SystemeCaisse.UI.ViewModels
             await LoadDataAsync();
         }
 
+        /// <summary>
+        /// Charge les produits, les 100 derniers mouvements et la date de dernière entrée
+        /// (agrégats calculés par la base, plus de chargement de tout l'historique).
+        /// </summary>
         public async Task LoadDataAsync()
         {
-            await Task.Run(async () => 
+            if (_isLoading) return;
+            _isLoading = true;
+            try
             {
-                try
+                var productsTask = _services.Catalog.GetProductsAsync();
+                var movementsTask = _services.Catalog.GetLastMovementsAsync(100);
+                var entriesTask = _services.Catalog.GetLastEntryDatesAsync();
+                await Task.WhenAll(productsTask, movementsTask, entriesTask);
+
+                var entries = entriesTask.Result;
+                int? selectedId = SelectedProduitMouvement?.Id;
+
+                // Update stable collection
+                Produits.Clear();
+                foreach (var p in productsTask.Result)
                 {
-                    _context?.Dispose();
-                    _context = _contextFactory.CreateDbContext();
-                    
-                    _context.Produits.Load();
-                    _context.MouvementsStock.Include(m => m.Produit).Load(); 
-                    
-                    await System.Windows.Application.Current.Dispatcher.InvokeAsync(() => 
-                    {
-                        // Update stable collection
-                        Produits.Clear();
-                        foreach (var p in _context.Produits.Local)
-                        {
-                            Produits.Add(p);
-                        }
-                        
-                        OverviewProductsView.Refresh();
-
-                        // Load Movements History (Last 100)
-                        var lastMouvements = _context.MouvementsStock.Local
-                            .OrderByDescending(m => m.DateMouvement)
-                            .Take(100)
-                            .ToList();
-                        
-                        Mouvements.Clear();
-                        foreach(var m in lastMouvements) Mouvements.Add(m);
-
-
-                        // Populate LastEntryDate
-                        var entries = _context.MouvementsStock.Local
-                            .Where(m => m.TypeMouvement == "entree")
-                            .GroupBy(m => m.ProduitId)
-                            .ToDictionary(g => g.Key, g => g.Max(m => m.DateMouvement));
-                        
-                        foreach (var p in Produits)
-                        {
-                            if (entries.TryGetValue(p.Id, out var date))
-                                p.LastEntryDate = date;
-                            else
-                                p.LastEntryDate = null;
-                        }
-
-                        CalculateStats();
-                    });
+                    p.LastEntryDate = entries.TryGetValue(p.Id, out var date) ? date : null;
+                    Produits.Add(p);
                 }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"LOAD STOCKS ERROR: {ex.Message}");
-                }
-            });
+                OverviewProductsView.Refresh();
+
+                Mouvements.Clear();
+                foreach (var m in movementsTask.Result) Mouvements.Add(m);
+
+                if (selectedId.HasValue)
+                    SelectedProduitMouvement = Produits.FirstOrDefault(p => p.Id == selectedId.Value);
+
+                CalculateStats();
+                LastLoaded = DateTime.Now;
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error("Stocks", "Chargement des stocks impossible", ex);
+            }
+            finally
+            {
+                _isLoading = false;
+            }
         }
         private void CalculateStats()
         {
@@ -243,9 +235,10 @@ namespace SystemeCaisse.UI.ViewModels
             return false;
         }
 
-        private void ValiderMouvement(object obj)
+        private async void ValiderMouvement(object obj)
         {
-            if (SelectedProduitMouvement == null) return;
+            var produit = SelectedProduitMouvement;
+            if (produit == null) return;
             var mainWin = Services.WindowHelper.GetAdminWindow();
 
             if (QuantiteMouvement <= 0) 
@@ -256,53 +249,18 @@ namespace SystemeCaisse.UI.ViewModels
 
             try
             {
-                using var context = _contextFactory.CreateDbContext();
-                
-                var m = new MouvementStock
-                {
-                    ProduitId = SelectedProduitMouvement.Id,
-                    TypeMouvement = TypeMouvement, // Stores raw value from UI ("entree", "sortie", "inventaire")
-                    Quantite = QuantiteMouvement,
-                    PrixUnitaire = TypeMouvement == "entree" ? PrixUnitaireMouvement : (decimal?)null,
-                    Commentaire = CommentaireMouvement,
-                    DateMouvement = DateTime.Now,
-                    ProduitNomSnapshot = SelectedProduitMouvement.Nom
-                };
+                // "entree" / "sortie" / "inventaire" (correction relative) : variation appliquée par la base,
+                // sans jamais réécrire un stock lu auparavant (les ventes des autres postes sont préservées).
+                await _services.Catalog.RecordMovementAsync(produit.Id, produit.Nom, TypeMouvement, QuantiteMouvement,
+                    TypeMouvement == "entree" ? PrixUnitaireMouvement : null, CommentaireMouvement);
 
-                context.MouvementsStock.Add(m);
-
-                // Update Stock
-                var prod = context.Produits.Find(SelectedProduitMouvement.Id);
-                if (prod != null)
-                {
-                    if (TypeMouvement == "entree")
-                    {
-                        prod.StockActuel += QuantiteMouvement;
-                        if (PrixUnitaireMouvement > 0)
-                            prod.PrixAchat = PrixUnitaireMouvement;
-                    }
-                    else if (TypeMouvement == "sortie")
-                    {
-                        prod.StockActuel -= QuantiteMouvement;
-                    }
-                    else if (TypeMouvement == "inventaire")
-                    {
-                        // In this app, 'inventaire' enters a relative correction (Delta)
-                        prod.StockActuel += QuantiteMouvement;
-                    }
-
-                    context.Update(prod);
-                    context.SaveChanges();
-                    
-                    // Refresh local collections
-                    _ = LoadDataAsync();
-                    
-                    MessageBox.Show(mainWin, "Mouvement de stock enregistré avec succès !", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
-                    ResetForm();
-                }
+                MessageBox.Show(mainWin, "Mouvement de stock enregistré avec succès !", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
+                ResetForm();
+                await LoadDataAsync();
             }
             catch (Exception ex)
             {
+                AppLog.Error("Stocks", "Enregistrement du mouvement impossible", ex);
                 MessageBox.Show(mainWin, $"Erreur lors de l'enregistrement du mouvement : {ex.InnerException?.Message ?? ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }

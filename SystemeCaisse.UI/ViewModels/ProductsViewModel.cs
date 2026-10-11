@@ -1,7 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Microsoft.EntityFrameworkCore;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
@@ -9,18 +9,27 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Data;
 using SystemeCaisse.Core.Entities;
-using SystemeCaisse.Infrastructure.Data;
+using SystemeCaisse.Infrastructure.Configuration;
+using SystemeCaisse.Infrastructure.Services;
+using SystemeCaisse.UI.Services;
 using System.IO;
 
 namespace SystemeCaisse.UI.ViewModels
 {
+    /// <summary>
+    /// Onglet Produits. Les produits sont chargés en lecture seule (aucun DbContext gardé ouvert) ;
+    /// à l'enregistrement, seuls les produits réellement modifiés sont envoyés, et le stock est
+    /// appliqué en delta pour ne jamais écraser les ventes faites entre-temps sur les autres postes.
+    /// </summary>
     public partial class ProductsViewModel : ObservableObject
     {
-        private readonly IDbContextFactory<AppDbContext> _contextFactory;
-        private AppDbContext _context;
+        private readonly CaisseServices _services;
+
+        /// <summary>Valeurs au chargement, par instance de produit (pour détecter les modifications).</summary>
+        private readonly Dictionary<Produit, ProductSnapshot> _snapshots = new(ReferenceEqualityComparer.Instance);
 
         [ObservableProperty]
-        private ObservableCollection<Produit> _products;
+        private ObservableCollection<Produit> _products = new();
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(IsDetailVisible))]
@@ -47,13 +56,19 @@ namespace SystemeCaisse.UI.ViewModels
         [ObservableProperty]
         private bool _showInactive = true;
 
-        public ICollectionView ProductsCollectionView { get; private set; }
+        [ObservableProperty]
+        private bool _isBusy;
+
+        public ICollectionView? ProductsCollectionView { get; private set; }
 
         public bool IsDetailVisible => SelectedProduct != null;
 
-        public ProductsViewModel(IDbContextFactory<AppDbContext> contextFactory)
+        /// <summary>Date du dernier chargement réussi (utilisé pour le rafraîchissement à l'ouverture de l'onglet).</summary>
+        public DateTime LastLoaded { get; private set; } = DateTime.MinValue;
+
+        public ProductsViewModel(CaisseServices services)
         {
-            _contextFactory = contextFactory;
+            _services = services;
             Categories = new ObservableCollection<string>();
             EditCategories = new ObservableCollection<string>();
             Fournisseurs = new ObservableCollection<Fournisseur>();
@@ -61,6 +76,17 @@ namespace SystemeCaisse.UI.ViewModels
 
         public async Task InitializeAsync()
         {
+            await LoadDataInternalAsync();
+        }
+
+        /// <summary>True si l'utilisateur a des modifications non enregistrées (on ne recharge pas sous ses pieds).</summary>
+        public bool HasUnsavedChanges =>
+            _pendingNewProduct != null || _snapshots.Any(kv => kv.Value.DiffersFrom(kv.Key));
+
+        /// <summary>Recharge si aucune saisie n'est en cours.</summary>
+        public async Task RefreshIfIdleAsync()
+        {
+            if (IsBusy || HasUnsavedChanges) return;
             await LoadDataInternalAsync();
         }
 
@@ -73,107 +99,79 @@ namespace SystemeCaisse.UI.ViewModels
         private async Task LoadData() => await LoadDataInternalAsync();
 
         [RelayCommand]
-        private async Task RefreshProducts() => await LoadDataInternalAsync();
+        private async Task RefreshProducts()
+        {
+            if (HasUnsavedChanges &&
+                MessageBox.Show(WindowHelper.GetAdminWindow(), "Des modifications ne sont pas enregistrées. Les abandonner et recharger ?",
+                    "Actualiser", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                return;
+            await LoadDataInternalAsync();
+        }
 
         private async Task LoadDataInternalAsync()
         {
+            if (IsBusy) return;
+            IsBusy = true;
             try
             {
-                _pendingNewProduct = null; // Clear any unsaved new product
-                _context?.Dispose();
-                _context = await _contextFactory.CreateDbContextAsync();
-                
-                // Load Fournisseurs
-                var fournisseurs = await _context.Fournisseurs.ToListAsync();
-                await Application.Current.Dispatcher.InvokeAsync(() => 
-                {
-                    Fournisseurs = new ObservableCollection<Fournisseur>(fournisseurs);
-                });
+                int? selectedId = SelectedProduct?.Id;
 
-                // Load Products
-                await _context.Produits.Include(p => p.Fournisseur).LoadAsync();
-                await Application.Current.Dispatcher.InvokeAsync(() => 
-                {
-                    Products = _context.Produits.Local.ToObservableCollection();
-                });
+                // Lectures en parallèle, hors thread UI, sans suivi EF.
+                var productsTask = _services.Catalog.GetProductsAsync(includeFournisseur: true);
+                var fournisseursTask = _services.Catalog.GetFournisseursAsync();
+                var popularityTask = _services.Popularity.GetAsync();
+                await Task.WhenAll(productsTask, fournisseursTask, popularityTask);
 
-                // Ensure all products have a category
-                foreach (var p in Products)
+                var products = productsTask.Result;
+                var popularity = popularityTask.Result;
+                foreach (var p in products)
                 {
-                    if (string.IsNullOrWhiteSpace(p.Categorie))
-                    {
-                        p.Categorie = "Autre";
-                    }
+                    if (string.IsNullOrWhiteSpace(p.Categorie)) p.Categorie = "Autre";
+                    p.ValidatedSalesCount = popularity.Get(p.Id, p.Nom);
                 }
 
-                // Calculate Popularity
-                await CalculateProductPopularity();
+                _pendingNewProduct = null;
+                _snapshots.Clear();
+                foreach (var p in products) _snapshots[p] = ProductSnapshot.Of(p);
 
-                // Setup CollectionView
-                await Application.Current.Dispatcher.InvokeAsync(() => 
-                {
-                    ProductsCollectionView = CollectionViewSource.GetDefaultView(Products);
-                    ProductsCollectionView.Filter = FilterProducts;
-                    // Sort by Popularity (Descending) then Name
-                    ProductsCollectionView.SortDescriptions.Add(new SortDescription("ValidatedSalesCount", ListSortDirection.Descending));
-                    ProductsCollectionView.SortDescriptions.Add(new SortDescription("Nom", ListSortDirection.Ascending));
-                    OnPropertyChanged(nameof(ProductsCollectionView));
-                });
+                Fournisseurs = new ObservableCollection<Fournisseur>(fournisseursTask.Result);
+                Products = new ObservableCollection<Produit>(products);
 
-                await LoadCategories();
+                ProductsCollectionView = CollectionViewSource.GetDefaultView(Products);
+                ProductsCollectionView.Filter = FilterProducts;
+                // Sort by Popularity (Descending) then Name
+                ProductsCollectionView.SortDescriptions.Clear();
+                ProductsCollectionView.SortDescriptions.Add(new SortDescription(nameof(Produit.ValidatedSalesCount), ListSortDirection.Descending));
+                ProductsCollectionView.SortDescriptions.Add(new SortDescription(nameof(Produit.Nom), ListSortDirection.Ascending));
+                OnPropertyChanged(nameof(ProductsCollectionView));
+
+                RebuildCategories(products);
+                SelectedProduct = selectedId.HasValue ? Products.FirstOrDefault(p => p.Id == selectedId.Value) : null;
+                LastLoaded = DateTime.Now;
             }
             catch (Exception ex)
             {
-                MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur chargement : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                AppLog.Error("Produits", "Chargement des produits impossible", ex);
+                MessageBox.Show(WindowHelper.GetAdminWindow(), $"Erreur chargement : {ex.InnerException?.Message ?? ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                IsBusy = false;
             }
         }
 
-        private async Task CalculateProductPopularity()
+        private void RebuildCategories(IEnumerable<Produit> products)
         {
-            try
-            {
-                // Ensure db context is alive
-                if (_context == null) _context = await _contextFactory.CreateDbContextAsync();
+            var cats = products.Select(p => p.Categorie).Where(c => !string.IsNullOrEmpty(c)).Distinct().OrderBy(c => c).ToList();
+            var currentFilter = SelectedCategoryFilter;
 
-                var allLines = await _context.LignesVente.AsNoTracking()
-                    .Select(l => new { l.ProduitId, l.Quantite })
-                    .ToListAsync();
+            Categories.Clear();
+            Categories.Add("Toutes");
+            foreach (var c in cats) Categories.Add(c!);
+            SelectedCategoryFilter = Categories.Contains(currentFilter) ? currentFilter : "Toutes";
 
-                var salesStats = allLines
-                    .GroupBy(l => l.ProduitId)
-                    .Select(g => new { Id = g.Key, Count = g.Sum(x => x.Quantite) })
-                    .ToList();
-
-                foreach (var p in Products)
-                {
-                    var stat = salesStats.FirstOrDefault(s => s.Id == p.Id);
-                    p.ValidatedSalesCount = stat?.Count ?? 0;
-                }
-            }
-            catch 
-            {
-                 // System.Diagnostics.Debug.WriteLine(ex.Message);
-            }
-        }
-
-        private async Task LoadCategories()
-        {
-            var cats = await _context.Produits
-                .Where(p => !string.IsNullOrEmpty(p.Categorie))
-                .Select(p => p.Categorie)
-                .Distinct()
-                .ToListAsync();
-
-            await Application.Current.Dispatcher.InvokeAsync(() => 
-            {
-                Categories.Clear();
-                Categories.Add("Toutes");
-                foreach(var c in cats.OrderBy(c => c)) Categories.Add(c!);
-                SelectedCategoryFilter = "Toutes";
-
-                EditCategories.Clear();
-                foreach(var c in cats.OrderBy(c => c)) EditCategories.Add(c!);
-            });
+            EditCategories.Clear();
+            foreach (var c in cats) EditCategories.Add(c!);
         }
 
         [RelayCommand]
@@ -220,69 +218,92 @@ namespace SystemeCaisse.UI.ViewModels
                 Categorie = "Autre",
                 TaxTier = 1
             };
-            // Don't add to context yet — only on Save
+            // Not sent to the database until Save
             _pendingNewProduct = newProduct;
             Products.Add(newProduct);
             SelectedProduct = newProduct;
         }
 
         [RelayCommand]
-        private void Delete()
+        private async Task Delete()
         {
-            if (SelectedProduct == null) return;
-            var mainWin = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w is SystemeCaisse.UI.MainWindow);
-            
-            // Check if product has sales
-            bool hasSales = _context.LignesVente.Any(l => l.ProduitId == SelectedProduct.Id);
+            var product = SelectedProduct;
+            if (product == null) return;
+            var owner = WindowHelper.GetAdminWindow();
 
-            if (hasSales)
+            if (ReferenceEquals(product, _pendingNewProduct))
             {
-                var result = MessageBox.Show(mainWin, $"Ce produit a déjà été vendu et ne peut pas être supprimé pour préserver l'historique.\n\nVoulez-vous le DÉSACTIVER ? (Il ne sera plus visible en caisse)", 
-                                           "Historique existant", MessageBoxButton.YesNo, MessageBoxImage.Information);
-                
-                if (result == MessageBoxResult.Yes)
-                {
-                    SelectedProduct.Actif = false;
-                    Save();
-                }
+                Products.Remove(product);
+                _pendingNewProduct = null;
+                SelectedProduct = null;
                 return;
             }
 
-            if (MessageBox.Show(mainWin, $"Supprimer '{SelectedProduct.Nom}' ?", "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+            try
             {
-                _context.Produits.Remove(SelectedProduct);
-                SelectedProduct = null;
-                Save();
+                bool hasSales = await _services.Catalog.HasSalesAsync(product.Id);
+                if (hasSales)
+                {
+                    var result = MessageBox.Show(owner, $"Ce produit a déjà été vendu et ne peut pas être supprimé pour préserver l'historique.\n\nVoulez-vous le DÉSACTIVER ? (Il ne sera plus visible en caisse)", 
+                                               "Historique existant", MessageBoxButton.YesNo, MessageBoxImage.Information);
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        product.Actif = false;
+                        await Save();
+                    }
+                    return;
+                }
+
+                if (MessageBox.Show(owner, $"Supprimer '{product.Nom}' ?", "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+                {
+                    await _services.Catalog.DeleteProductAsync(product.Id);
+                    _snapshots.Remove(product);
+                    Products.Remove(product);
+                    SelectedProduct = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error("Produits", "Suppression impossible", ex);
+                MessageBox.Show(owner, $"Erreur lors de la suppression : {ex.InnerException?.Message ?? ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
         [RelayCommand]
-        private void Save()
+        private async Task Save()
         {
+            var owner = WindowHelper.GetAdminWindow();
             try
             {
-                // Final safety check
+                var changes = new List<ProductChange>();
                 foreach (var p in Products)
                 {
                     if (string.IsNullOrWhiteSpace(p.Categorie)) p.Categorie = "Autre";
-                    // Ensure uppercase for all (migration of old data)
                     p.Nom = p.Nom?.ToUpper() ?? string.Empty;
+
+                    if (ReferenceEquals(p, _pendingNewProduct) || p.Id == 0)
+                        changes.Add(new ProductChange(p, null));
+                    else if (_snapshots.TryGetValue(p, out var original) && original.DiffersFrom(p))
+                        changes.Add(new ProductChange(p, original));
                 }
-                
-                // Add pending new product to context only on explicit Save
-                if (_pendingNewProduct != null)
+
+                if (changes.Count == 0)
                 {
-                    _context.Produits.Add(_pendingNewProduct);
-                    _pendingNewProduct = null;
+                    MessageBox.Show(owner, "Aucune modification à enregistrer.", "Information", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
                 }
-                
-                _context.SaveChanges();
-                MessageBox.Show(Services.WindowHelper.GetAdminWindow(), "Enregistré avec succès !", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
-                _ = LoadCategories(); // Refresh categories in case new ones were added
+
+                await _services.Catalog.SaveProductsAsync(changes);
+                _pendingNewProduct = null;
+                MessageBox.Show(owner, "Enregistré avec succès !", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
+
+                // Relire : récupère les Id des nouveaux produits et le stock réel (ventes des autres postes incluses).
+                await LoadDataInternalAsync();
             }
             catch (Exception ex)
             {
-                MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur lors de l'enregistrement : {ex.InnerException?.Message ?? ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                AppLog.Error("Produits", "Enregistrement impossible", ex);
+                MessageBox.Show(owner, $"Erreur lors de l'enregistrement : {ex.InnerException?.Message ?? ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -322,69 +343,45 @@ namespace SystemeCaisse.UI.ViewModels
             return code + checksum;
         }
 
+        /// <summary>
+        /// L'image est enregistrée EN BASE (visible immédiatement par tous les postes) et dans le cache local.
+        /// Le produit garde la clé de l'image dans ImagePath (enregistrée au prochain « Enregistrer »).
+        /// </summary>
         [RelayCommand]
-        private void SelectProductImage()
+        private async Task SelectProductImage()
         {
-            if (SelectedProduct == null) return;
+            var product = SelectedProduct;
+            if (product == null) return;
+            var owner = WindowHelper.GetAdminWindow();
 
             var openDlg = new Microsoft.Win32.OpenFileDialog
             {
                 Filter = "Images (*.png;*.jpg;*.jpeg;*.bmp;*.webp)|*.png;*.jpg;*.jpeg;*.bmp;*.webp",
                 Title = "Sélectionner une image pour le produit"
             };
+            if (openDlg.ShowDialog(owner) != true) return;
 
-            if (openDlg.ShowDialog(Services.WindowHelper.GetAdminWindow()) == true)
+            try
             {
-                try
+                var info = new FileInfo(openDlg.FileName);
+                if (info.Length > 5 * 1024 * 1024)
                 {
-                    // Remember old path to delete
-                    var oldPath = SelectedProduct.FullImagePath;
-
-                    // Create Images/Produits folder
-                    var imagesDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images", "Produits");
-                    Directory.CreateDirectory(imagesDir);
-
-                    // Copy with product-based name with timestamp to avoid cache issues
-                    var ext = Path.GetExtension(openDlg.FileName);
-                    var timestamp = DateTime.Now.Ticks;
-                    
-                    var fileName = SelectedProduct.Id > 0 
-                        ? $"produit_{SelectedProduct.Id}_{timestamp}{ext}" 
-                        : $"produit_new_{timestamp}{ext}";
-
-                    var destPath = Path.Combine(imagesDir, fileName);
-                    var relativePath = Path.Combine("Images", "Produits", fileName);
-
-                    // Clear the image path first to release WPF file lock
-                    SelectedProduct.ImagePath = null;
-                    OnPropertyChanged(nameof(SelectedProduct));
-
-                    // Small delay to let WPF release the file handle
-                    System.Threading.Thread.Sleep(50);
-                    GC.Collect();
-                    GC.WaitForPendingFinalizers();
-
-                    // Delete old image if exists
-                    if (!string.IsNullOrEmpty(oldPath) && File.Exists(oldPath))
-                    {
-                        try { File.Delete(oldPath); } catch { /* Ignore locked files */ }
-                    }
-
-                    // Copy using FileStream to handle potential locks
-                    using (var source = new FileStream(openDlg.FileName, FileMode.Open, FileAccess.Read, FileShare.Read))
-                    using (var dest = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None))
-                    {
-                        source.CopyTo(dest);
-                    }
-
-                    // Set the new path
-                    SelectedProduct.ImagePath = relativePath;
-                    OnPropertyChanged(nameof(SelectedProduct));
+                    MessageBox.Show(owner, "Image trop lourde (5 Mo maximum).", "Image", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
                 }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur lors de la copie de l'image : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
+
+                var ext = Path.GetExtension(openDlg.FileName).ToLowerInvariant();
+                var name = product.Id > 0 ? $"produit_{product.Id}_{DateTime.Now.Ticks}{ext}" : $"produit_new_{DateTime.Now.Ticks}{ext}";
+                var key = await _services.Images.SaveFileAsync($"Images/Produits/{name}", openDlg.FileName);
+
+                product.ImagePath = key;
+                OnPropertyChanged(nameof(SelectedProduct));
+                ProductsCollectionView?.Refresh();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error("Produits", "Enregistrement de l'image impossible", ex);
+                MessageBox.Show(owner, $"Erreur lors de l'enregistrement de l'image : {ex.InnerException?.Message ?? ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -392,20 +389,17 @@ namespace SystemeCaisse.UI.ViewModels
         private void RemoveProductImage()
         {
             if (SelectedProduct == null) return;
-            
-            var oldPath = SelectedProduct.FullImagePath;
-            
+            // L'image reste en base (elle peut être référencée par une sauvegarde) ; le produit ne la référence plus.
             SelectedProduct.ImagePath = null;
             OnPropertyChanged(nameof(SelectedProduct));
+            ProductsCollectionView?.Refresh();
+        }
 
-            System.Threading.Thread.Sleep(50);
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-
-            if (!string.IsNullOrEmpty(oldPath) && File.Exists(oldPath))
-            {
-                try { File.Delete(oldPath); } catch { /* Ignore locked files */ }
-            }
+        /// <summary>Rafraîchit l'affichage quand de nouvelles images arrivent dans le cache.</summary>
+        public void RefreshImages()
+        {
+            ProductsCollectionView?.Refresh();
+            OnPropertyChanged(nameof(SelectedProduct));
         }
     }
 }
