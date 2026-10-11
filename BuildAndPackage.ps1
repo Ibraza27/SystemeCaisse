@@ -41,7 +41,7 @@ if ($cert) {
 
 # 4. Création de l'installateur avec Inno Setup (avec SignTool intégré)
 Write-Host "4. Génération de Setup.exe avec Inno Setup (signature intégrée)..."
-$isccPath = "$env:ProgramFiles (x86)\Inno Setup 6\ISCC.exe"
+$isccPath = "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
 
 if (-not (Test-Path $isccPath)) {
     Write-Error "Inno Setup n'est pas installé dans le dossier par défaut ($isccPath)."

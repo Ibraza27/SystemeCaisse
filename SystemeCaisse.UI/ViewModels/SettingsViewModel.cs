@@ -926,9 +926,23 @@ namespace SystemeCaisse.UI.ViewModels
 
             NetworkDbTestStatus = "⏳ Test en cours...";
             bool accessible = NetworkDatabaseService.TestNetworkPath(NetworkDbPath);
-            NetworkDbTestStatus = accessible
-                ? $"✅ Chemin accessible : {NetworkDbPath}"
-                : $"❌ Chemin inaccessible : {NetworkDbPath}. Vérifiez le réseau et le partage.";
+            if (accessible)
+            {
+                NetworkDbTestStatus = $"✅ Chemin accessible : {NetworkDbPath}";
+                MessageBox.Show(Application.Current.MainWindow, $"Connexion réussie au dossier réseau :\n{NetworkDbPath}", "Test Réseau", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                NetworkDbTestStatus = $"❌ Chemin inaccessible : {NetworkDbPath}";
+                MessageBox.Show(Application.Current.MainWindow, 
+                    $"IMPOSSIBLE d'accéder au dossier réseau :\n{NetworkDbPath}\n\n" +
+                    "Vos données ne sont PAS PERDUES, elles sont toujours sur le PC principal.\n\n" +
+                    "Vérifiez :\n" +
+                    "1. Le PC principal est-il allumé ?\n" +
+                    "2. Êtes-vous connecté au même réseau (Wi-Fi/Câble) ?\n" +
+                    "3. Le Pare-feu/Antivirus bloque-t-il la nouvelle version de l'application ?",
+                    "Erreur Réseau", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         [RelayCommand]

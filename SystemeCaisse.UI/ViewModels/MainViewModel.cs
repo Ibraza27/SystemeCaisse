@@ -11,7 +11,9 @@ using SystemeCaisse.Infrastructure.Data;
 using SystemeCaisse.UI.Views;
 using SystemeCaisse.UI.Services;
 using SystemeCaisse.Core.Interfaces;
+using SystemeCaisse.Infrastructure.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.Extensions.Logging;
 using System.Linq;
 
 namespace SystemeCaisse.UI.ViewModels
@@ -41,6 +43,10 @@ namespace SystemeCaisse.UI.ViewModels
         public InventoryViewModel InventoryVM { get; private set; }
         public AnalysisViewModel AnalysisVM { get; private set; }
         public CommandesViewModel CommandesVM { get; private set; }
+
+        // ── SignalR Sync ──
+        private SyncClient? _syncClient;
+        public SyncClient? SyncClient => _syncClient;
         
         // Aliases for Customer Display Binding
         public ObservableCollection<CartItemViewModel> LignesVente => Panier;
@@ -722,6 +728,195 @@ namespace SystemeCaisse.UI.ViewModels
                 {
                     System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] TPE init error: {ex.Message}\n");
                 }
+
+                // 5. Initialize Sync Client (SignalR → TransitManager)
+                try
+                {
+                    using var syncCtx = _contextFactory.CreateDbContext();
+                    var syncEnabled = syncCtx.Configuration.Find("sync_enabled");
+                    if (syncEnabled != null && bool.TryParse(syncEnabled.Valeur, out bool syncOn) && syncOn)
+                    {
+                        var syncUrl = syncCtx.Configuration.Find("sync_hub_url");
+                        var syncKey = syncCtx.Configuration.Find("sync_api_key");
+                        string hubUrl = syncUrl?.Valeur ?? "https://hippocampetransitmanager.com/hubs/sync";
+                        string apiKey = syncKey?.Valeur ?? "";
+
+                        if (!string.IsNullOrEmpty(apiKey))
+                        {
+                            System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient: connecting to {hubUrl}...\n");
+                            var logger = Microsoft.Extensions.Logging.LoggerFactory.Create(b => b.AddDebug()).CreateLogger<SyncClient>();
+                            _syncClient = new SyncClient(hubUrl, apiKey, logger);
+                            
+                            // Wire receive handlers → insert into SQLite + refresh UI
+                            _syncClient.OnOrderReceived += async dto =>
+                            {
+                                try
+                                {
+                                    using var ctx = _contextFactory.CreateDbContext();
+                                    // Check for duplicate by SyncId
+                                    var existing = ctx.Commandes.FirstOrDefault(c => c.SyncId == dto.SyncId.ToString());
+                                    if (existing != null) return; // Already exists
+
+                                    var commande = new Commande
+                                    {
+                                        NumeroCommande = dto.NumeroCommande,
+                                        SyncId = dto.SyncId.ToString(),
+                                        Source = dto.Source,
+                                        Nom = dto.Nom,
+                                        Prenom = dto.Prenom,
+                                        Telephone = dto.Telephone,
+                                        Email = dto.Email,
+                                        Ville = dto.Ville,
+                                        CodePostal = dto.CodePostal,
+                                        AvecLivraison = dto.ModeLivraison != "depot",
+                                        Adresse = dto.AdresseLivraison,
+                                        MontantLivraison = dto.MontantLivraison,
+                                        Total = dto.Total,
+                                        TotalRemise = dto.TotalRemise,
+                                        MontantPaye = dto.MontantPaye,
+                                        ModePaiement = dto.ModePaiement,
+                                        Statut = dto.Statut,
+                                        NbArticles = dto.Lignes.Sum(l => (int)l.Quantite),
+                                        CreatedAt = dto.CreatedAt.ToLocalTime(),
+                                        UpdatedAt = dto.UpdatedAt.ToLocalTime()
+                                    };
+
+                                    foreach (var line in dto.Lignes)
+                                    {
+                                        commande.Lignes.Add(new LigneCommande
+                                        {
+                                            ProduitId = line.ProduitSourceId,
+                                            ProduitNom = line.ProduitNom,
+                                            CategorieNom = line.CategorieNom ?? "Autre",
+                                            PrixUnitaire = line.PrixUnitaire,
+                                            Quantite = line.Quantite,
+                                            TotalLigne = line.TotalLigne,
+                                            Remise = line.Remise ?? 0,
+                                            PromotionAppliquee = line.PromotionAppliquee
+                                        });
+                                    }
+
+                                    ctx.Commandes.Add(commande);
+                                    ctx.SaveChanges();
+
+                                    // Refresh UI + badge
+                                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                                    {
+                                        CommandesVM.NewOrderCount++;
+                                        _ = CommandesVM.InitializeAsync();
+                                    });
+
+                                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient: received order {dto.NumeroCommande}\n");
+                                }
+                                catch (Exception ex2)
+                                {
+                                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient OnOrderReceived error: {ex2.Message}\n");
+                                }
+                            };
+
+                            _syncClient.OnOrderUpdated += async dto =>
+                            {
+                                try
+                                {
+                                    using var ctx = _contextFactory.CreateDbContext();
+                                    var existing = ctx.Commandes.Include(c => c.Lignes).FirstOrDefault(c => c.SyncId == dto.SyncId.ToString());
+                                    if (existing == null) return;
+
+                                    existing.Nom = dto.Nom;
+                                    existing.Prenom = dto.Prenom;
+                                    existing.Telephone = dto.Telephone;
+                                    existing.Statut = dto.Statut;
+                                    existing.MontantPaye = dto.MontantPaye;
+                                    existing.Total = dto.Total;
+                                    existing.UpdatedAt = dto.UpdatedAt.ToLocalTime();
+                                    ctx.SaveChanges();
+
+                                    await Application.Current.Dispatcher.InvokeAsync(() => _ = CommandesVM.InitializeAsync());
+                                }
+                                catch (Exception ex2)
+                                {
+                                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient OnOrderUpdated error: {ex2.Message}\n");
+                                }
+                            };
+
+                            _syncClient.OnOrderDeleted += async syncId =>
+                            {
+                                try
+                                {
+                                    using var ctx = _contextFactory.CreateDbContext();
+                                    var existing = ctx.Commandes.Include(c => c.Lignes).FirstOrDefault(c => c.SyncId == syncId.ToString());
+                                    if (existing == null) return;
+
+                                    ctx.LignesCommande.RemoveRange(existing.Lignes);
+                                    ctx.Commandes.Remove(existing);
+                                    ctx.SaveChanges();
+
+                                    await Application.Current.Dispatcher.InvokeAsync(() => _ = CommandesVM.InitializeAsync());
+                                }
+                                catch (Exception ex2)
+                                {
+                                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient OnOrderDeleted error: {ex2.Message}\n");
+                                }
+                            };
+
+                            _syncClient.OnPaymentAdded += async (syncId, payment) =>
+                            {
+                                try
+                                {
+                                    using var ctx = _contextFactory.CreateDbContext();
+                                    var existing = ctx.Commandes.FirstOrDefault(c => c.SyncId == syncId.ToString());
+                                    if (existing == null) return;
+
+                                    existing.MontantPaye += payment.Montant;
+                                    existing.UpdatedAt = DateTime.Now;
+                                    ctx.SaveChanges();
+
+                                    await Application.Current.Dispatcher.InvokeAsync(() => _ = CommandesVM.InitializeAsync());
+                                }
+                                catch (Exception ex2)
+                                {
+                                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient OnPaymentAdded error: {ex2.Message}\n");
+                                }
+                            };
+
+                            _syncClient.OnStatusChanged += status =>
+                            {
+                                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient status: {status}\n");
+                            };
+
+                            _syncClient.OnTestPingReceived += message =>
+                            {
+                                Application.Current.Dispatcher.Invoke(() =>
+                                {
+                                    System.Windows.MessageBox.Show(
+                                        $"Ping reçu du Web : {message}", 
+                                        "Test de Connexion Réussi", 
+                                        System.Windows.MessageBoxButton.OK, 
+                                        System.Windows.MessageBoxImage.Information);
+                                });
+                            };
+
+                            // Pass to CommandesVM so it can emit events
+                            CommandesVM.SetSyncClient(_syncClient);
+
+                            // Start connection (fire-and-forget, auto-reconnect built in)
+                            _ = _syncClient.StartAsync();
+                            System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient: initialization started\n");
+                        }
+                        else
+                        {
+                            System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient: sync_api_key is empty, skipping\n");
+                        }
+                    }
+                    else
+                    {
+                        System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient: sync_enabled is false or missing, skipping\n");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient init error: {ex.Message}\n");
+                }
             });
 
             // 5. Initialize Network Database monitoring
@@ -758,6 +953,94 @@ namespace SystemeCaisse.UI.ViewModels
             catch (Exception ex)
             {
                 System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] NetworkDB init error: {ex.Message}\n");
+            }
+
+            // 6. Initialize SignalR SyncClient for TransitManager sync
+            try
+            {
+                using var syncCtx = _contextFactory.CreateDbContext();
+                var syncEnabled = syncCtx.Configuration.Find("sync_enabled");
+                var syncUrl = syncCtx.Configuration.Find("sync_hub_url");
+                var syncApiKey = syncCtx.Configuration.Find("sync_api_key");
+
+                bool isSyncEnabled = syncEnabled != null && bool.TryParse(syncEnabled.Valeur, out bool sEnabled) && sEnabled;
+                string hubUrl = syncUrl?.Valeur ?? "https://hippocampetransitmanager.com/hubs/sync";
+                string apiKey = syncApiKey?.Valeur ?? "";
+
+                if (isSyncEnabled && !string.IsNullOrWhiteSpace(apiKey))
+                {
+                    var logger = Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance.CreateLogger("SyncClient");
+
+                    _syncClient = new SyncClient(hubUrl, apiKey, logger);
+
+                    // Wire events → refresh CommandesVM on incoming orders
+                    _syncClient.OnOrderReceived += async dto =>
+                    {
+                        System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient: OrderReceived {dto.NumeroCommande}\n");
+                        await Application.Current.Dispatcher.InvokeAsync(async () =>
+                        {
+                            await CommandesVM.LoadDataAsync();
+                            // Increment badge counter
+                            CommandesVM.NewOrderCount++;
+                            StatusMessage = $"🛒 Nouvelle commande web : {dto.NumeroCommande}";
+                        });
+                    };
+
+                    _syncClient.OnOrderUpdated += async dto =>
+                    {
+                        await Application.Current.Dispatcher.InvokeAsync(async () =>
+                        {
+                            await CommandesVM.LoadDataAsync();
+                        });
+                    };
+
+                    _syncClient.OnOrderDeleted += async syncId =>
+                    {
+                        await Application.Current.Dispatcher.InvokeAsync(async () =>
+                        {
+                            await CommandesVM.LoadDataAsync();
+                        });
+                    };
+
+                    _syncClient.OnPaymentAdded += async (syncId, payment) =>
+                    {
+                        await Application.Current.Dispatcher.InvokeAsync(async () =>
+                        {
+                            await CommandesVM.LoadDataAsync();
+                        });
+                    };
+
+                    _syncClient.OnProductUpdated += async dto =>
+                    {
+                        await Application.Current.Dispatcher.InvokeAsync(() =>
+                        {
+                            ReloadProductsFromDb();
+                            StatusMessage = $"📦 Produit modifié depuis le web : {dto.Nom}";
+                        });
+                    };
+
+                    _syncClient.OnStatusChanged += status =>
+                    {
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient status: {status}\n");
+                        });
+                    };
+
+                    // Pass to CommandesVM so it can emit on order create/update
+                    CommandesVM.SetSyncClient(_syncClient);
+
+                    await _syncClient.StartAsync();
+                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient: Started on {hubUrl}\n");
+                }
+                else
+                {
+                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient: Disabled or no API key configured\n");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient init error: {ex.Message}\n");
             }
         }
 

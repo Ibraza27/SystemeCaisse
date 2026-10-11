@@ -496,3 +496,17 @@ builder.Cache = SqliteCacheMode.Shared; // ❌
 - **Bouton** : « 🔄 Actualiser » dans le footer de `ProductsView`, à côté de « Nouveau »
 - **Command** : `RefreshProductsCommand` dans `ProductsViewModel` — appelle `LoadDataInternalAsync()` pour recharger la liste depuis la BDD
 - **Usage** : Utile en mode multi-poste pour voir les produits ajoutés/modifiés depuis un autre poste
+
+## 20. Résilience Déploiement et Configuration
+
+### Déploiement Self-Contained
+- **Règle absolue** : Pour publier l'application en mode `SelfContained` sans que les utilisateurs ne subissent de fenêtres de demande d'installation du runtime .NET, il faut **obligatoirement** ajouter `<SelfContained>true</SelfContained>` directement dans le `<PropertyGroup>` de `SystemeCaisse.UI.csproj`. Le passage du paramètre `--self-contained true` en ligne de commande avec `dotnet publish` ne suffit pas à garantir l'intégration du runtime sous .NET 8+.
+
+### Résilience de la Base de Données
+- Lors d'une nouvelle installation (ou mise à jour majeure modifiant le dossier d'installation), le fichier local `network_db.json` est perdu. L'application démarre alors en **Mode Local** et génère une base `caisse.db` de test.
+- **Règle UI** : L'interface et les popups de test de connexion (`SettingsViewModel`, `CommandesViewModel`) doivent explicitement avertir l'utilisateur que "L'application est en Mode Local" et que ses données "ne sont pas perdues mais inaccessibles sur le réseau" au lieu de générer des messages d'erreur génériques de type "Réseau indisponible".
+
+### Synchronisation Web TransitManager
+- **Paramètres en BDD** : Les paramètres d'activation de la synchronisation Web (`sync_enabled`, `sync_hub_url`, `sync_api_key`) résident dans la table `Configuration` de la BDD SQLite.
+- **Attention au multi-poste** : L'activation de la synchronisation sur le poste développeur n'a **aucun effet** sur la production. Les scripts d'injection de configuration (`activate_sync_prod.py`) doivent impérativement être joués sur la BDD physique utilisée par la caisse principale (ex: `\\100.113.56.25\SystemeCaisse\caisse.db`).
+

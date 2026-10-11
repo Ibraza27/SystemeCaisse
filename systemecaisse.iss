@@ -1,6 +1,6 @@
 ; Script Inno Setup pour SystemeCaisse
 #define MyAppName "SystemeCaisse"
-#define MyAppVersion "4.6.0"
+#define MyAppVersion "4.7.0"
 #define MyAppPublisher "Hippocampe Import-Export"
 #define MyAppExeName "SystemeCaisse.UI.exe"
 #define BuildDir "SystemeCaisse.UI\bin\Release\net8.0-windows10.0.19041\win-x64\publish"
@@ -28,7 +28,7 @@ Name: "french"; MessagesFile: "compiler:Languages\French.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
 
 [Files]
-Source: "{#BuildDir}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion signonce
+Source: "{#BuildDir}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]

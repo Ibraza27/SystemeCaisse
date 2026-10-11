@@ -48,9 +48,10 @@
     <Product>Hippocampe POS</Product>
     <Description>Système de Gestion de Caisse Moderne</Description>
     <Copyright>Copyright © 2026 Hippocampe</Copyright>
-    <Version>4.6.0</Version>
-    <FileVersion>4.6.0.0</FileVersion>
-    <AssemblyVersion>4.6.0.0</AssemblyVersion>
+    <Version>4.8.0</Version>
+    <FileVersion>4.8.0.0</FileVersion>
+    <AssemblyVersion>4.8.0.0</AssemblyVersion>
+    <SelfContained>true</SelfContained>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 

@@ -29,6 +29,16 @@ namespace SystemeCaisse.Core.Entities
         [MaxLength(20)]
         public string Telephone { get; set; } = string.Empty;
 
+        // ─── Sync avec TransitManager ───
+        [MaxLength(36)]
+        public string? SyncId { get; set; } // GUID de réconciliation inter-systèmes
+
+        [MaxLength(10)]
+        public string Source { get; set; } = "caisse"; // "caisse" ou "web"
+
+        [MaxLength(200)]
+        public string? Email { get; set; }
+
         [MaxLength(200)]
         public string? Adresse { get; set; }
 

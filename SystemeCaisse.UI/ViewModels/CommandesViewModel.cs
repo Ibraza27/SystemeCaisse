@@ -9,6 +9,7 @@ using System.Windows;
 using System.Windows.Input;
 using SystemeCaisse.Core.Entities;
 using SystemeCaisse.Infrastructure.Data;
+using SystemeCaisse.Infrastructure.Services;
 using SystemeCaisse.UI.Services;
 
 namespace SystemeCaisse.UI.ViewModels
@@ -43,6 +44,21 @@ namespace SystemeCaisse.UI.ViewModels
         {
             get => _paiementFilter;
             set { _paiementFilter = value; OnPropertyChanged(); _ = LoadDataAsync(); }
+        }
+
+        // ── Filtre par période (date début → date fin) ──
+        private DateTime? _dateDebut;
+        public DateTime? DateDebut
+        {
+            get => _dateDebut;
+            set { _dateDebut = value; OnPropertyChanged(); _ = LoadDataAsync(); }
+        }
+
+        private DateTime? _dateFin;
+        public DateTime? DateFin
+        {
+            get => _dateFin;
+            set { _dateFin = value; OnPropertyChanged(); _ = LoadDataAsync(); }
         }
 
         // Ville/CP multi-filter
@@ -267,6 +283,8 @@ namespace SystemeCaisse.UI.ViewModels
         public ICommand BatchRecapCommand { get; }
         public ICommand PrintClientRecapCommand { get; }
 
+        public ICommand TestSyncCommand { get; }
+
         public CommandesViewModel(IDbContextFactory<AppDbContext> contextFactory, PrintService printService)
         {
             _contextFactory = contextFactory;
@@ -286,6 +304,9 @@ namespace SystemeCaisse.UI.ViewModels
             ScanNewCommandeCommand = new BasicRelayCommand(_ => HandleNewCommandeScan());
             ClearNewCommandeSearchCommand = new BasicRelayCommand(_ => NewCommandeSearchText = string.Empty);
             OpenVilleCPFilterCommand = new BasicRelayCommand(_ => OpenVilleCPFilter());
+            
+            TestSyncCommand = new BasicRelayCommand(_ => ExecuteTestSync());
+            
             ClearAllFiltersCommand = new BasicRelayCommand(_ => ClearAllFilters());
             PrintRecapCommand = new BasicRelayCommand(_ => PrintRecap(), _ => Commandes.Count > 0);
             OpenCommandeDiscountCommand = new BasicRelayCommand(_ => ApplyManualDiscount(), _ => CommandePanier.Count > 0);
@@ -343,6 +364,22 @@ namespace SystemeCaisse.UI.ViewModels
             _mainViewModel = mainVM;
         }
 
+        // ── SignalR Sync ──
+        private SyncClient? _syncClient;
+
+        private int _newOrderCount;
+        public int NewOrderCount
+        {
+            get => _newOrderCount;
+            set { _newOrderCount = value; OnPropertyChanged(); OnPropertyChanged(nameof(HasNewOrders)); }
+        }
+        public bool HasNewOrders => NewOrderCount > 0;
+
+        public void SetSyncClient(SyncClient client)
+        {
+            _syncClient = client;
+        }
+
         public async Task InitializeAsync()
         {
             CommuneService.Load();
@@ -350,6 +387,46 @@ namespace SystemeCaisse.UI.ViewModels
             await LoadDataAsync();
             LoadProducts();
         }
+
+        private async void ExecuteTestSync()
+        {
+            if (_syncClient == null || !_syncClient.IsConnected)
+            {
+                var netSvc = Services.NetworkDatabaseService.Instance;
+                string extraInfo = "";
+                if (!netSvc.IsNetworkMode) extraInfo = "\n\n⚠️ INFO CRITIQUE : La caisse tourne actuellement en Mode Local (sur une nouvelle base de données vide). C'est pour cela que vos données semblent perdues !\n\nL'application n'arrive plus à accéder au dossier réseau de TransitManager. Vos vraies données sont toujours là-bas. Veuillez vérifier :\n1. Que le PC TransitManager est allumé.\n2. Que le réseau fonctionne.\n3. Que votre antivirus/Pare-feu ne bloque pas la nouvelle version de l'application.";
+                
+                System.Windows.MessageBox.Show(
+                    $"❌ La caisse n'est pas connectée au serveur Web.{extraInfo}", 
+                    "Test de Synchronisation", 
+                    System.Windows.MessageBoxButton.OK, 
+                    System.Windows.MessageBoxImage.Warning);
+                return;
+            }
+
+            try
+            {
+                var message = $"Test depuis la Caisse à {DateTime.Now:HH:mm:ss}";
+                await _syncClient.NotifyTestPing(message);
+                System.Windows.MessageBox.Show(
+                    "Ping envoyé avec succès. Vérifiez l'interface Web Administrateur.", 
+                    "Test de Synchronisation", 
+                    System.Windows.MessageBoxButton.OK, 
+                    System.Windows.MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show(
+                    $"❌ Erreur lors de l'envoi du ping : {ex.Message}", 
+                    "Erreur", 
+                    System.Windows.MessageBoxButton.OK, 
+                    System.Windows.MessageBoxImage.Error);
+            }
+        }
+
+        // ═══════════════════════════════════════════════
+        //  TICKET & IMPRESSION
+        // ═══════════════════════════════════════════════
 
         // ─── TopProducts: delegate to MainViewModel ───
         public ObservableCollection<Produit> TopProducts => _mainViewModel?.TopProducts ?? new ObservableCollection<Produit>();
@@ -466,6 +543,16 @@ namespace SystemeCaisse.UI.ViewModels
                         c.Prenom.ToLower().Contains(q) ||
                         c.Telephone.Contains(q)
                     ).ToList();
+                }
+
+                // Date range filter
+                if (DateDebut.HasValue)
+                {
+                    commandesList = commandesList.Where(c => c.CreatedAt.Date >= DateDebut.Value.Date).ToList();
+                }
+                if (DateFin.HasValue)
+                {
+                    commandesList = commandesList.Where(c => c.CreatedAt.Date <= DateFin.Value.Date).ToList();
                 }
 
                 Application.Current.Dispatcher.Invoke(() =>
@@ -892,6 +979,20 @@ namespace SystemeCaisse.UI.ViewModels
 
                         ctx.SaveChanges();
 
+                        // ── SignalR: notifier TransitManager de la mise à jour ──
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                if (_syncClient != null)
+                                {
+                                    var syncDto = MapCommandeToSync(existing);
+                                    await _syncClient.NotifyOrderUpdated(syncDto);
+                                }
+                            }
+                            catch { /* silent */ }
+                        });
+
                         MessageBox.Show(WindowHelper.GetAdminWindow(),
                             $"Commande {existing.NumeroCommande} mise à jour !",
                             "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -912,6 +1013,8 @@ namespace SystemeCaisse.UI.ViewModels
                 var commande = new Commande
                 {
                     NumeroCommande = numero,
+                    SyncId = Guid.NewGuid().ToString(),
+                    Source = "caisse",
                     Nom = _clientNom,
                     Prenom = _clientPrenom,
                     Telephone = _clientTelephone,
@@ -948,6 +1051,20 @@ namespace SystemeCaisse.UI.ViewModels
 
                 ctx.Commandes.Add(commande);
                 ctx.SaveChanges();
+
+                // ── SignalR: notifier TransitManager de la nouvelle commande ──
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        if (_syncClient != null)
+                        {
+                            var syncDto = MapCommandeToSync(commande);
+                            await _syncClient.NotifyOrderCreated(syncDto);
+                        }
+                    }
+                    catch { /* silent — sync is best-effort */ }
+                });
 
                 MessageBox.Show(WindowHelper.GetAdminWindow(),
                     $"Commande {numero} créée avec succès !",
@@ -1196,7 +1313,12 @@ namespace SystemeCaisse.UI.ViewModels
             OnPropertyChanged(nameof(StatutFilter));
             _paiementFilter = "Tous";
             OnPropertyChanged(nameof(PaiementFilter));
+            _dateDebut = null;
+            OnPropertyChanged(nameof(DateDebut));
+            _dateFin = null;
+            OnPropertyChanged(nameof(DateFin));
             VilleCPFilterList = new List<string>();
+            NewOrderCount = 0;
         }
 
         private void PrintRecap()
@@ -1582,6 +1704,47 @@ namespace SystemeCaisse.UI.ViewModels
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string? name = null)
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+        // ── Helper: convertir Commande → OrderSyncDto pour SignalR ──
+        private static OrderSyncDto MapCommandeToSync(Commande cmd)
+        {
+            Guid.TryParse(cmd.SyncId, out var syncGuid);
+            return new OrderSyncDto
+            {
+                SyncId = syncGuid != Guid.Empty ? syncGuid : Guid.NewGuid(),
+                NumeroCommande = cmd.NumeroCommande,
+                Source = cmd.Source ?? "caisse",
+                CreatedAt = cmd.CreatedAt,
+                UpdatedAt = cmd.UpdatedAt,
+                Nom = cmd.Nom,
+                Prenom = cmd.Prenom,
+                Telephone = cmd.Telephone,
+                Email = cmd.Email,
+                Ville = cmd.Ville,
+                CodePostal = cmd.CodePostal,
+                ModeLivraison = cmd.AvecLivraison ? "livraison" : "depot",
+                AdresseLivraison = cmd.Adresse,
+                MontantLivraison = cmd.MontantLivraison,
+                SousTotal = cmd.Total + cmd.TotalRemise,
+                TotalRemise = cmd.TotalRemise,
+                Total = cmd.Total,
+                MontantPaye = cmd.MontantPaye,
+                ModePaiement = cmd.ModePaiement,
+                Statut = cmd.Statut,
+                Lignes = cmd.Lignes.Select(l => new LineSyncDto
+                {
+                    ProduitSourceId = l.ProduitId ?? 0,
+                    ProduitNom = l.ProduitNom,
+                    CategorieNom = l.CategorieNom,
+                    PrixUnitaire = l.PrixUnitaire,
+                    Quantite = l.Quantite,
+                    TotalLigne = l.TotalLigne,
+                    Remise = l.Remise,
+                    PromotionAppliquee = l.PromotionAppliquee
+                }).ToList(),
+                Paiements = new List<PaymentSyncDto>()
+            };
+        }
     }
 
     public class SuspendedCommande

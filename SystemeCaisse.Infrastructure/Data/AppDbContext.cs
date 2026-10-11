@@ -44,7 +44,48 @@ namespace SystemeCaisse.Infrastructure.Data
                     cmd.CommandText = "PRAGMA journal_mode=DELETE; PRAGMA busy_timeout=10000; PRAGMA synchronous=NORMAL;";
                     cmd.ExecuteNonQuery();
                 }
-                connection.Close(); // Release the lock! EF Core will reopen as needed.
+
+                // ── Migration safe: ajouter colonnes sync si absentes ──
+                using (var cmd = connection.CreateCommand())
+                {
+                    cmd.CommandText = "PRAGMA table_info(Commandes);";
+                    var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read()) columns.Add(reader.GetString(1));
+                    }
+                    if (!columns.Contains("SyncId"))
+                    {
+                        using var alter = connection.CreateCommand();
+                        alter.CommandText = "ALTER TABLE Commandes ADD COLUMN SyncId TEXT;";
+                        alter.ExecuteNonQuery();
+                    }
+                    if (!columns.Contains("Source"))
+                    {
+                        using var alter = connection.CreateCommand();
+                        alter.CommandText = "ALTER TABLE Commandes ADD COLUMN Source TEXT DEFAULT 'caisse';";
+                        alter.ExecuteNonQuery();
+                    }
+                    if (!columns.Contains("Email"))
+                    {
+                        using var alter = connection.CreateCommand();
+                        alter.CommandText = "ALTER TABLE Commandes ADD COLUMN Email TEXT;";
+                        alter.ExecuteNonQuery();
+                    }
+                }
+
+                // ── Seed safe: ajouter les clés de config sync si absentes ──
+                using (var cmd = connection.CreateCommand())
+                {
+                    cmd.CommandText = @"
+                        INSERT OR IGNORE INTO Configuration (Cle, Valeur, Description) VALUES ('sync_enabled', 'false', 'Activer la sync SignalR avec TransitManager');
+                        INSERT OR IGNORE INTO Configuration (Cle, Valeur, Description) VALUES ('sync_hub_url', 'https://hippocampetransitmanager.com/hubs/sync', 'URL du hub SignalR TransitManager');
+                        INSERT OR IGNORE INTO Configuration (Cle, Valeur, Description) VALUES ('sync_api_key', '', 'Clé API pour authentification SignalR');
+                    ";
+                    cmd.ExecuteNonQuery();
+                }
+
+                connection.Close();
             }
             catch
             {
