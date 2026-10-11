@@ -16,6 +16,18 @@ namespace SystemeCaisse.Core.Entities
 
         public DateTime CreatedAt { get; set; } = DateTime.Now;
 
+        /// <summary>
+        /// Identifiant unique généré par le poste au moment de l'encaissement.
+        /// Garantit l'idempotence : une vente renvoyée (file hors-ligne, nouvelle tentative)
+        /// n'est jamais enregistrée deux fois (index unique).
+        /// </summary>
+        [MaxLength(36)]
+        public string? ClientUid { get; set; }
+
+        /// <summary>Nom du poste de caisse ayant encaissé la vente.</summary>
+        [MaxLength(50)]
+        public string? Poste { get; set; }
+
         [Column(TypeName = "decimal(18,2)")]
         public decimal Total { get; set; }
 

@@ -37,6 +37,10 @@ namespace SystemeCaisse.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Email")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ModePaiement")
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
@@ -60,14 +64,27 @@ namespace SystemeCaisse.Infrastructure.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Poste")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Prenom")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Statut")
                         .IsRequired()
                         .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SyncId")
+                        .HasMaxLength(36)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Telephone")
@@ -89,6 +106,16 @@ namespace SystemeCaisse.Infrastructure.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("NumeroCommande")
+                        .IsUnique();
+
+                    b.HasIndex("Statut");
+
+                    b.HasIndex("SyncId")
+                        .IsUnique();
 
                     b.ToTable("Commandes");
                 });
@@ -131,6 +158,23 @@ namespace SystemeCaisse.Infrastructure.Migrations
                     b.ToTable("CommandesFournisseurs");
                 });
 
+            modelBuilder.Entity("SystemeCaisse.Core.Entities.DataVersion", b =>
+                {
+                    b.Property<string>("Domaine")
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Domaine");
+
+                    b.ToTable("DataVersions", (string)null);
+                });
+
             modelBuilder.Entity("SystemeCaisse.Core.Entities.Entreprise", b =>
                 {
                     b.Property<int>("Id")
@@ -169,14 +213,6 @@ namespace SystemeCaisse.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Entreprise");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 1,
-                            Nom = "Mon Magasin",
-                            UpdatedAt = new DateTime(2026, 6, 12, 17, 49, 4, 256, DateTimeKind.Local).AddTicks(4620)
-                        });
                 });
 
             modelBuilder.Entity("SystemeCaisse.Core.Entities.Fournisseur", b =>
@@ -240,6 +276,29 @@ namespace SystemeCaisse.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("HistoriqueActions");
+                });
+
+            modelBuilder.Entity("SystemeCaisse.Core.Entities.ImageStockee", b =>
+                {
+                    b.Property<string>("Cle")
+                        .HasMaxLength(255)
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte[]>("Donnees")
+                        .IsRequired()
+                        .HasColumnType("BLOB");
+
+                    b.Property<string>("Hash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Cle");
+
+                    b.ToTable("ImagesStockees", (string)null);
                 });
 
             modelBuilder.Entity("SystemeCaisse.Core.Entities.Inventaire", b =>
@@ -432,6 +491,8 @@ namespace SystemeCaisse.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("DateMouvement");
+
                     b.HasIndex("ProduitId");
 
                     b.ToTable("MouvementsStock");
@@ -525,7 +586,11 @@ namespace SystemeCaisse.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CodeBarre");
+
                     b.HasIndex("FournisseurId");
+
+                    b.HasIndex("Nom");
 
                     b.ToTable("Produits");
                 });
@@ -659,21 +724,6 @@ namespace SystemeCaisse.Infrastructure.Migrations
                     b.HasKey("Cle");
 
                     b.ToTable("Configuration");
-
-                    b.HasData(
-                        new
-                        {
-                            Cle = "version",
-                            Description = "Version de l'application",
-                            Type = "text",
-                            Valeur = "1.0.0"
-                        },
-                        new
-                        {
-                            Cle = "theme",
-                            Type = "text",
-                            Valeur = "default"
-                        });
                 });
 
             modelBuilder.Entity("SystemeCaisse.Core.Entities.Vente", b =>
@@ -681,6 +731,10 @@ namespace SystemeCaisse.Infrastructure.Migrations
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("ClientUid")
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
@@ -707,6 +761,10 @@ namespace SystemeCaisse.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Poste")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Statut")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -719,6 +777,11 @@ namespace SystemeCaisse.Infrastructure.Migrations
                         .HasColumnType("decimal(18,2)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ClientUid")
+                        .IsUnique();
+
+                    b.HasIndex("CreatedAt");
 
                     b.ToTable("Ventes");
                 });

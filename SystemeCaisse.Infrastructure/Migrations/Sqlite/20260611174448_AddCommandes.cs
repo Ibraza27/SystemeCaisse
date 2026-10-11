@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -21,6 +21,11 @@ namespace SystemeCaisse.Infrastructure.Data.Migrations
                     Nom = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
                     Prenom = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
                     Telephone = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
+                    // Ajout refonte multi-poste : ces colonnes étaient créées par ALTER TABLE au runtime.
+                    // Les bases existantes les reçoivent via DatabaseBootstrapper.PrepareSqliteAsync.
+                    SyncId = table.Column<string>(type: "TEXT", maxLength: 36, nullable: true),
+                    Source = table.Column<string>(type: "TEXT", maxLength: 10, nullable: false, defaultValue: "caisse"),
+                    Email = table.Column<string>(type: "TEXT", maxLength: 200, nullable: true),
                     Adresse = table.Column<string>(type: "TEXT", maxLength: 200, nullable: true),
                     Ville = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
                     CodePostal = table.Column<string>(type: "TEXT", maxLength: 10, nullable: true),

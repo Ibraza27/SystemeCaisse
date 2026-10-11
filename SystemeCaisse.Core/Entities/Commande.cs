@@ -76,6 +76,10 @@ namespace SystemeCaisse.Core.Entities
         public DateTime CreatedAt { get; set; } = DateTime.Now;
         public DateTime UpdatedAt { get; set; } = DateTime.Now;
 
+        /// <summary>Nom du poste de caisse ayant créé la commande (null pour les commandes web).</summary>
+        [MaxLength(50)]
+        public string? Poste { get; set; }
+
         // Navigation
         public List<LigneCommande> Lignes { get; set; } = new();
 

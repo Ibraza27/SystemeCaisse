@@ -3,108 +3,86 @@ using SystemeCaisse.Core.Entities;
 
 namespace SystemeCaisse.Infrastructure.Data
 {
+    /// <summary>
+    /// Contexte EF Core principal. Utilisé tel quel pour SQLite (mode Local),
+    /// et via <see cref="PostgresAppDbContext"/> pour PostgreSQL (mode Serveur).
+    ///
+    /// RÈGLES (voir PROJECT_GUIDELINES §18) :
+    /// - Le constructeur ne doit JAMAIS ouvrir de connexion ni exécuter de SQL :
+    ///   un contexte est créé pour CHAQUE opération (durée de vie courte).
+    /// - Les réglages de connexion (PRAGMA SQLite, timeouts) sont gérés par
+    ///   <see cref="CaisseDbContextFactory"/> et <see cref="SqliteConnectionInterceptor"/>.
+    /// - Les évolutions de schéma passent par des migrations EF pour LES DEUX moteurs.
+    /// </summary>
     public class AppDbContext : DbContext
     {
-        /// <summary>
-        /// Static flag set by the UI layer at startup to indicate if we're using a network database.
-        /// When true, WAL mode is disabled (incompatible with SMB network shares).
-        /// </summary>
-        public static bool IsNetworkDatabaseMode { get; set; }
-        public DbSet<Produit> Produits { get; set; }
-        public DbSet<Entreprise> Entreprise { get; set; }
-        public DbSet<SystemConfiguration> Configuration { get; set; }
-        public DbSet<Vente> Ventes { get; set; }
-        public DbSet<LigneVente> LignesVente { get; set; }
-        public DbSet<MouvementStock> MouvementsStock { get; set; }
-        public DbSet<Promotion> Promotions { get; set; }
-        public DbSet<PromotionTier> PromotionTiers { get; set; }
-        public DbSet<PromotionBundleItem> PromotionBundleItems { get; set; }
-        public DbSet<Inventaire> Inventaires { get; set; }
-        public DbSet<LigneInventaire> LignesInventaire { get; set; }
-        public DbSet<Fournisseur> Fournisseurs { get; set; }
-        public DbSet<CommandeFournisseur> CommandesFournisseurs { get; set; }
-        public DbSet<HistoriqueAction> HistoriqueActions { get; set; }
-        public DbSet<PlanningPromotion> PlanningPromotions { get; set; }
-        public DbSet<Commande> Commandes { get; set; }
-        public DbSet<LigneCommande> LignesCommande { get; set; }
+        public DbSet<Produit> Produits { get; set; } = null!;
+        public DbSet<Entreprise> Entreprise { get; set; } = null!;
+        public DbSet<SystemConfiguration> Configuration { get; set; } = null!;
+        public DbSet<Vente> Ventes { get; set; } = null!;
+        public DbSet<LigneVente> LignesVente { get; set; } = null!;
+        public DbSet<MouvementStock> MouvementsStock { get; set; } = null!;
+        public DbSet<Promotion> Promotions { get; set; } = null!;
+        public DbSet<PromotionTier> PromotionTiers { get; set; } = null!;
+        public DbSet<PromotionBundleItem> PromotionBundleItems { get; set; } = null!;
+        public DbSet<Inventaire> Inventaires { get; set; } = null!;
+        public DbSet<LigneInventaire> LignesInventaire { get; set; } = null!;
+        public DbSet<Fournisseur> Fournisseurs { get; set; } = null!;
+        public DbSet<CommandeFournisseur> CommandesFournisseurs { get; set; } = null!;
+        public DbSet<HistoriqueAction> HistoriqueActions { get; set; } = null!;
+        public DbSet<PlanningPromotion> PlanningPromotions { get; set; } = null!;
+        public DbSet<Commande> Commandes { get; set; } = null!;
+        public DbSet<LigneCommande> LignesCommande { get; set; } = null!;
+        public DbSet<DataVersion> DataVersions { get; set; } = null!;
+        public DbSet<ImageStockee> ImagesStockees { get; set; } = null!;
 
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
         {
-            // Use DELETE journal mode for ALL modes (local AND network)
-            // WAL mode creates -wal/-shm files using memory-mapped I/O which prevents
-            // other machines from writing to the database over SMB network shares.
-            // CRITICAL: Close connection after PRAGMAs to release file lock!
-            // Without this, the main computer holds the lock and secondaries can't write.
-            try
-            {
-                var connection = Database.GetDbConnection();
-                connection.Open();
-                using (var cmd = connection.CreateCommand())
-                {
-                    cmd.CommandText = "PRAGMA journal_mode=DELETE; PRAGMA busy_timeout=10000; PRAGMA synchronous=NORMAL;";
-                    cmd.ExecuteNonQuery();
-                }
-
-                // ── Migration safe: ajouter colonnes sync si absentes ──
-                using (var cmd = connection.CreateCommand())
-                {
-                    cmd.CommandText = "PRAGMA table_info(Commandes);";
-                    var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        while (reader.Read()) columns.Add(reader.GetString(1));
-                    }
-                    if (!columns.Contains("SyncId"))
-                    {
-                        using var alter = connection.CreateCommand();
-                        alter.CommandText = "ALTER TABLE Commandes ADD COLUMN SyncId TEXT;";
-                        alter.ExecuteNonQuery();
-                    }
-                    if (!columns.Contains("Source"))
-                    {
-                        using var alter = connection.CreateCommand();
-                        alter.CommandText = "ALTER TABLE Commandes ADD COLUMN Source TEXT DEFAULT 'caisse';";
-                        alter.ExecuteNonQuery();
-                    }
-                    if (!columns.Contains("Email"))
-                    {
-                        using var alter = connection.CreateCommand();
-                        alter.CommandText = "ALTER TABLE Commandes ADD COLUMN Email TEXT;";
-                        alter.ExecuteNonQuery();
-                    }
-                }
-
-                // ── Seed safe: ajouter les clés de config sync si absentes ──
-                using (var cmd = connection.CreateCommand())
-                {
-                    cmd.CommandText = @"
-                        INSERT OR IGNORE INTO Configuration (Cle, Valeur, Description) VALUES ('sync_enabled', 'false', 'Activer la sync SignalR avec TransitManager');
-                        INSERT OR IGNORE INTO Configuration (Cle, Valeur, Description) VALUES ('sync_hub_url', 'https://hippocampetransitmanager.com/hubs/sync', 'URL du hub SignalR TransitManager');
-                        INSERT OR IGNORE INTO Configuration (Cle, Valeur, Description) VALUES ('sync_api_key', '', 'Clé API pour authentification SignalR');
-                    ";
-                    cmd.ExecuteNonQuery();
-                }
-
-                connection.Close();
-            }
-            catch
-            {
-                // Silently ignore if connection fails (will be caught elsewhere)
-            }
         }
+
+        /// <summary>Constructeur pour les contextes dérivés (PostgreSQL).</summary>
+        protected AppDbContext(DbContextOptions options) : base(options)
+        {
+        }
+
+        /// <summary>True si ce contexte cible PostgreSQL.</summary>
+        public bool IsPostgres => Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
-            // Seed initial data for Entreprise
-            modelBuilder.Entity<Entreprise>().HasData(new Entreprise { Id = 1, Nom = "Mon Magasin" });
+            // NOTE : plus de HasData ici. Le seed (Entreprise, Configuration) est réalisé
+            // par DatabaseBootstrapper uniquement si la base est vide. HasData avec DateTime.Now
+            // générait une migration parasite à chaque `migrations add`.
 
-            // Seed initial configuration
-            modelBuilder.Entity<SystemConfiguration>().HasData(
-                new SystemConfiguration { Cle = "version", Valeur = "1.0.0", Description = "Version de l'application" },
-                new SystemConfiguration { Cle = "theme", Valeur = "default" }
-            );
+            modelBuilder.Entity<Vente>(e =>
+            {
+                e.HasIndex(v => v.CreatedAt);
+                e.HasIndex(v => v.ClientUid).IsUnique();
+            });
+
+            modelBuilder.Entity<Commande>(e =>
+            {
+                e.HasIndex(c => c.CreatedAt);
+                e.HasIndex(c => c.Statut);
+                e.HasIndex(c => c.NumeroCommande).IsUnique();
+                e.HasIndex(c => c.SyncId).IsUnique();
+            });
+
+            modelBuilder.Entity<Produit>(e =>
+            {
+                e.HasIndex(p => p.CodeBarre);
+                e.HasIndex(p => p.Nom);
+            });
+
+            modelBuilder.Entity<MouvementStock>(e =>
+            {
+                e.HasIndex(m => m.DateMouvement);
+            });
+
+            modelBuilder.Entity<DataVersion>().ToTable("DataVersions");
+            modelBuilder.Entity<ImageStockee>().ToTable("ImagesStockees");
         }
     }
 }
