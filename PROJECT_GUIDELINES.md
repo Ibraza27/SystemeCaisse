@@ -510,3 +510,21 @@ builder.Cache = SqliteCacheMode.Shared; // ❌
 - **Paramètres en BDD** : Les paramètres d'activation de la synchronisation Web (`sync_enabled`, `sync_hub_url`, `sync_api_key`) résident dans la table `Configuration` de la BDD SQLite.
 - **Attention au multi-poste** : L'activation de la synchronisation sur le poste développeur n'a **aucun effet** sur la production. Les scripts d'injection de configuration (`activate_sync_prod.py`) doivent impérativement être joués sur la BDD physique utilisée par la caisse principale (ex: `\\100.113.56.25\SystemeCaisse\caisse.db`).
 
+## 21. Architecture Multi-Poste Hybride (PostgreSQL / SQLite) et Bootstrapper
+
+### Règles architecturales :
+- **Fabrique de contextes unifiée** : `CaisseDbContextFactory` est l'UNIQUE fabrique enregistrée dans l'injecteur de dépendances (DI), à la fois sous son type concret et sous `IDbContextFactory<AppDbContext>`. Aucun service ne doit créer de `DbContextOptions` ad-hoc sous peine de créer un état "split-brain" (moitié SQLite, moitié PostgreSQL).
+- **Initialisation par Bootstrapper** : Toute initialisation de base de données (test de connectivité, migrations, vérification de version du schéma et seed) passe impérativement par `DatabaseBootstrapper.InitializeAsync()`.
+- **Verrou consultatif PostgreSQL** : Les migrations sur PostgreSQL sont protégées par `pg_advisory_lock` pour éviter tout conflit si plusieurs postes démarrent simultanément.
+- **Reprise automatique** : Si la base cible est vide et qu'une base SQLite `caisse.db` existe sur le poste, `DataTransferService.ImportSqliteAsync` est exécuté automatiquement pour restaurer les données et réaligner les séquences (`setval`).
+- **Mode hors-ligne résilient** : En cas de serveur PostgreSQL injoignable, l'application démarre en mode dégradé avec le cache catalogue local (`CatalogCache`) et empile les ventes dans la file locale (`OfflineSalesQueue`) pour envoi automatique au rétablissement réseau.
+
+## 22. Fluidité de Navigation et Maintien en Mémoire des Vues (TabContent.IsCached)
+
+### Règles pour le TabControl principal :
+- **Conservation du Visual Tree** : Le `TabControl` de navigation dans `MainWindow.xaml` doit obligatoirement porter l'attribut `controls:TabContent.IsCached="True"`.
+- **Mécanisme** : Au lieu de détruire et reconstruire les contrôles WPF lourds (DataGrid, images, listes de plus de 1 000 articles), `TabContent` conserve chaque vue dans un `Grid` et bascule uniquement la propriété `Visibility` (`Visible` / `Collapsed`). Le temps de commutation est instantané (0 ms).
+- **Pas de chargement bloquant sur le thread UI** : Lors du changement d'onglet, aucun rechargement synchrone de données ne doit s'exécuter sur le thread UI. Utiliser `Task.Run` ou des appels asynchrones avec rafraîchissement différé.
+- **Gestion des erreurs en arrière-plan** : Les rechargements automatiques d'onglets ne doivent JAMAIS afficher de `MessageBox` modale en cas d'erreur réseau passagère. Logger avec `AppLog.Error` et réserver les popups aux actions manuelles explicites de l'utilisateur (bouton "Actualiser").
+
+

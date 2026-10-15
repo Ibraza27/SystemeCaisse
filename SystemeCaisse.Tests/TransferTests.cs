@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using SystemeCaisse.Infrastructure.Configuration;
+using SystemeCaisse.Infrastructure.Data;
 using SystemeCaisse.Infrastructure.Services;
 
 namespace SystemeCaisse.Tests

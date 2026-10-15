@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:SystemeCaisse.UI"
         xmlns:views="clr-namespace:SystemeCaisse.UI.Views"
+        xmlns:controls="clr-namespace:SystemeCaisse.UI.Controls"
         mc:Ignorable="d"
         x:Name="mainWindow"
         Title="Hippocampe - Système de Caisse" Height="700" Width="1100"
@@ -71,7 +72,7 @@
 
         <!-- Navigation Tabs -->
         <!-- Navigation Tabs (Default to Caisse/Index 1) -->
-        <TabControl x:Name="mainTabs" Grid.Row="1" SelectedIndex="{Binding SelectedTabIndex}" Background="Transparent" BorderThickness="0" Margin="10">
+        <TabControl x:Name="mainTabs" Grid.Row="1" controls:TabContent.IsCached="True" SelectedIndex="{Binding SelectedTabIndex}" Background="Transparent" BorderThickness="0" Margin="10">
             <TabControl.Resources>
                 <Style TargetType="TabItem">
                     <Setter Property="FontSize" Value="14"/>

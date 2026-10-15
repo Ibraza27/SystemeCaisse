@@ -64,14 +64,14 @@ namespace SystemeCaisse.UI
                 {
                     services.AddSingleton(networkDbService);
 
-                    services.AddDbContextFactory<AppDbContext>(options =>
-                    {
-                        options.UseSqlite(connectionString);
-                    });
-
-                    // Add LocalSettingsStore and CaisseDbContextFactory
+                    // Add LocalSettingsStore and CaisseDbContextFactory (single source of truth for entire app)
                     services.AddSingleton<LocalSettingsStore>();
-                    services.AddSingleton<CaisseDbContextFactory>();
+                    services.AddSingleton(sp => 
+                    {
+                        var store = sp.GetRequiredService<LocalSettingsStore>();
+                        return new CaisseDbContextFactory(store.Current.Database);
+                    });
+                    services.AddSingleton<IDbContextFactory<AppDbContext>>(sp => sp.GetRequiredService<CaisseDbContextFactory>());
                     services.AddSingleton<CaisseServices>();
 
                     services.AddSingleton<MainWindow>();
@@ -153,102 +153,61 @@ namespace SystemeCaisse.UI
                             System.IO.Directory.CreateDirectory(imagesDir);
                         }
 
-                        System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Task.Run: Migration DB...\n");
-                        var networkSvc = _host.Services.GetRequiredService<NetworkDatabaseService>();
-                        // Seed Data if empty
-                        var factory = _host.Services.GetRequiredService<IDbContextFactory<AppDbContext>>();
-                        using (var context = factory.CreateDbContext())
+                        System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Task.Run: Bootstrap DB...\n");
+                        var dbFactory = _host.Services.GetRequiredService<CaisseDbContextFactory>();
+                        var caisseServices = _host.Services.GetRequiredService<CaisseServices>();
+                        var bootstrapper = new DatabaseBootstrapper(dbFactory);
+                        var bootResult = await bootstrapper.InitializeAsync();
+                        System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Task.Run: Bootstrap result: {bootResult.Status}, {bootResult.Message}\n");
+
+                        if (bootResult.IsReady)
                         {
-                            if (networkSvc.IsNetworkMode)
+                            caisseServices.StartBackground(true);
+
+                            // Si la base est totalement vide (nouveau serveur ou premier lancement),
+                            // on importe automatiquement l'ancienne base SQLite si elle existe.
+                            if (await bootstrapper.IsDatabaseEmptyAsync())
                             {
-                                // Network mode: skip migrations and seeding (main computer manages)
-                                // But DO read enterprise data for splash logo
-                                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Mode RÉSEAU: skip migration, lecture données...\n");
-                                try
+                                var store = _host.Services.GetRequiredService<LocalSettingsStore>();
+                                var legacyCandidate = store.Current.Database.SqlitePath;
+                                if (string.IsNullOrWhiteSpace(legacyCandidate) || !System.IO.File.Exists(legacyCandidate))
+                                    legacyCandidate = AppPaths.DefaultSqlitePath;
+                                if (!System.IO.File.Exists(legacyCandidate))
+                                    legacyCandidate = System.IO.Path.Combine(AppPaths.InstallDir, "caisse.db");
+
+                                if (System.IO.File.Exists(legacyCandidate))
                                 {
-                                    var entreprise = await context.Entreprise.FirstOrDefaultAsync();
-                                    if (entreprise != null)
+                                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Base vide : import automatique depuis {legacyCandidate}...\n");
+                                    try
                                     {
-                                        var logoPath = !string.IsNullOrEmpty(entreprise.LogoPath) && System.IO.File.Exists(entreprise.LogoPath) 
-                                            ? entreprise.LogoPath : null;
-                                        await Application.Current.Dispatcher.InvokeAsync(() => {
-                                            try { splash.SetLogo(logoPath); } catch { }
-                                        });
+                                        var transfer = new DataTransferService(dbFactory);
+                                        var report = await transfer.ImportSqliteAsync(legacyCandidate, replaceExisting: true);
+                                        System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Import automatique terminé : {report.TotalRows} lignes.\n");
                                     }
-                                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Mode RÉSEAU: lecture OK\n");
-                                }
-                                catch (Exception netEx)
-                                {
-                                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Mode RÉSEAU: erreur lecture: {netEx.Message}\n");
+                                    catch (Exception impEx)
+                                    {
+                                        System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Erreur import automatique : {impEx.Message}\n");
+                                    }
                                 }
                             }
-                            else
-                            {
-                                // Local mode: run migrations normally
-                                await context.Database.MigrateAsync();
-                                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Task.Run: Migration terminée. Seed...\n");
-                                if (!await context.Produits.AnyAsync())
-                                {
-                                    context.Produits.AddRange(
-                                        new Core.Entities.Produit { Nom = "Pomme Golden", PrixVente = 1.99m, StockActuel = 100, CodeBarre = "1001" },
-                                        new Core.Entities.Produit { Nom = "Banane Cavendish", PrixVente = 0.99m, StockActuel = 50, CodeBarre = "1002" },
-                                        new Core.Entities.Produit { Nom = "Tomate Grappe", PrixVente = 2.50m, StockActuel = 30, CodeBarre = "1003" },
-                                        new Core.Entities.Produit { Nom = "Courgette Bio", PrixVente = 1.50m, StockActuel = 20, CodeBarre = "1004" },
-                                        new Core.Entities.Produit { Nom = "Poivron Rouge", PrixVente = 3.00m, StockActuel = 40, CodeBarre = "1005" },
-                                        new Core.Entities.Produit { Nom = "Salade Batavia", PrixVente = 1.20m, StockActuel = 15, CodeBarre = "1006" }
-                                    );
-                                    await context.SaveChangesAsync();
-                                }
 
-                                // Ensure Enterprise data is correct
-                                var entreprise = await context.Entreprise.FirstOrDefaultAsync();
-                                if (entreprise == null)
-                                {
-                                    entreprise = new Core.Entities.Entreprise
-                                    {
-                                        Nom = "HIPPOCAMPE",
-                                        Adresse = "5 - 7 Rue Pascal 33370 Tresses, France",
-                                        Telephone = "06 00 00 00 00"
-                                    };
-                                    context.Entreprise.Add(entreprise);
-                                    await context.SaveChangesAsync();
-                                }
-                            
-                                // Update Splash Logo on UI Thread safely
+                            // Lecture des coordonnées et logo pour le splash
+                            await using var context = await dbFactory.CreateDbContextAsync();
+                            var entreprise = await context.Entreprise.AsNoTracking().FirstOrDefaultAsync();
+                            if (entreprise != null)
+                            {
                                 var logoPath = !string.IsNullOrEmpty(entreprise.LogoPath) && System.IO.File.Exists(entreprise.LogoPath) 
                                     ? entreprise.LogoPath : null;
-                            
-                                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Task.Run: Splash Logo Update...\n");
                                 await Application.Current.Dispatcher.InvokeAsync(() => {
                                     try { splash.SetLogo(logoPath); } catch { }
                                 });
-                                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Task.Run: Divers data fix...\n");
-                                var diversLines = await context.LignesVente
-                                    .Where(l => l.CategorieNom == "Divers" || string.IsNullOrWhiteSpace(l.CategorieNom))
-                                    .ToListAsync();
-                            
-                                foreach (var line in diversLines)
-                                {
-                                    line.CategorieNom = "Autre";
-                                }
-
-                                var diversProds = await context.Produits
-                                    .Where(p => p.Categorie == "Divers" || string.IsNullOrWhiteSpace(p.Categorie))
-                                    .ToListAsync();
-                            
-                                foreach (var prod in diversProds)
-                                {
-                                    prod.Categorie = "Autre";
-                                }
-
-                                var tomateProd = await context.Produits.FirstOrDefaultAsync(p => p.Nom == "Tomates" && !p.Actif);
-                                if (tomateProd != null)
-                                {
-                                    tomateProd.Actif = true;
-                                }
-
-                                await context.SaveChangesAsync();
                             }
+                        }
+                        else
+                        {
+                            caisseServices.StartedOffline = true;
+                            caisseServices.StartBackground(false);
+                            System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Démarrage en mode dégradé / hors-ligne\n");
                         }
                     }
                     catch (Exception innerEx)

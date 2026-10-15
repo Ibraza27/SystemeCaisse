@@ -30,3 +30,24 @@ Ce fichier documente les retours d'expérience, les problèmes rencontrés lors 
 
 ## 5. Résilience de l'Installateur (Inno Setup)
 **Règle :** L'installateur ne supprime jamais les bases de données `.db` ou les `.json` qui ne font pas partie du package généré par `dotnet publish`. C'est une sécurité vitale qui empêche l'écrasement accidentel des données si l'utilisateur installe l'application directement dans le dossier réseau partagé.
+
+## 6. Refonte Multi-Poste (PostgreSQL + SQLite) et Unification des Fabriques
+**Problème :** Lors du passage au moteur PostgreSQL, l'erreur `42P01: relation "Produits" does not exist` apparaissait et les onglets Produits, Stocks et Ventes étaient vides.
+**Cause :** 
+- L'injection de dépendances dans `App.xaml.cs` enregistrait deux fabriques en parallèle : un `AddDbContextFactory<AppDbContext>` pointant vers SQLite, et `CaisseDbContextFactory` pointant vers PostgreSQL. Les ViewModels recevaient des contextes ciblant des bases différentes (split-brain).
+- De plus, les migrations EF Core n'étaient jouées qu'au démarrage sur SQLite, laissant la base PostgreSQL cible avec 0 tables créées.
+**Solution :**
+- `CaisseDbContextFactory` est l'unique source de vérité pour toute l'application. Elle est enregistrée comme singleton pour son type concret et pour l'interface `IDbContextFactory<AppDbContext>`.
+- Le démarrage dans `App.xaml.cs` fait appel à `DatabaseBootstrapper.InitializeAsync()`, qui gère les migrations de schéma avec verrou consultatif PostgreSQL (`pg_advisory_lock`), garantissant la cohérence même si plusieurs postes démarrent en même temps.
+- En cas de base cible neuve/vide, `DataTransferService.ImportSqliteAsync` est déclenché automatiquement pour migrer l'intégralité des données existantes (produits, ventes, commandes, historiques, images) depuis le fichier `caisse.db`.
+
+## 7. Fluidité de Navigation des Onglets (WPF TabControl Caching)
+**Problème :** Le passage entre les onglets présentait des ralentissements, des micro-gels de l'interface et des rechargements intempestifs.
+**Cause :**
+- Le `TabControl` natif de WPF détruit l'arborescence visuelle (`VisualTree`) de l'onglet actif et reconstruit de zéro l'arborescence de l'onglet cible à chaque clic. Sur des vues avec de lourds DataGrids (plus de 1 300 produits avec images, 3 700 ventes), cela provoque un coût de layout et de rendu important.
+- Certains chargements s'exécutaient de manière synchrone sur le thread UI lors du basculement d'onglet.
+**Solution :**
+- Implémentation du composant `TabContent.IsCached="True"` (`SystemeCaisse.UI.Controls.TabContent`) sur le `TabControl` principal. Les arborescences visuelles sont conservées en mémoire et seule la visibilité (`Visibility.Visible` / `Visibility.Collapsed`) bascule. Le temps de passage d'un onglet à un autre passe à 0 ms.
+- Déport des lectures en base hors du thread UI (`Task.Run` / chargements asynchrones dans `MainViewModel.cs`).
+- Remplacement des popups d'erreur bloquantes (`MessageBox.Show`) par du logging silencieux `AppLog.Error` lors des rafraîchissements en arrière-plan.
+

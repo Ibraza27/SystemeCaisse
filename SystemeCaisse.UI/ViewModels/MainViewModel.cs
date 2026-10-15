@@ -436,15 +436,16 @@ namespace SystemeCaisse.UI.ViewModels
         public ICommand SendToTPECommand { get; }
         public ICommand FillExactAmountCommand { get; }
 
-        private void ReloadProductsFromDb()
+        private async Task ReloadProductsFromDbAsync()
         {
             try
             {
-                // CRITICAL: Clear the tracker to discard cached entity state from previous tab visits.
-                // This forces EF to fetch the latest values (prices, etc.) from the DB.
-                _context.ChangeTracker.Clear();
+                await Task.Run(() =>
+                {
+                    _context.ChangeTracker.Clear();
+                    _context.Produits.Load();
+                });
                 
-                _context.Produits.Load();
                 Produits = _context.Produits.Local.ToObservableCollection();
                 
                 // Refresh the CollectionView
@@ -464,7 +465,10 @@ namespace SystemeCaisse.UI.ViewModels
             }
         }
 
-
+        private void ReloadProductsFromDb()
+        {
+            _ = ReloadProductsFromDbAsync();
+        }
 
         private int _selectedTabIndex = 1;
         public int SelectedTabIndex
@@ -489,30 +493,32 @@ namespace SystemeCaisse.UI.ViewModels
             {
                 _lastIndex = value;
 
-                if (value == 6)
+                if (value == 0)
                 {
-                    // Analysis disabled temporarily due to build issues
+                    _ = DashboardVM?.LoadDashboardDataInternalAsync();
                 }
-
-                if (value == 1)
+                else if (value == 1)
                 {
-                    // Price Sync: Reload latest products from DB when entering Caisse
-                    ReloadProductsFromDb();
-                    
+                    // Price Sync: Reload latest products in background when entering Caisse
+                    _ = ReloadProductsFromDbAsync();
                     LoadPromotions();
                     ApplyAutomaticPromotions();
                     UpdateTotal();
                 }
-
-                if (value == 2)
+                else if (value == 2)
                 {
-                    // Auto-refresh commandes data when switching to Commandes tab
                     _ = CommandesVM?.LoadDataAsync();
                 }
-
-                if (value == 5)
+                else if (value == 3)
                 {
-                    // Auto-refresh history data when switching to Ventes tab
+                    _ = ProductsVM?.RefreshIfIdleAsync();
+                }
+                else if (value == 4)
+                {
+                    _ = StocksVM?.LoadDataAsync();
+                }
+                else if (value == 5)
+                {
                     _ = HistoryVM?.LoadDataAsync();
                 }
             }

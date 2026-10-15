@@ -105,10 +105,10 @@ namespace SystemeCaisse.UI.ViewModels
                 MessageBox.Show(WindowHelper.GetAdminWindow(), "Des modifications ne sont pas enregistrées. Les abandonner et recharger ?",
                     "Actualiser", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
                 return;
-            await LoadDataInternalAsync();
+            await LoadDataInternalAsync(showErrorDialog: true);
         }
 
-        private async Task LoadDataInternalAsync()
+        private async Task LoadDataInternalAsync(bool showErrorDialog = false)
         {
             if (IsBusy) return;
             IsBusy = true;
@@ -152,7 +152,10 @@ namespace SystemeCaisse.UI.ViewModels
             catch (Exception ex)
             {
                 AppLog.Error("Produits", "Chargement des produits impossible", ex);
-                MessageBox.Show(WindowHelper.GetAdminWindow(), $"Erreur chargement : {ex.InnerException?.Message ?? ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                if (showErrorDialog)
+                {
+                    MessageBox.Show(WindowHelper.GetAdminWindow(), $"Erreur chargement : {ex.InnerException?.Message ?? ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
             }
             finally
             {

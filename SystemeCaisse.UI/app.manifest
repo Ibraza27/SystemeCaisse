@@ -4,8 +4,8 @@
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
     <security>
       <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
-        <!-- Requerir les droits d'administrateur -->
-        <requestedExecutionLevel level="requireAdministrator" uiAccess="false" />
+        <!-- Lancement avec les droits de l'utilisateur courant (asInvoker) pour faciliter le test -->
+        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
       </requestedPrivileges>
     </security>
   </trustInfo>
