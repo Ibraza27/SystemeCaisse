@@ -7,6 +7,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using Microsoft.EntityFrameworkCore;
 using SystemeCaisse.Core.Entities;
+using SystemeCaisse.Infrastructure.Configuration;
 using SystemeCaisse.Infrastructure.Data;
 using SystemeCaisse.UI.Views;
 using SystemeCaisse.UI.Services;
@@ -24,14 +25,59 @@ namespace SystemeCaisse.UI.ViewModels
         private readonly AppDbContext _context;
         private readonly PrintService _printService;
         private readonly IDataMigrationService _migrationService;
+        private readonly CaisseServices _caisseServices;
+        private volatile bool _caisseCatalogDirty;
+        private volatile bool _caissePromosDirty;
 
+        public void MarkCaisseDirty(bool catalog = true, bool promotions = false)
+        {
+            if (catalog) _caisseCatalogDirty = true;
+            if (promotions) _caissePromosDirty = true;
+        }
+
+        private void OnDataVersionsChanged(IReadOnlyCollection<string> domains)
+        {
+            if (domains.Contains(DataDomains.Produits) || domains.Contains(DataDomains.Stocks))
+            {
+                _caisseCatalogDirty = true;
+                if (SelectedTabIndex == 1 && Panier.Count == 0)
+                {
+                    _caisseCatalogDirty = false;
+                    _ = ReloadProductsFromDbAsync();
+                }
+            }
+            if (domains.Contains(DataDomains.Promotions))
+            {
+                _caissePromosDirty = true;
+                if (SelectedTabIndex == 1 && Panier.Count == 0)
+                {
+                    _caissePromosDirty = false;
+                    _ = Task.Run(() =>
+                    {
+                        LoadPromotions();
+                        Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            ApplyAutomaticPromotions();
+                            UpdateTotal();
+                        }));
+                    });
+                }
+            }
+            if (domains.Contains(DataDomains.Commandes))
+            {
+                if (SelectedTabIndex == 2)
+                {
+                    _ = CommandesVM?.RefreshIfNeededAsync();
+                }
+            }
+        }
 
         private List<Promotion> _activePromotions = new();
         
         public ObservableCollection<Produit> Produits { get; set; }
         public ObservableCollection<Produit> TopProducts { get; set; }
         public ICollectionView ProductsView { get; private set; }
-        public ObservableCollection<Produit> SearchSuggestions { get; private set; } = new();
+        public List<Produit> SearchSuggestions { get; private set; } = new();
         public ObservableCollection<CartItemViewModel> Panier { get; set; } = new();
         
         public ProductsViewModel ProductsVM { get; private set; }
@@ -43,10 +89,6 @@ namespace SystemeCaisse.UI.ViewModels
         public InventoryViewModel InventoryVM { get; private set; }
         public AnalysisViewModel AnalysisVM { get; private set; }
         public CommandesViewModel CommandesVM { get; private set; }
-
-        // ── SignalR Sync ──
-        private SyncClient? _syncClient;
-        public SyncClient? SyncClient => _syncClient;
         
         // Aliases for Customer Display Binding
         public ObservableCollection<CartItemViewModel> LignesVente => Panier;
@@ -184,43 +226,81 @@ namespace SystemeCaisse.UI.ViewModels
                         // Only open dropdown for text searches, not numeric barcodes
                         if (!isNumeric)
                         {
-                            UpdateSearchSuggestions();
-                            IsSearchDropDownOpen = true;
+                            UpdateSearchSuggestions(search);
                         }
                         else
                         {
                             IsSearchDropDownOpen = false;
-                            _ = Application.Current.Dispatcher.InvokeAsync(() => SearchSuggestions.Clear());
+                            if (SearchSuggestions.Count > 0)
+                            {
+                                SearchSuggestions = new List<Produit>();
+                                OnPropertyChanged(nameof(SearchSuggestions));
+                            }
                         }
                     }
                     else
                     {
                         IsSearchDropDownOpen = false;
-                        _ = Application.Current.Dispatcher.InvokeAsync(() => SearchSuggestions.Clear());
+                        if (SearchSuggestions.Count > 0)
+                        {
+                            SearchSuggestions = new List<Produit>();
+                            OnPropertyChanged(nameof(SearchSuggestions));
+                        }
                     }
-                    
-                    ProductsView.Refresh();
                 }
             }
         }
 
-        private void UpdateSearchSuggestions()
+        private void UpdateSearchSuggestions(string search)
         {
-            Application.Current.Dispatcher.BeginInvoke(new Action(() => 
+            if (Produits == null || string.IsNullOrWhiteSpace(search))
             {
-                SearchSuggestions.Clear();
-                if (string.IsNullOrWhiteSpace(SearchText) || SearchText.Length < 1) return;
+                IsSearchDropDownOpen = false;
+                if (SearchSuggestions.Count > 0)
+                {
+                    SearchSuggestions = new List<Produit>();
+                    OnPropertyChanged(nameof(SearchSuggestions));
+                }
+                return;
+            }
 
-                var search = SearchText.Trim().ToLower();
-                var matches = Produits
-                    .Where(p => p.Actif && // Only active products
-                                ((p.Nom != null && p.Nom.ToLower().Contains(search)) || 
-                                 (p.CodeBarre != null && p.CodeBarre.Contains(search))))
-                    .Take(50) // Speed optimization: only show top 50 matches
-                    .ToList();
+            var startsWithMatches = new List<Produit>(35);
+            var containsMatches = new List<Produit>(35);
 
-                foreach (var m in matches) SearchSuggestions.Add(m);
-            }), System.Windows.Threading.DispatcherPriority.Background);
+            foreach (var p in Produits)
+            {
+                if (!p.Actif) continue;
+
+                bool nameStarts = p.Nom != null && p.Nom.StartsWith(search, StringComparison.OrdinalIgnoreCase);
+                if (nameStarts)
+                {
+                    startsWithMatches.Add(p);
+                    if (startsWithMatches.Count >= 35) break;
+                    continue;
+                }
+
+                bool nameContains = p.Nom != null && p.Nom.Contains(search, StringComparison.OrdinalIgnoreCase);
+                bool codeContains = p.CodeBarre != null && p.CodeBarre.Contains(search, StringComparison.OrdinalIgnoreCase);
+                if (nameContains || codeContains)
+                {
+                    containsMatches.Add(p);
+                }
+            }
+
+            var results = new List<Produit>(35);
+            results.AddRange(startsWithMatches);
+            if (results.Count < 35 && containsMatches.Count > 0)
+            {
+                int remaining = 35 - results.Count;
+                for (int i = 0; i < containsMatches.Count && i < remaining; i++)
+                {
+                    results.Add(containsMatches[i]);
+                }
+            }
+
+            SearchSuggestions = results;
+            OnPropertyChanged(nameof(SearchSuggestions));
+            IsSearchDropDownOpen = results.Count > 0;
         }
 
         private decimal _total;
@@ -329,21 +409,23 @@ namespace SystemeCaisse.UI.ViewModels
         {
             if (SelectedPaiementMode == "Especes")
             {
-                // Monnaie = Recu - A Payer (Total correctly updated)
                 MonnaieRendre = Math.Max(0, MontantRecu - Total);
                 MontantCarte = 0;
             }
             else if (SelectedPaiementMode == "Mixte" || SelectedPaiementMode == "Espece/CB")
             {
                 MonnaieRendre = 0;
-                // Part paid by card is the remainder
                 MontantCarte = Math.Max(0, Total - MontantRecu);
+            }
+            else if (SelectedPaiementMode == "Wero" || SelectedPaiementMode == "En ligne")
+            {
+                MonnaieRendre = 0;
+                MontantCarte = 0;
             }
             else // CB
             {
                 MonnaieRendre = 0;
                 MontantCarte = Total;
-                // Fix: Don't set MontantRecu to 0 here to avoid triggering property changes that might crash bound textboxes
             }
         }
 
@@ -376,8 +458,55 @@ namespace SystemeCaisse.UI.ViewModels
             set { _databasePath = value; OnPropertyChanged(); }
         }
 
-        public string DatabaseModeDisplay => IsNetworkDisconnected ? "⚠ Réseau perdu" : (IsNetworkMode ? "🟢 Réseau" : "🔴 Local");
+        private string? _customDatabaseModeText;
+        public string DatabaseModeDisplay
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(_customDatabaseModeText)) return _customDatabaseModeText;
+                return IsNetworkDisconnected ? "⚠ Réseau perdu" : (IsNetworkMode ? "🟢 Réseau" : "🔴 Local");
+            }
+        }
+
         public string DatabaseModeColor => IsNetworkDisconnected ? "#E65100" : (IsNetworkMode ? "#2E7D32" : "#C62828");
+
+        private void RefreshPostgresStatusBanner()
+        {
+            if (_caisseServices.Factory.Provider != DatabaseProvider.PostgreSql) return;
+
+            var poste = _caisseServices.Poste;
+            var db = poste.Database;
+            bool online = _caisseServices.IsOnline;
+            int queued = _caisseServices.OfflineQueue.Count;
+            bool isPrincipal = poste.EstPostePrincipal ||
+                               string.Equals(db.Host, "localhost", StringComparison.OrdinalIgnoreCase) ||
+                               string.Equals(db.Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase);
+
+            IsNetworkMode = true;
+            IsNetworkDisconnected = !online;
+            DatabasePath = $"PostgreSQL {db.Host}:{db.Port}/{db.Database} (Poste : {poste.NomPoste})";
+
+            if (!online)
+            {
+                _customDatabaseModeText = queued > 0
+                    ? $"⚠ Hors-ligne ({queued} vente(s) en attente)"
+                    : "⚠ Serveur PostgreSQL injoignable";
+            }
+            else if (isPrincipal)
+            {
+                var ts = PostgresProvisioningService.GetNetworkAndTailscaleStatus();
+                _customDatabaseModeText = !string.IsNullOrEmpty(ts.TailscaleIp)
+                    ? $"🟢 Serveur Principal ({ts.TailscaleIp}:{db.Port})"
+                    : $"🟢 Serveur Principal (localhost:{db.Port})";
+            }
+            else
+            {
+                _customDatabaseModeText = $"🟢 Connecté ({db.Host}:{db.Port})";
+            }
+
+            OnPropertyChanged(nameof(DatabaseModeDisplay));
+            OnPropertyChanged(nameof(DatabaseModeColor));
+        }
 
         private Entreprise? _currentEntreprise;
         public Entreprise? CurrentEntreprise
@@ -392,12 +521,15 @@ namespace SystemeCaisse.UI.ViewModels
 
         private void LoadEntrepriseInfo()
         {
-            _context.Entreprise.Load();
-            CurrentEntreprise = _context.Entreprise.Local.FirstOrDefault();
+            try
+            {
+                _context.Entreprise.Load();
+                CurrentEntreprise = _context.Entreprise.Local.FirstOrDefault();
+            }
+            catch { }
             
             if (CurrentEntreprise == null)
             {
-                // Fallback / Seed if somehow missing (though DbContext seeds it)
                 CurrentEntreprise = new Entreprise { Nom = "Mon Magasin", Adresse = "Adresse inconnue" };
             }
         }
@@ -413,7 +545,6 @@ namespace SystemeCaisse.UI.ViewModels
                     CurrentEntreprise = entreprise;
                     OnPropertyChanged(nameof(CurrentEntreprise));
                     
-                    // Refresh Display
                     InitializeCustomerDisplay();
                 }
             }
@@ -445,23 +576,52 @@ namespace SystemeCaisse.UI.ViewModels
                     _context.ChangeTracker.Clear();
                     _context.Produits.Load();
                 });
-                
-                Produits = _context.Produits.Local.ToObservableCollection();
-                
-                // Refresh the CollectionView
-                ProductsView = CollectionViewSource.GetDefaultView(Produits);
-                ProductsView.Filter = FilterProducts;
-                ProductsView.Refresh();
-                
-                OnPropertyChanged(nameof(Produits));
-                OnPropertyChanged(nameof(ProductsView));
 
-                // Force refresh TopProducts (with the new product objects)
-                _ = CalculateProductPopularity(); 
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    Produits = _context.Produits.Local.ToObservableCollection();
+                    ProductsView = CollectionViewSource.GetDefaultView(Produits);
+
+                    OnPropertyChanged(nameof(Produits));
+                    OnPropertyChanged(nameof(ProductsView));
+                });
+
+                await CalculateProductPopularity();
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Reload Error: {ex.Message}");
+            }
+        }
+
+        public async Task ReloadAllDataAfterRestoreAsync()
+        {
+            try
+            {
+                await new SystemeCaisse.Infrastructure.Services.DatabaseBootstrapper(_caisseServices.Factory).InitializeAsync(backupBeforeMigration: false);
+                _caisseServices.Popularity.Invalidate();
+                _caisseCatalogDirty = false;
+                _caissePromosDirty = false;
+
+                await ReloadProductsFromDbAsync();
+                ReloadEntrepriseInfo();
+                LoadPromotions();
+                ApplyAutomaticPromotions();
+                UpdateTotal();
+
+                _ = SafeInitAsync("ProductsVM", () => ProductsVM.InitializeAsync());
+                _ = SafeInitAsync("StocksVM", () => StocksVM.InitializeAsync());
+                _ = SafeInitAsync("HistoryVM", () => HistoryVM.InitializeAsync());
+                _ = SafeInitAsync("SettingsVM", () => SettingsVM.InitializeAsync());
+                _ = SafeInitAsync("DashboardVM", () => DashboardVM.InitializeAsync());
+                _ = SafeInitAsync("PromotionsVM", () => PromotionsVM.InitializeAsync());
+                _ = SafeInitAsync("InventoryVM", () => InventoryVM.InitializeAsync());
+                _ = SafeInitAsync("AnalysisVM", () => AnalysisVM.InitializeAsync());
+                _ = SafeInitAsync("CommandesVM", () => CommandesVM.InitializeAsync());
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"ReloadAllDataAfterRestoreAsync Error: {ex.Message}");
             }
         }
 
@@ -499,15 +659,34 @@ namespace SystemeCaisse.UI.ViewModels
                 }
                 else if (value == 1)
                 {
-                    // Price Sync: Reload latest products in background when entering Caisse
-                    _ = ReloadProductsFromDbAsync();
-                    LoadPromotions();
-                    ApplyAutomaticPromotions();
-                    UpdateTotal();
+                    if (_caisseCatalogDirty)
+                    {
+                        _caisseCatalogDirty = false;
+                        _ = ReloadProductsFromDbAsync();
+                    }
+
+                    if (_caissePromosDirty)
+                    {
+                        _caissePromosDirty = false;
+                        _ = Task.Run(() =>
+                        {
+                            LoadPromotions();
+                            Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+                            {
+                                ApplyAutomaticPromotions();
+                                UpdateTotal();
+                            }));
+                        });
+                    }
+                    else if (Panier.Count > 0)
+                    {
+                        ApplyAutomaticPromotions();
+                        UpdateTotal();
+                    }
                 }
                 else if (value == 2)
                 {
-                    _ = CommandesVM?.LoadDataAsync();
+                    _ = CommandesVM?.RefreshIfNeededAsync();
                 }
                 else if (value == 3)
                 {
@@ -530,6 +709,16 @@ namespace SystemeCaisse.UI.ViewModels
             _contextFactory = contextFactory;
             _printService = printService;
             _migrationService = migrationService;
+            _caisseServices = caisseServices;
+            _caisseServices.Versions.Changed += OnDataVersionsChanged;
+            _caisseServices.Images.ImagesUpdated += () =>
+            {
+                Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
+                {
+                    ProductsVM?.RefreshImages();
+                    ProductsView?.Refresh();
+                }));
+            };
             
             AvailablePromotions = new ObservableCollection<Promotion>();
             Panier = new ObservableCollection<CartItemViewModel>();
@@ -540,7 +729,7 @@ namespace SystemeCaisse.UI.ViewModels
             ProductsVM = new ProductsViewModel(caisseServices);
             StocksVM = new StocksViewModel(caisseServices);
             HistoryVM = new HistoryViewModel(caisseServices, _printService);
-            SettingsVM = new SettingsViewModel(contextFactory, migrationService);
+            SettingsVM = new SettingsViewModel(contextFactory, migrationService, caisseServices);
             DashboardVM = new DashboardViewModel(contextFactory);
             PromotionsVM = new PromotionsViewModel(contextFactory);
             InventoryVM = new InventoryViewModel(contextFactory);
@@ -561,7 +750,7 @@ namespace SystemeCaisse.UI.ViewModels
             
             OpenWeightDialogCommand = new BasicRelayCommand(_ => 
             {
-                var weightProducts = Produits.Where(p => string.Equals(p.TypeVente, "poids", StringComparison.OrdinalIgnoreCase)).ToList();
+                var weightProducts = Produits.Where(p => p.Actif && string.Equals(p.TypeVente, "poids", StringComparison.OrdinalIgnoreCase)).ToList();
                 var selectDialog = new SystemeCaisse.UI.Views.ProductSelectionWindow(weightProducts);
                 SetupWindowOwner(selectDialog);
                 if (selectDialog.ShowDialog() == true && selectDialog.SelectedProduct != null)
@@ -584,8 +773,7 @@ namespace SystemeCaisse.UI.ViewModels
                     {
                         item.PropertyChanged += (sender, args) => 
                         {
-                            if (args.PropertyName == nameof(CartItemViewModel.Quantite) || 
-                                args.PropertyName == nameof(CartItemViewModel.TotalLigneStandard))
+                            if (args.PropertyName == nameof(CartItemViewModel.Quantite))
                             {
                                 ApplyAutomaticPromotions();
                                 UpdateTotal();
@@ -599,12 +787,6 @@ namespace SystemeCaisse.UI.ViewModels
             };
 
             UpdateTotal();
-            
-            // Final refresh of TopProducts to be sure
-            Task.Delay(1000).ContinueWith(_ => CalculateProductPopularity());
-
-            // NOTE: Customer Display initialization is triggered by MainWindow.Loaded event (in MainWindow.xaml.cs)
-            // This ensures it runs on the UI thread with a fully visible window.
 
             // Start Live Clock Timer
             _clockTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -614,11 +796,11 @@ namespace SystemeCaisse.UI.ViewModels
 
         public async Task InitializeAsync()
         {
+            // 1. Charger uniquement les données essentielles à l'ouverture immédiate de la Caisse
             await Task.Run(async () => 
             {
                 try 
                 {
-                    // 1. Initialize self data
                     System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] _context.Produits.Load()\n");
                     _context.Produits.Load();
                     
@@ -627,37 +809,136 @@ namespace SystemeCaisse.UI.ViewModels
                     {
                         Produits = _context.Produits.Local.ToObservableCollection();
                         ProductsView = CollectionViewSource.GetDefaultView(Produits);
-                        ProductsView.Filter = FilterProducts;
-                        ProductsView.SortDescriptions.Clear();
-                        ProductsView.SortDescriptions.Add(new SortDescription("ValidatedSalesCount", ListSortDirection.Descending));
-                        ProductsView.SortDescriptions.Add(new SortDescription("Nom", ListSortDirection.Ascending));
                     });
 
-                    _ = CalculateProductPopularity(); 
                     LoadEntrepriseInfo();
                     LoadPromotions();
+                    await CalculateProductPopularity();
+
+                    // Sauvegarder un instantané local du catalogue pour le mode hors-ligne
+                    try
+                    {
+                        _caisseServices.Cache.Save(new CatalogSnapshot
+                        {
+                            SavedAt = DateTime.Now,
+                            Produits = Produits.ToList(),
+                            Promotions = _activePromotions.ToList(),
+                            Entreprise = CurrentEntreprise
+                        });
+                    }
+                    catch { }
                 }
                 catch (Exception ex)
                 {
-                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] MAIN INIT ERROR: {ex.Message}\nStack: {ex.StackTrace}\n");
+                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] MAIN INIT ERROR (repli cache local): {ex.Message}\n");
+                    var cached = _caisseServices.Cache.Load();
+                    if (cached != null)
+                    {
+                        _activePromotions = cached.Promotions ?? new List<Promotion>();
+                        CurrentEntreprise = cached.Entreprise ?? new Entreprise { Nom = "Mon Magasin" };
+                        await Application.Current.Dispatcher.InvokeAsync(() =>
+                        {
+                            Produits = new ObservableCollection<Produit>(cached.Produits);
+                            ProductsView = CollectionViewSource.GetDefaultView(Produits);
+                            TopProducts.Clear();
+                            foreach (var p in cached.Produits.Where(x => x.Actif).Take(20))
+                                TopProducts.Add(p);
+                        });
+                    }
                 }
+            });
 
-                // 2. Initialize children — each wrapped in try/catch so one failure doesn't block others
+            // 2. Initialize Network / PostgreSQL Multi-Postes monitoring
+            try
+            {
+                if (_caisseServices.Factory.Provider == DatabaseProvider.PostgreSql)
+                {
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        RefreshPostgresStatusBanner();
+                        if (!_caisseServices.IsOnline)
+                        {
+                            StatusMessage = "⚠ Serveur PostgreSQL injoignable — Mode Caisse hors-ligne actif (synchronisation auto).";
+                        }
+                    });
+
+                    _caisseServices.Connectivity.StatusChanged += (online, error) =>
+                    {
+                        Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
+                        {
+                            RefreshPostgresStatusBanner();
+                            if (!online)
+                            {
+                                StatusMessage = "⚠ Connexion au Poste Principal perdue — Les ventes sont sauvegardées localement.";
+                            }
+                            else
+                            {
+                                StatusMessage = "✅ Connexion PostgreSQL rétablie — Synchronisation automatique effectuée.";
+                                if (Panier.Count == 0)
+                                    _ = ReloadProductsFromDbAsync();
+                                else
+                                    _caisseCatalogDirty = true;
+                            }
+                        }));
+                    };
+
+                    _caisseServices.OfflineQueue.CountChanged += count =>
+                    {
+                        Application.Current?.Dispatcher?.BeginInvoke(new Action(RefreshPostgresStatusBanner));
+                    };
+                }
+                else
+                {
+                    var networkService = NetworkDatabaseService.Instance;
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        IsNetworkMode = networkService.IsNetworkMode;
+                        DatabasePath = networkService.CurrentDbPath;
+
+                        networkService.NetworkStatusChanged += isConnected =>
+                        {
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                IsNetworkDisconnected = !isConnected;
+                                if (!isConnected)
+                                {
+                                    StatusMessage = "⚠ Connexion réseau perdue ! Les données ne sont plus synchronisées.";
+                                }
+                                else
+                                {
+                                    StatusMessage = "✅ Connexion réseau rétablie.";
+                                    IsNetworkDisconnected = false;
+                                }
+                            });
+                        };
+
+                        networkService.StartPeriodicCheck();
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] NetworkDB init error: {ex.Message}\n");
+            }
+
+            // 3. Initialiser les onglets secondaires et périphériques en tâche de fond sans bloquer l'affichage de la fenêtre
+            _ = Task.Run(async () =>
+            {
                 System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Sub-VM execution start\n");
-                
+
+                await SafeInitAsync("SettingsVM", () => SettingsVM.InitializeAsync());
+                await SafeInitAsync("CommandesVM", () => CommandesVM.InitializeAsync());
                 await SafeInitAsync("ProductsVM", () => ProductsVM.InitializeAsync());
                 await SafeInitAsync("StocksVM", () => StocksVM.InitializeAsync());
                 await SafeInitAsync("HistoryVM", () => HistoryVM.InitializeAsync());
-                await SafeInitAsync("SettingsVM", () => SettingsVM.InitializeAsync());
                 await SafeInitAsync("DashboardVM", () => DashboardVM.InitializeAsync());
                 await SafeInitAsync("PromotionsVM", () => PromotionsVM.InitializeAsync());
                 await SafeInitAsync("InventoryVM", () => InventoryVM.InitializeAsync());
                 await SafeInitAsync("AnalysisVM", () => AnalysisVM.InitializeAsync());
-                await SafeInitAsync("CommandesVM", () => CommandesVM.InitializeAsync());
-                
+
                 System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Sub-VM execution end\n");
 
-                // 3. Initialize Scale Service
+                // Initialize Scale Service
                 try
                 {
                     using var scaleCtx = _contextFactory.CreateDbContext();
@@ -691,7 +972,7 @@ namespace SystemeCaisse.UI.ViewModels
                     System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Scale init error: {ex.Message}\n");
                 }
 
-                // 4. Initialize TPE Service
+                // Initialize TPE Service
                 try
                 {
                     using var tpeCtx = _contextFactory.CreateDbContext();
@@ -734,320 +1015,7 @@ namespace SystemeCaisse.UI.ViewModels
                 {
                     System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] TPE init error: {ex.Message}\n");
                 }
-
-                // 5. Initialize Sync Client (SignalR → TransitManager)
-                try
-                {
-                    using var syncCtx = _contextFactory.CreateDbContext();
-                    var syncEnabled = syncCtx.Configuration.Find("sync_enabled");
-                    if (syncEnabled != null && bool.TryParse(syncEnabled.Valeur, out bool syncOn) && syncOn)
-                    {
-                        var syncUrl = syncCtx.Configuration.Find("sync_hub_url");
-                        var syncKey = syncCtx.Configuration.Find("sync_api_key");
-                        string hubUrl = syncUrl?.Valeur ?? "https://hippocampetransitmanager.com/hubs/sync";
-                        string apiKey = syncKey?.Valeur ?? "";
-
-                        if (!string.IsNullOrEmpty(apiKey))
-                        {
-                            System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient: connecting to {hubUrl}...\n");
-                            var logger = Microsoft.Extensions.Logging.LoggerFactory.Create(b => b.AddDebug()).CreateLogger<SyncClient>();
-                            _syncClient = new SyncClient(hubUrl, apiKey, logger);
-                            
-                            // Wire receive handlers → insert into SQLite + refresh UI
-                            _syncClient.OnOrderReceived += async dto =>
-                            {
-                                try
-                                {
-                                    using var ctx = _contextFactory.CreateDbContext();
-                                    // Check for duplicate by SyncId
-                                    var existing = ctx.Commandes.FirstOrDefault(c => c.SyncId == dto.SyncId.ToString());
-                                    if (existing != null) return; // Already exists
-
-                                    var commande = new Commande
-                                    {
-                                        NumeroCommande = dto.NumeroCommande,
-                                        SyncId = dto.SyncId.ToString(),
-                                        Source = dto.Source,
-                                        Nom = dto.Nom,
-                                        Prenom = dto.Prenom,
-                                        Telephone = dto.Telephone,
-                                        Email = dto.Email,
-                                        Ville = dto.Ville,
-                                        CodePostal = dto.CodePostal,
-                                        AvecLivraison = dto.ModeLivraison != "depot",
-                                        Adresse = dto.AdresseLivraison,
-                                        MontantLivraison = dto.MontantLivraison,
-                                        Total = dto.Total,
-                                        TotalRemise = dto.TotalRemise,
-                                        MontantPaye = dto.MontantPaye,
-                                        ModePaiement = dto.ModePaiement,
-                                        Statut = dto.Statut,
-                                        NbArticles = dto.Lignes.Sum(l => (int)l.Quantite),
-                                        CreatedAt = dto.CreatedAt.ToLocalTime(),
-                                        UpdatedAt = dto.UpdatedAt.ToLocalTime()
-                                    };
-
-                                    foreach (var line in dto.Lignes)
-                                    {
-                                        commande.Lignes.Add(new LigneCommande
-                                        {
-                                            ProduitId = line.ProduitSourceId,
-                                            ProduitNom = line.ProduitNom,
-                                            CategorieNom = line.CategorieNom ?? "Autre",
-                                            PrixUnitaire = line.PrixUnitaire,
-                                            Quantite = line.Quantite,
-                                            TotalLigne = line.TotalLigne,
-                                            Remise = line.Remise ?? 0,
-                                            PromotionAppliquee = line.PromotionAppliquee
-                                        });
-                                    }
-
-                                    ctx.Commandes.Add(commande);
-                                    ctx.SaveChanges();
-
-                                    // Refresh UI + badge
-                                    await Application.Current.Dispatcher.InvokeAsync(() =>
-                                    {
-                                        CommandesVM.NewOrderCount++;
-                                        _ = CommandesVM.InitializeAsync();
-                                    });
-
-                                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient: received order {dto.NumeroCommande}\n");
-                                }
-                                catch (Exception ex2)
-                                {
-                                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient OnOrderReceived error: {ex2.Message}\n");
-                                }
-                            };
-
-                            _syncClient.OnOrderUpdated += async dto =>
-                            {
-                                try
-                                {
-                                    using var ctx = _contextFactory.CreateDbContext();
-                                    var existing = ctx.Commandes.Include(c => c.Lignes).FirstOrDefault(c => c.SyncId == dto.SyncId.ToString());
-                                    if (existing == null) return;
-
-                                    existing.Nom = dto.Nom;
-                                    existing.Prenom = dto.Prenom;
-                                    existing.Telephone = dto.Telephone;
-                                    existing.Statut = dto.Statut;
-                                    existing.MontantPaye = dto.MontantPaye;
-                                    existing.Total = dto.Total;
-                                    existing.UpdatedAt = dto.UpdatedAt.ToLocalTime();
-                                    ctx.SaveChanges();
-
-                                    await Application.Current.Dispatcher.InvokeAsync(() => _ = CommandesVM.InitializeAsync());
-                                }
-                                catch (Exception ex2)
-                                {
-                                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient OnOrderUpdated error: {ex2.Message}\n");
-                                }
-                            };
-
-                            _syncClient.OnOrderDeleted += async syncId =>
-                            {
-                                try
-                                {
-                                    using var ctx = _contextFactory.CreateDbContext();
-                                    var existing = ctx.Commandes.Include(c => c.Lignes).FirstOrDefault(c => c.SyncId == syncId.ToString());
-                                    if (existing == null) return;
-
-                                    ctx.LignesCommande.RemoveRange(existing.Lignes);
-                                    ctx.Commandes.Remove(existing);
-                                    ctx.SaveChanges();
-
-                                    await Application.Current.Dispatcher.InvokeAsync(() => _ = CommandesVM.InitializeAsync());
-                                }
-                                catch (Exception ex2)
-                                {
-                                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient OnOrderDeleted error: {ex2.Message}\n");
-                                }
-                            };
-
-                            _syncClient.OnPaymentAdded += async (syncId, payment) =>
-                            {
-                                try
-                                {
-                                    using var ctx = _contextFactory.CreateDbContext();
-                                    var existing = ctx.Commandes.FirstOrDefault(c => c.SyncId == syncId.ToString());
-                                    if (existing == null) return;
-
-                                    existing.MontantPaye += payment.Montant;
-                                    existing.UpdatedAt = DateTime.Now;
-                                    ctx.SaveChanges();
-
-                                    await Application.Current.Dispatcher.InvokeAsync(() => _ = CommandesVM.InitializeAsync());
-                                }
-                                catch (Exception ex2)
-                                {
-                                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient OnPaymentAdded error: {ex2.Message}\n");
-                                }
-                            };
-
-                            _syncClient.OnStatusChanged += status =>
-                            {
-                                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient status: {status}\n");
-                            };
-
-                            _syncClient.OnTestPingReceived += message =>
-                            {
-                                Application.Current.Dispatcher.Invoke(() =>
-                                {
-                                    System.Windows.MessageBox.Show(
-                                        $"Ping reçu du Web : {message}", 
-                                        "Test de Connexion Réussi", 
-                                        System.Windows.MessageBoxButton.OK, 
-                                        System.Windows.MessageBoxImage.Information);
-                                });
-                            };
-
-                            // Pass to CommandesVM so it can emit events
-                            CommandesVM.SetSyncClient(_syncClient);
-
-                            // Start connection (fire-and-forget, auto-reconnect built in)
-                            _ = _syncClient.StartAsync();
-                            System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient: initialization started\n");
-                        }
-                        else
-                        {
-                            System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient: sync_api_key is empty, skipping\n");
-                        }
-                    }
-                    else
-                    {
-                        System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient: sync_enabled is false or missing, skipping\n");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient init error: {ex.Message}\n");
-                }
             });
-
-            // 5. Initialize Network Database monitoring
-            try
-            {
-                var networkService = NetworkDatabaseService.Instance;
-                await Application.Current.Dispatcher.InvokeAsync(() =>
-                {
-                    IsNetworkMode = networkService.IsNetworkMode;
-                    DatabasePath = networkService.CurrentDbPath;
-
-                    // Subscribe to network status changes
-                    networkService.NetworkStatusChanged += isConnected =>
-                    {
-                        Application.Current.Dispatcher.Invoke(() =>
-                        {
-                            IsNetworkDisconnected = !isConnected;
-                            if (!isConnected)
-                            {
-                                StatusMessage = "⚠ Connexion réseau perdue ! Les données ne sont plus synchronisées.";
-                            }
-                            else
-                            {
-                                StatusMessage = "✅ Connexion réseau rétablie.";
-                                IsNetworkDisconnected = false;
-                            }
-                        });
-                    };
-
-                    // Start periodic check (every 30 seconds)
-                    networkService.StartPeriodicCheck();
-                });
-            }
-            catch (Exception ex)
-            {
-                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] NetworkDB init error: {ex.Message}\n");
-            }
-
-            // 6. Initialize SignalR SyncClient for TransitManager sync
-            try
-            {
-                using var syncCtx = _contextFactory.CreateDbContext();
-                var syncEnabled = syncCtx.Configuration.Find("sync_enabled");
-                var syncUrl = syncCtx.Configuration.Find("sync_hub_url");
-                var syncApiKey = syncCtx.Configuration.Find("sync_api_key");
-
-                bool isSyncEnabled = syncEnabled != null && bool.TryParse(syncEnabled.Valeur, out bool sEnabled) && sEnabled;
-                string hubUrl = syncUrl?.Valeur ?? "https://hippocampetransitmanager.com/hubs/sync";
-                string apiKey = syncApiKey?.Valeur ?? "";
-
-                if (isSyncEnabled && !string.IsNullOrWhiteSpace(apiKey))
-                {
-                    var logger = Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance.CreateLogger("SyncClient");
-
-                    _syncClient = new SyncClient(hubUrl, apiKey, logger);
-
-                    // Wire events → refresh CommandesVM on incoming orders
-                    _syncClient.OnOrderReceived += async dto =>
-                    {
-                        System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient: OrderReceived {dto.NumeroCommande}\n");
-                        await Application.Current.Dispatcher.InvokeAsync(async () =>
-                        {
-                            await CommandesVM.LoadDataAsync();
-                            // Increment badge counter
-                            CommandesVM.NewOrderCount++;
-                            StatusMessage = $"🛒 Nouvelle commande web : {dto.NumeroCommande}";
-                        });
-                    };
-
-                    _syncClient.OnOrderUpdated += async dto =>
-                    {
-                        await Application.Current.Dispatcher.InvokeAsync(async () =>
-                        {
-                            await CommandesVM.LoadDataAsync();
-                        });
-                    };
-
-                    _syncClient.OnOrderDeleted += async syncId =>
-                    {
-                        await Application.Current.Dispatcher.InvokeAsync(async () =>
-                        {
-                            await CommandesVM.LoadDataAsync();
-                        });
-                    };
-
-                    _syncClient.OnPaymentAdded += async (syncId, payment) =>
-                    {
-                        await Application.Current.Dispatcher.InvokeAsync(async () =>
-                        {
-                            await CommandesVM.LoadDataAsync();
-                        });
-                    };
-
-                    _syncClient.OnProductUpdated += async dto =>
-                    {
-                        await Application.Current.Dispatcher.InvokeAsync(() =>
-                        {
-                            ReloadProductsFromDb();
-                            StatusMessage = $"📦 Produit modifié depuis le web : {dto.Nom}";
-                        });
-                    };
-
-                    _syncClient.OnStatusChanged += status =>
-                    {
-                        Application.Current.Dispatcher.Invoke(() =>
-                        {
-                            System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient status: {status}\n");
-                        });
-                    };
-
-                    // Pass to CommandesVM so it can emit on order create/update
-                    CommandesVM.SetSyncClient(_syncClient);
-
-                    await _syncClient.StartAsync();
-                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient: Started on {hubUrl}\n");
-                }
-                else
-                {
-                    System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient: Disabled or no API key configured\n");
-                }
-            }
-            catch (Exception ex)
-            {
-                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] SyncClient init error: {ex.Message}\n");
-            }
         }
 
         private async Task SafeInitAsync(string name, Func<Task> init)
@@ -1091,22 +1059,18 @@ namespace SystemeCaisse.UI.ViewModels
                 var cdCompact = context.Configuration.Find("customer_display_compact");
                 IsCompactCustomerDisplay = cdCompact != null && bool.TryParse(cdCompact.Valeur, out bool cp) && cp;
 
-                // Load display promotions
                 LoadDisplayPromotions(context);
 
-                // Start or restart carousel timer
                 if (ShowDisplayPromotions && DisplayPromotions.Count > 0)
                 {
                     StartPromoCarousel();
                 }
 
-                // Determine which screen to use
                 var screenConfig = context.Configuration.Find("customer_display_screen_index");
                 int savedScreenIndex = (screenConfig != null && int.TryParse(screenConfig.Valeur, out int si)) ? si : -1;
                 
                 var screens = ScreenHelper.GetScreens();
                 
-                // Detailed logging for monitor discovery
                 string screenLog = $"[{DateTime.Now}] Screen Discovery: Found {screens.Count} screens.\n";
                 for (int i = 0; i < screens.Count; i++)
                 {
@@ -1115,7 +1079,6 @@ namespace SystemeCaisse.UI.ViewModels
                 }
                 System.IO.File.AppendAllText("startup_log_v2.txt", screenLog);
 
-                // PROJECT_GUIDELINES §1: Customer display requires at least 2 screens
                 if (screens.Count < 2)
                 {
                     System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] CustomerDisplay: Only {screens.Count} screen(s) detected — need 2+ for client display. Skipping.\n");
@@ -1129,7 +1092,6 @@ namespace SystemeCaisse.UI.ViewModels
                 }
                 else
                 {
-                    // Default: first non-primary screen or second screen
                     targetScreen = screens.FirstOrDefault(s => !s.IsPrimary) ?? (screens.Count > 1 ? screens[1] : null);
                 }
                 
@@ -1139,23 +1101,15 @@ namespace SystemeCaisse.UI.ViewModels
                     return;
                 }
 
-                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Decision: Target Screen Index={screens.IndexOf(targetScreen)}, IsPrimary={targetScreen.IsPrimary}\n");
-
-                // Identify Admin screen (MUST be different from targetScreen)
                 var adminScreen = screens.FirstOrDefault(s => s != targetScreen) ?? screens.FirstOrDefault(s => s.IsPrimary) ?? screens[0];
-                
-                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Screen Assignment: Client=Screen {screens.IndexOf(targetScreen)}, Admin=Screen {screens.IndexOf(adminScreen)}\n");
-
-                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Attempting SHOW on monitor {screens.IndexOf(targetScreen)} at {targetScreen.LogicalBounds.Left},{targetScreen.LogicalBounds.Top}\n");
 
                 _customerDisplay = new SystemeCaisse.UI.Views.CustomerDisplayWindow(this);
 
                 _customerDisplay.WindowStartupLocation = WindowStartupLocation.Manual;
-                _customerDisplay.Topmost = true; // Stay on top
+                _customerDisplay.Topmost = true;
                 _customerDisplay.WindowState = WindowState.Normal;
                 _customerDisplay.WindowStyle = WindowStyle.None;
 
-                // Use LOGICAL coordinates for WPF
                 _customerDisplay.Left = targetScreen.LogicalBounds.Left;
                 _customerDisplay.Top = targetScreen.LogicalBounds.Top;
                 _customerDisplay.Width = targetScreen.LogicalBounds.Width;
@@ -1163,14 +1117,10 @@ namespace SystemeCaisse.UI.ViewModels
                 
                 _customerDisplay.Show();
                 
-                // Re-set and maximize AFTER show to ensure it respects the monitor
                 _customerDisplay.Left = targetScreen.LogicalBounds.Left;
                 _customerDisplay.Top = targetScreen.LogicalBounds.Top;
                 _customerDisplay.WindowState = WindowState.Maximized;
-                
-                System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] CustomerDisplay: Window SHOWN successfully.\n");
 
-                // Ensure Admin window is moved to the designated admin screen
                 if (adminScreen != null)
                 {
                     MoveAdminToScreen(adminScreen);
@@ -1188,17 +1138,14 @@ namespace SystemeCaisse.UI.ViewModels
             var mainWin = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w is SystemeCaisse.UI.MainWindow);
             if (mainWin == null) return;
 
-            // CRITICAL: Must set to Normal before moving if maximized
             bool wasMaximized = mainWin.WindowState == WindowState.Maximized;
             if (wasMaximized) mainWin.WindowState = WindowState.Normal;
 
-            // Move the admin window using LOGICAL coordinates
             mainWin.Left = adminScreen.LogicalWorkingArea.Left + 50; 
             mainWin.Top = adminScreen.LogicalWorkingArea.Top + 50;
 
             if (wasMaximized)
             {
-                // Re-position accurately and re-maximize
                 mainWin.Left = adminScreen.LogicalWorkingArea.Left;
                 mainWin.Top = adminScreen.LogicalWorkingArea.Top;
                 mainWin.Width = adminScreen.LogicalWorkingArea.Width;
@@ -1215,20 +1162,14 @@ namespace SystemeCaisse.UI.ViewModels
             if (mainWin != null && mainWin != win)
             {
                 win.Owner = mainWin;
-                
-                // Instead of relying on CenterOwner (which can be unreliable with DPI),
-                // we manually center the window on the Admin Monitor.
                 win.WindowStartupLocation = WindowStartupLocation.Manual;
                 
-                // Load screens to find where the Admin is
                 var screens = ScreenHelper.GetScreens();
                 var adminScreen = screens.FirstOrDefault(s => 
                     s.LogicalWorkingArea.Contains(new Point(mainWin.Left + 10, mainWin.Top + 10))) ?? screens[0];
                 
-                // Wait for the window to load its size or use default
                 win.SourceInitialized += (s, e) => 
                 {
-                    // Center calculation
                     double left = adminScreen.LogicalWorkingArea.Left + (adminScreen.LogicalWorkingArea.Width - win.ActualWidth) / 2;
                     double top = adminScreen.LogicalWorkingArea.Top + (adminScreen.LogicalWorkingArea.Height - win.ActualHeight) / 2;
                     
@@ -1254,11 +1195,10 @@ namespace SystemeCaisse.UI.ViewModels
         {
             if (obj is Produit produit)
             {
-                if (!produit.Actif) return false; // Hide inactive products
+                if (!produit.Actif) return false;
                 if (string.IsNullOrWhiteSpace(SearchText)) return true;
                 
                 var search = SearchText.Trim();
-                // Enhanced Search: Name, Barcode, OR ID
                 return (produit.Nom?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false) ||
                        (produit.CodeBarre?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false) ||
                        (produit.Id.ToString() == search);
@@ -1270,57 +1210,55 @@ namespace SystemeCaisse.UI.ViewModels
         {
             try
             {
-                 using var context = _contextFactory.CreateDbContext();
-                 
-                // Fix for SQLite Decimal Sum Error: Fetch minimal data and aggregate in memory
-                var allLines = await context.LignesVente.AsNoTracking()
-                    .Select(l => new { l.ProduitId, l.ProduitNom, l.Quantite })
-                    .ToListAsync();
+                var popularity = await _caisseServices.Popularity.GetAsync();
 
-                // Grouping logic: ID preferred, Name as fallback for old data
-                var salesStats = allLines
-                    .GroupBy(l => l.ProduitId > 0 ? l.ProduitId.ToString() : l.ProduitNom ?? "Inconnu")
-                    .Select(g => new { Key = g.Key, Count = g.Sum(x => x.Quantite) })
-                    .OrderByDescending(x => x.Count)
-                    .ToList();
-
-                // Update local instances for sorting in main grid
-                foreach (var p in Produits)
+                int topLimit = 20;
+                bool showAll = false;
+                try
                 {
-                    var stat = salesStats.FirstOrDefault(s => s.Key == p.Id.ToString() || s.Key == p.Nom);
-                    p.ValidatedSalesCount = stat?.Count ?? 0;
+                    using var context = _contextFactory.CreateDbContext();
+                    var countConfig = context.Configuration.Find("top_products_count");
+                    if (countConfig != null && int.TryParse(countConfig.Valeur, out int tc)) topLimit = tc;
+                    
+                    var showAllConfig = context.Configuration.Find("show_all_top_products");
+                    showAll = (showAllConfig != null && bool.TryParse(showAllConfig.Valeur, out bool sa)) && sa;
+                }
+                catch { }
+
+                var produitsSnapshot = Produits?.ToList() ?? new List<Produit>();
+                foreach (var p in produitsSnapshot)
+                {
+                    p.ValidatedSalesCount = popularity.Get(p.Id, p.Nom);
                 }
 
-                 // Get top limits from config
-                 var countConfig = context.Configuration.Find("top_products_count");
-                 int topLimit = (countConfig != null && int.TryParse(countConfig.Valeur, out int tc)) ? tc : 20;
-                 
-                 var showAllConfig = context.Configuration.Find("show_all_top_products");
-                 bool showAll = (showAllConfig != null && bool.TryParse(showAllConfig.Valeur, out bool sa)) && sa;
+                var top20Items = produitsSnapshot
+                    .Where(p => p.Actif && p.ValidatedSalesCount > 0)
+                    .OrderByDescending(p => p.ValidatedSalesCount)
+                    .ThenBy(p => p.Nom)
+                    .Take(showAll ? int.MaxValue : topLimit)
+                    .ToList();
 
-                // Update Top Products (Active products only)
-                var top20Items = new List<Produit>();
-                foreach (var stat in salesStats) 
+                if (top20Items.Count == 0)
                 {
-                    var matchingProd = Produits.FirstOrDefault(p => p.Actif && (p.Id.ToString() == stat.Key || p.Nom == stat.Key));
-                    if (matchingProd != null && !top20Items.Contains(matchingProd))
-                    {
-                        top20Items.Add(matchingProd);
-                        if (!showAll && top20Items.Count >= topLimit) break;
-                    }
+                    top20Items = produitsSnapshot
+                        .Where(p => p.Actif)
+                        .OrderBy(p => p.Nom)
+                        .Take(showAll ? int.MaxValue : topLimit)
+                        .ToList();
                 }
 
                 _ = Application.Current.Dispatcher.BeginInvoke(new Action(() => 
                 {
-                    TopProducts.Clear();
-                    foreach (var p in top20Items) 
+                    bool sameTop = TopProducts.Count == top20Items.Count &&
+                                   TopProducts.Zip(top20Items, (a, b) => a.Id == b.Id).All(x => x);
+                    if (!sameTop)
                     {
-                        if (p != null) TopProducts.Add(p);
+                        TopProducts.Clear();
+                        foreach (var p in top20Items) 
+                        {
+                            if (p != null) TopProducts.Add(p);
+                        }
                     }
-                    
-                    // Force refresh the collection view
-                    ProductsView?.Refresh();
-                    System.Diagnostics.Debug.WriteLine($"POS DEBUG: TopProducts count={TopProducts.Count}, total active prods={Produits.Count}");
                 }), System.Windows.Threading.DispatcherPriority.Background);
             }
             catch (Exception ex) 
@@ -1382,31 +1320,31 @@ namespace SystemeCaisse.UI.ViewModels
             if (string.IsNullOrWhiteSpace(SearchText)) return;
 
             var code = SearchText.Trim();
-            // Exact match priority
-            var product = Produits.FirstOrDefault(p => p.CodeBarre == code);
+            var product = Produits.FirstOrDefault(p => p.Actif && p.CodeBarre == code);
             
             if (product == null)
             {
-                // If numeric, try ID?
-                if (int.TryParse(code, out int id) && id < 10000) // Assumption: IDs are small, barcodes large
-                     product = Produits.FirstOrDefault(p => p.Id == id);
+                if (int.TryParse(code, out int id) && id < 10000)
+                     product = Produits.FirstOrDefault(p => p.Actif && p.Id == id);
             }
 
             if (product != null)
             {
                 AddToCart((object)product);
-                SearchText = string.Empty; // Clear after successful scan
+                SearchText = string.Empty;
                 IsSearchDropDownOpen = false;
-                SearchSuggestions.Clear();
+                if (SearchSuggestions.Count > 0)
+                {
+                    SearchSuggestions = new List<Produit>();
+                    OnPropertyChanged(nameof(SearchSuggestions));
+                }
             }
             else
             {
-                // Product Not Found logic
                 var dialog = new SystemeCaisse.UI.Views.ProductNotFoundWindow(code);
                 SetupWindowOwner(dialog);
                 if (dialog.ShowDialog() == true && dialog.AddRequested)
                 {
-                    // Fetch existing categories for the autocomplete
                     var categories = Produits
                         .Select(p => p.Categorie)
                         .Where(c => !string.IsNullOrEmpty(c))
@@ -1421,29 +1359,26 @@ namespace SystemeCaisse.UI.ViewModels
                     {
                         var newProd = addDialog.NewProduct;
 
-                        // Save to database using the main context to keep tracking in sync
                         _context.Produits.Add(newProd);
                         await _context.SaveChangesAsync();
 
-                        // Add to local observable collection so it appears in UI
                         Produits.Add(newProd);
 
                         _ = ProductsVM.LoadDataCommand.ExecuteAsync(null);
                         _ = StocksVM.LoadDataAsync();
                         _ = InventoryVM.LoadHistoryAsync();
 
-                        // Automatically add to cart
                         AddToCart((object)newProd);
-                        
-                        // Force refresh of the TopProducts and Search suggestions if needed
-                        UpdateSearchSuggestions();
                     }
                 }
                 
-                // CRITICAL: Always clear SearchText after the flow, even if cancelled
                 SearchText = string.Empty;
                 IsSearchDropDownOpen = false;
-                SearchSuggestions.Clear();
+                if (SearchSuggestions.Count > 0)
+                {
+                    SearchSuggestions = new List<Produit>();
+                    OnPropertyChanged(nameof(SearchSuggestions));
+                }
             }
         }
         
@@ -1477,13 +1412,17 @@ namespace SystemeCaisse.UI.ViewModels
 
             try
             {
+                var now = DateTime.Now;
+                var poste = _caisseServices.Poste;
                 var vente = new Vente
                 {
-                    CreatedAt = DateTime.Now,
+                    CreatedAt = now,
+                    ClientUid = Guid.NewGuid().ToString("D"),
+                    Poste = poste.NomPoste,
                     Total = Total,
                     TotalRemise = TotalRemise,
                     NbArticles = (int)Panier.Sum(i => i.Quantite),
-                    NumeroTicket = DateTime.Now.Ticks.ToString().Substring(10),
+                    NumeroTicket = SalesService.GenerateTicketNumber(poste.CodePoste, now),
                     MoyenPaiement = SelectedPaiementMode,
                     MontantEspeces = SelectedPaiementMode == "Especes" ? MontantRecu : (SelectedPaiementMode == "Mixte" ? MontantRecu : 0),
                     MontantCB = SelectedPaiementMode == "CB" ? Total : (SelectedPaiementMode == "Mixte" ? MontantCarte : 0),
@@ -1504,8 +1443,6 @@ namespace SystemeCaisse.UI.ViewModels
 
                     if (MessageBox.Show(Services.WindowHelper.GetAdminWindow(), "Simuler l'impression du ticket ?", "Impression Formation", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
                     {
-                        // PrintTicket uses WPF controls (FlowDocument, PrintDialog) which require STA thread
-                        // Must run on UI dispatcher, not Task.Run
                         _printService.PrintTicket(vente, CurrentEntreprise ?? new Entreprise { Nom = "Inconnu" }, true);
                     }
                     
@@ -1513,38 +1450,77 @@ namespace SystemeCaisse.UI.ViewModels
                     return;
                 }
 
-                foreach (var item in Panier)
+                // En mode PostgreSQL Multi-Postes (ou hors-ligne), passer par CaisseServices.RecordSaleOrQueueAsync
+                // pour un décrément atomique côté serveur + file d'attente locale automatique si Tailscale coupe
+                if (_caisseServices.Factory.Provider == DatabaseProvider.PostgreSql || !_caisseServices.IsOnline)
                 {
-                    int productId = item.Produit.Id;
-                    decimal quantity = item.Quantite;
-                    decimal price = item.Produit.PrixVente;
-                    string productNom = item.ProduitNom;
-                    
-                    var ligne = item.ToEntity();
-                    ligne.Produit = null; 
-                    vente.Lignes.Add(ligne);
-
-                    var mvmt = new MouvementStock
+                    foreach (var item in Panier)
                     {
-                        ProduitId = productId,
-                        TypeMouvement = "sortie",
-                        Quantite = quantity,
-                        PrixUnitaire = price, 
-                        DateMouvement = DateTime.Now,
-                        Commentaire = "Vente",
-                        ProduitNomSnapshot = productNom
-                    };
-                    _context.MouvementsStock.Add(mvmt);
+                        int productId = item.Produit.Id;
+                        decimal quantity = item.Quantite;
+                        var ligne = item.ToEntity();
+                        ligne.Produit = null;
+                        vente.Lignes.Add(ligne);
 
-                    var productToUpdate = _context.Produits.FirstOrDefault(p => p.Id == productId);
-                    if (productToUpdate != null)
-                    {
-                         productToUpdate.StockActuel -= quantity;
+                        var productToUpdate = _context.Produits.Local.FirstOrDefault(p => p.Id == productId);
+                        if (productToUpdate != null)
+                        {
+                            productToUpdate.StockActuel -= quantity;
+                            productToUpdate.ValidatedSalesCount += Math.Max(1, (int)Math.Ceiling(quantity));
+                            _context.Entry(productToUpdate).State = EntityState.Unchanged;
+                        }
                     }
-                }
 
-                _context.Ventes.Add(vente);
-                await _context.SaveChangesAsync();
+                    await _caisseServices.RecordSaleOrQueueAsync(vente);
+                }
+                else
+                {
+                    var addedMovements = new List<MouvementStock>(Panier.Count);
+                    foreach (var item in Panier)
+                    {
+                        int productId = item.Produit.Id;
+                        decimal quantity = item.Quantite;
+                        decimal price = item.Produit.PrixVente;
+                        string productNom = item.ProduitNom;
+                        
+                        var ligne = item.ToEntity();
+                        ligne.Produit = null; 
+                        vente.Lignes.Add(ligne);
+
+                        var mvmt = new MouvementStock
+                        {
+                            ProduitId = productId,
+                            TypeMouvement = "sortie",
+                            Quantite = quantity,
+                            PrixUnitaire = price, 
+                            DateMouvement = now,
+                            Commentaire = "Vente",
+                            ProduitNomSnapshot = productNom
+                        };
+                        _context.MouvementsStock.Add(mvmt);
+                        addedMovements.Add(mvmt);
+
+                        var productToUpdate = _context.Produits.Local.FirstOrDefault(p => p.Id == productId)
+                                              ?? _context.Produits.FirstOrDefault(p => p.Id == productId);
+                        if (productToUpdate != null)
+                        {
+                             productToUpdate.StockActuel -= quantity;
+                             productToUpdate.ValidatedSalesCount += Math.Max(1, (int)Math.Ceiling(quantity));
+                        }
+                    }
+
+                    _context.Ventes.Add(vente);
+                    await _context.SaveChangesAsync();
+
+                    // Detach sale and stock movements so the long-lived _context ChangeTracker stays tiny and fast
+                    foreach (var m in addedMovements)
+                        _context.Entry(m).State = EntityState.Detached;
+                    foreach (var l in vente.Lignes)
+                        _context.Entry(l).State = EntityState.Detached;
+                    _context.Entry(vente).State = EntityState.Detached;
+
+                    _caisseServices.Popularity.Invalidate();
+                }
 
                 decimal changeToReturn = MonnaieRendre;
 
@@ -1561,7 +1537,6 @@ namespace SystemeCaisse.UI.ViewModels
                 if (_customerDisplay != null && _customerDisplay.IsVisible)
                 {
                     ShowThankYouMessage = true;
-                    // Auto-hide after 5 seconds
                     _ = Task.Delay(5000).ContinueWith(_ => 
                     {
                         Application.Current.Dispatcher.Invoke(() => ShowThankYouMessage = false);
@@ -1570,19 +1545,6 @@ namespace SystemeCaisse.UI.ViewModels
                 
                 if (changeToReturn > 0)
                     MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Monnaie à rendre : {changeToReturn:C}", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
-
-                _ = Task.Run(async () => 
-                {
-                    await CalculateProductPopularity(); 
-                    _ = Application.Current.Dispatcher.BeginInvoke(new Action(() => 
-                    {
-                        _ = DashboardVM.LoadDashboardDataInternalAsync();
-                        ProductsView.Refresh();
-                        _ = StocksVM.LoadDataAsync();
-                        _ = ProductsVM.LoadDataCommand.ExecuteAsync(null);
-                        _ = InventoryVM.LoadHistoryAsync();
-                    }), System.Windows.Threading.DispatcherPriority.Background);
-                });
             }
             catch (Exception ex)
             {
@@ -1590,16 +1552,10 @@ namespace SystemeCaisse.UI.ViewModels
             }
         }
 
-        /// <summary>
-        /// Envoie le montant CB au TPE et gère le résultat.
-        /// Succès → validation automatique du panier.
-        /// Échec → affiche une modale d'erreur avec option de réessayer.
-        /// </summary>
         private async Task SendToTPE()
         {
             if (Panier.Count == 0 || !IsTPEConnected || _tpeService == null) return;
 
-            // Déterminer le montant à envoyer au TPE
             decimal montantTPE = SelectedPaiementMode == "CB" ? Total : MontantCarte;
             if (montantTPE <= 0)
             {
@@ -1621,17 +1577,14 @@ namespace SystemeCaisse.UI.ViewModels
 
                     if (result.Success)
                     {
-                        // Paiement réussi → valider automatiquement le panier
                         IsTPEPaymentInProgress = false;
                         TPEStatusMessage = "✅ Paiement accepté";
                         StatusMessage = "Paiement TPE accepté — validation en cours...";
 
-                        // Appeler Checkout directement
                         Checkout(null);
                     }
                     else
                     {
-                        // Paiement échoué → modale d'erreur
                         IsTPEPaymentInProgress = false;
                         TPEStatusMessage = $"❌ {result.Message}";
                         StatusMessage = "Paiement TPE refusé";
@@ -1642,7 +1595,6 @@ namespace SystemeCaisse.UI.ViewModels
 
                         if (dialogResult == true)
                         {
-                            // L'utilisateur veut réessayer
                             retry = true;
                         }
                         else
@@ -1673,7 +1625,9 @@ namespace SystemeCaisse.UI.ViewModels
         {
             try
             {
-                var lastVente = _context.Ventes
+                using var ctx = _contextFactory.CreateDbContext();
+                var lastVente = ctx.Ventes
+                    .AsNoTracking()
                     .Include(v => v.Lignes)
                     .OrderByDescending(v => v.CreatedAt)
                     .FirstOrDefault();
@@ -1783,14 +1737,12 @@ namespace SystemeCaisse.UI.ViewModels
 
                     if (isWeight)
                     {
-                        // Ouvrir la fenêtre poids client sur l'écran secondaire
                         SystemeCaisse.UI.Views.CustomerWeightDisplayWindow? customerWeightWin = null;
                         try
                         {
                             var screens = ScreenHelper.GetScreens();
                             if (screens.Count >= 2 && _customerDisplay != null)
                             {
-                                // Utiliser le même écran que l'affichage client
                                 using var ctx = _contextFactory.CreateDbContext();
                                 var screenConfig = ctx.Configuration.Find("customer_display_screen_index");
                                 int savedIndex = (screenConfig != null && int.TryParse(screenConfig.Valeur, out int si)) ? si : -1;
@@ -1820,7 +1772,6 @@ namespace SystemeCaisse.UI.ViewModels
                             AddLine(produit, dialog.PoidsSaisi);
                         }
 
-                        // Fermer la fenêtre poids client
                         try { customerWeightWin?.Close(); } catch { }
                     }
                     else
@@ -1861,10 +1812,6 @@ namespace SystemeCaisse.UI.ViewModels
 
         private void ResetSale()
         {
-            // IMPORTANT: Do NOT manually reset item properties (RemiseManuellePercent/Fixed) 
-            // before clearing, because SuspendSale keeps REFERENCES to these items.
-            // Just clearing the Panier is enough for a fresh start.
-            
             Panier.Clear();
             BasketRemiseManuelle = 0;
             UpdateTotal();
@@ -1892,18 +1839,12 @@ namespace SystemeCaisse.UI.ViewModels
             }
         }
 
-        /// <summary>
-        /// Returns the number of available (not yet consumed by promotions) units for a cart line.
-        /// </summary>
         private decimal GetAvailableQty(CartItemViewModel item, Dictionary<CartItemViewModel, decimal> consumedQty)
         {
             consumedQty.TryGetValue(item, out decimal used);
             return item.Quantite - used;
         }
 
-        /// <summary>
-        /// Marks a number of units as consumed by a promotion for the given cart line.
-        /// </summary>
         private void ConsumeQty(CartItemViewModel item, decimal qty, Dictionary<CartItemViewModel, decimal> consumedQty)
         {
             consumedQty.TryGetValue(item, out decimal used);
@@ -1920,8 +1861,6 @@ namespace SystemeCaisse.UI.ViewModels
 
             if (_activePromotions == null || !_activePromotions.Any()) return;
 
-            // Track how many units of each cart line have been consumed by promotions.
-            // Remaining units (Quantite - consumed) are still available for other promos.
             var consumedQty = new Dictionary<CartItemViewModel, decimal>();
 
             foreach (var promo in _activePromotions.Where(p => p.TypePromotion != "remise_total" && p.TypePromotion != "seuil_panier"))
@@ -1952,7 +1891,6 @@ namespace SystemeCaisse.UI.ViewModels
                     {
                         if (promo.BundleItems == null || !promo.BundleItems.Any()) break;
 
-                        // Calculate how many complete bundles we can form from available units
                         int maxBundles = int.MaxValue;
                         foreach (var bi in promo.BundleItems)
                         {
@@ -1963,7 +1901,6 @@ namespace SystemeCaisse.UI.ViewModels
                         }
                         if (maxBundles <= 0) break;
 
-                        // Calculate original bundle total for ratio-based discount distribution
                         decimal originalBundleTotal = 0;
                         foreach (var bi in promo.BundleItems)
                         {
@@ -1972,7 +1909,6 @@ namespace SystemeCaisse.UI.ViewModels
                         }
                         if (originalBundleTotal <= 0) break;
 
-                        // Apply discount and consume only the required units
                         var participantIds = promo.BundleItems.Select(bi => bi.ProduitId).ToList();
                         var bundleLines = Panier
                             .Where(i => i.ProduitId.HasValue && participantIds.Contains(i.ProduitId.Value))
@@ -2079,15 +2015,12 @@ namespace SystemeCaisse.UI.ViewModels
                                 .FirstOrDefault();
                             if (bestTier != null && bestTier.PrixUnitaire < item.PrixUnitaire)
                             {
-                                // Only discount the tier quantity, leave remaining units for other promos
                                 decimal tierQty = bestTier.QuantiteMin;
-                                decimal remainingQty = available - tierQty;
                                 decimal standardTotal = item.PrixUnitaire * tierQty;
                                 decimal degressifTotal = bestTier.PrixUnitaire * tierQty;
                                 item.RemiseAuto += (standardTotal - degressifTotal);
                                 item.PromotionAppliquee = AppendPromoLabel(item.PromotionAppliquee, $"{promo.Nom} ({bestTier.PrixUnitaire:C}/u x{tierQty})");
                                 ConsumeQty(item, tierQty, consumedQty);
-                                // remainingQty units stay available for other promotions
                             }
                         }
                         break;
@@ -2096,9 +2029,6 @@ namespace SystemeCaisse.UI.ViewModels
             }
         }
 
-        /// <summary>
-        /// Appends a promotion label to an existing label string (supports multiple promos on same line).
-        /// </summary>
         private static string AppendPromoLabel(string? existing, string newLabel)
         {
             if (string.IsNullOrEmpty(existing)) return newLabel;
@@ -2118,7 +2048,6 @@ namespace SystemeCaisse.UI.ViewModels
                 var type = selectWindow.SelectedType;
                 CartItemViewModel? targetItem = null;
 
-                // "Prix de vente" and Item-level discounts require selecting a cart item
                 if (scope == SystemeCaisse.UI.Views.DiscountScope.Item || scope == SystemeCaisse.UI.Views.DiscountScope.PriceOverride)
                 {
                     if (Panier.Count == 0) return;
@@ -2130,7 +2059,6 @@ namespace SystemeCaisse.UI.ViewModels
 
                 if (scope == SystemeCaisse.UI.Views.DiscountScope.PriceOverride)
                 {
-                    // Price Override: enter the new sale price directly
                     if (targetItem == null) return;
                     string priceTitle = $"Nouveau prix de vente pour {targetItem.ProduitNom}";
                     var priceWindow = new SystemeCaisse.UI.Views.DiscountValueInputWindow(priceTitle, "€");
@@ -2140,19 +2068,15 @@ namespace SystemeCaisse.UI.ViewModels
                     decimal newPrice = priceWindow.DiscountValue;
                     if (newPrice < 0) newPrice = 0;
 
-                    // Calculate the fixed discount as the difference between original price and new price
-                    // Applied per unit, regardless of quantity
                     decimal priceDiff = targetItem.PrixUnitaire - newPrice;
                     if (priceDiff > 0)
                     {
-                        // Set the fixed discount to the total difference across all units
                         targetItem.RemiseManuelleFixed = priceDiff * targetItem.Quantite;
                         targetItem.RemiseManuellePercent = 0;
                         targetItem.PriceOverridePerUnit = priceDiff;
                     }
                     else
                     {
-                        // New price >= original price, no discount
                         targetItem.RemiseManuelleFixed = 0;
                         targetItem.RemiseManuellePercent = 0;
                         targetItem.PriceOverridePerUnit = 0;
@@ -2189,7 +2113,7 @@ namespace SystemeCaisse.UI.ViewModels
                         targetItem.RemiseManuelleFixed = val;
                         targetItem.RemiseManuellePercent = 0;
                     }
-                    targetItem.PriceOverridePerUnit = 0; // Clear any price override
+                    targetItem.PriceOverridePerUnit = 0;
                 }
                 UpdateTotal();
             }
@@ -2227,7 +2151,6 @@ namespace SystemeCaisse.UI.ViewModels
             Total = baseTotal - TotalRemise;
             if (Total < 0) Total = 0;
 
-            // Notify UI summaries
             OnPropertyChanged(nameof(TotalHorsRemise));
             OnPropertyChanged(nameof(TotalRemises));
             OnPropertyChanged(nameof(TotalVente));

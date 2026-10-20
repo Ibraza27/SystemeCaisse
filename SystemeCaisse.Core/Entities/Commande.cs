@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Linq;
 using System.Runtime.CompilerServices;
 
 namespace SystemeCaisse.Core.Entities
@@ -48,6 +49,9 @@ namespace SystemeCaisse.Core.Entities
         [MaxLength(10)]
         public string? CodePostal { get; set; }
 
+        [MaxLength(500)]
+        public string? Commentaire { get; set; }
+
         // Amounts
         [Column(TypeName = "decimal(18,2)")]
         public decimal Total { get; set; }
@@ -65,13 +69,13 @@ namespace SystemeCaisse.Core.Entities
 
         public int NbArticles { get; set; }
 
-        // Status: "en_attente", "traitee", "annulee"
+        // Status: "en_attente", "validee", "traitee", "annulee", "supprimee"
         [Required]
         [MaxLength(20)]
         public string Statut { get; set; } = "en_attente";
 
         [MaxLength(20)]
-        public string? ModePaiement { get; set; } // "espece", "virement", "wero"
+        public string? ModePaiement { get; set; } // "espece", "virement", "wero", "cb", "en_ligne", "sur_place"
 
         public DateTime CreatedAt { get; set; } = DateTime.Now;
         public DateTime UpdatedAt { get; set; } = DateTime.Now;
@@ -133,8 +137,10 @@ namespace SystemeCaisse.Core.Entities
                 return Statut switch
                 {
                     "en_attente" => "En attente",
+                    "validee" => "Validée",
                     "traitee" => "Traitée",
                     "annulee" => "Annulée",
+                    "supprimee" => "Supprimée",
                     _ => Statut
                 };
             }
@@ -152,12 +158,38 @@ namespace SystemeCaisse.Core.Entities
             "wero" => "Wero",
             "cb" => "CB",
             "en_ligne" => "En ligne",
+            "sur_place" => "Sur place",
             _ => ModePaiement ?? "—"
         };
+
+        [NotMapped]
+        public bool IsGroupedCommande => Lignes != null && Lignes.Any(l => !string.IsNullOrWhiteSpace(l.ClientNom));
+
+        [NotMapped]
+        public List<CommandeClientSubTotal> SubClientTotals => Lignes == null
+            ? new List<CommandeClientSubTotal>()
+            : Lignes.Where(l => !string.IsNullOrWhiteSpace(l.ClientNom))
+                    .GroupBy(l => l.ClientNom!)
+                    .Select(g => new CommandeClientSubTotal
+                    {
+                        ClientNom = g.Key,
+                        Total = g.Sum(x => x.TotalLigne),
+                        NbArticles = (int)g.Sum(x => Math.Ceiling(x.Quantite)),
+                        Lignes = g.ToList()
+                    })
+                    .ToList();
 
         // INotifyPropertyChanged (for IsSelected binding)
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string? name = null)
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    }
+
+    public class CommandeClientSubTotal
+    {
+        public string ClientNom { get; set; } = string.Empty;
+        public decimal Total { get; set; }
+        public int NbArticles { get; set; }
+        public List<LigneCommande> Lignes { get; set; } = new();
     }
 }

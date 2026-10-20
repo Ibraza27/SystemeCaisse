@@ -1,6 +1,6 @@
 ; Script Inno Setup pour SystemeCaisse
 #define MyAppName "SystemeCaisse"
-#define MyAppVersion "4.7.0"
+#define MyAppVersion "4.8.0"
 #define MyAppPublisher "Hippocampe Import-Export"
 #define MyAppExeName "SystemeCaisse.UI.exe"
 #define BuildDir "SystemeCaisse.UI\bin\Release\net8.0-windows10.0.19041\win-x64\publish"
@@ -26,6 +26,7 @@ Name: "french"; MessagesFile: "compiler:Languages\French.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
+Name: "setupprincipal"; Description: "Configurer ce poste en tant que Poste Principal (Serveur PostgreSQL + Tailscale autonome)"; GroupDescription: "Architecture Multi-Postes (Production) :"; Flags: unchecked
 
 [Files]
 Source: "{#BuildDir}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
@@ -37,4 +38,5 @@ Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--setup-principal"; Description: "Lancer {#MyAppName} et provisionner automatiquement PostgreSQL (Poste Principal)"; Tasks: setupprincipal; Flags: nowait postinstall skipifsilent runascurrentuser
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Tasks: not setupprincipal; Flags: nowait postinstall skipifsilent

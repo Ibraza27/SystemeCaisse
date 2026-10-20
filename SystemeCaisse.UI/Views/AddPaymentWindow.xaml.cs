@@ -40,6 +40,7 @@ namespace SystemeCaisse.UI.Views
                     : rbWero.IsChecked == true ? "wero" 
                     : rbCB.IsChecked == true ? "cb" 
                     : rbEnLigne.IsChecked == true ? "en_ligne" 
+                    : rbSurPlace.IsChecked == true ? "sur_place"
                     : "espece";
                 DialogResult = true;
                 Close();

@@ -9,25 +9,18 @@
              d:DesignHeight="600" d:DesignWidth="1000">
 
     <UserControl.Resources>
-        <!-- Style pour les cartes produits -->
+        <!-- Style pour les cartes produits (sans DropShadowEffect CPU pour fluidité maximale en SoftwareOnly) -->
         <Style x:Key="ProductCardStyle" TargetType="Border">
             <Setter Property="Background" Value="White"/>
             <Setter Property="CornerRadius" Value="8"/>
             <Setter Property="Padding" Value="10"/>
             <Setter Property="Margin" Value="5"/>
-            <Setter Property="Effect">
-                <Setter.Value>
-                    <DropShadowEffect Color="#DDDDDD" BlurRadius="5" ShadowDepth="2" Direction="270" Opacity="0.5"/>
-                </Setter.Value>
-            </Setter>
+            <Setter Property="BorderBrush" Value="#E0E0E0"/>
+            <Setter Property="BorderThickness" Value="1"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Effect">
-                        <Setter.Value>
-                            <DropShadowEffect Color="#BBBBBB" BlurRadius="10" ShadowDepth="4" Direction="270" Opacity="0.7"/>
-                        </Setter.Value>
-                    </Setter>
-                    <Setter Property="Background" Value="#FAFAFA"/>
+                    <Setter Property="BorderBrush" Value="#2E7D32"/>
+                    <Setter Property="Background" Value="#F5FBF5"/>
                     <Setter Property="Cursor" Value="Hand"/>
                 </Trigger>
             </Style.Triggers>
@@ -42,8 +35,8 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- Barre de recherche (AutoComplete Suggestions) -->
-            <Border Grid.Row="0" Background="White" CornerRadius="20" Padding="15,5" Margin="0,0,0,20" BorderBrush="#EEEEEE" BorderThickness="1">
+            <!-- Barre de recherche fluide (sans auto-complétion intrusive) -->
+            <Border x:Name="searchBarBorder" Grid.Row="0" Background="White" CornerRadius="20" Padding="15,5" Margin="0,0,0,20" BorderBrush="#EEEEEE" BorderThickness="1">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -52,59 +45,75 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="🔍" VerticalAlignment="Center" Margin="5,0,10,0" Foreground="Gray" FontSize="16"/>
                     
-                    <ComboBox x:Name="searchCombo" Grid.Column="1" 
-                              IsEditable="True" 
-                              IsTextSearchEnabled="False"
-                              IsTextSearchCaseSensitive="False"
-                              StaysOpenOnEdit="True"
-                              BorderThickness="0" 
-                              VerticalAlignment="Center" 
-                              FontSize="16" 
-                              ItemsSource="{Binding SearchSuggestions}"
-                              Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                              SelectedItem="{Binding SelectedSearchProduct}"
-                              IsDropDownOpen="{Binding IsSearchDropDownOpen, Mode=TwoWay}"
-                              Loaded="searchCombo_Loaded"
-                              Foreground="#333">
-                        <ComboBox.InputBindings>
-                            <KeyBinding Key="Enter" Command="{Binding ScanCommand}"/>
-                        </ComboBox.InputBindings>
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate>
-                                <Grid Width="550" Margin="0,2">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="45"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <!-- Product Image -->
-                                    <Border Width="40" Height="40" CornerRadius="4" Background="#F8F8F8" ClipToBounds="True">
-                                        <Grid>
-                                            <Image Source="{Binding FullImagePath, Converter={StaticResource PathToImage}}" Stretch="Uniform" Margin="2"/>
-                                            <TextBlock Text="📦" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#CCC"
-                                                       Visibility="{Binding FullImagePath, Converter={StaticResource InvertedNullToVis}}"/>
+                    <TextBox x:Name="searchTextBox" Grid.Column="1"
+                             BorderThickness="0"
+                             Background="Transparent"
+                             VerticalAlignment="Center"
+                             VerticalContentAlignment="Center"
+                             FontSize="16"
+                             Foreground="#333"
+                             CaretBrush="#333"
+                             Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                             PreviewKeyDown="searchTextBox_PreviewKeyDown"
+                             LostKeyboardFocus="searchTextBox_LostKeyboardFocus"/>
+
+                    <Popup x:Name="searchPopup"
+                           PlacementTarget="{Binding ElementName=searchBarBorder}"
+                           Placement="Bottom"
+                           StaysOpen="True"
+                           AllowsTransparency="True"
+                           Focusable="False"
+                           IsOpen="{Binding IsSearchDropDownOpen, Mode=TwoWay}">
+                        <Border Background="White" BorderBrush="#CCCCCC" BorderThickness="1" CornerRadius="8" Margin="0,2,0,0"
+                                MaxHeight="520" MinWidth="750" Width="{Binding ActualWidth, ElementName=searchBarBorder}">
+                            <ListBox x:Name="suggestionsListBox"
+                                     ItemsSource="{Binding SearchSuggestions}"
+                                     BorderThickness="0"
+                                     Background="Transparent"
+                                     Focusable="False"
+                                     HorizontalContentAlignment="Stretch"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     VirtualizingPanel.IsVirtualizing="True"
+                                     VirtualizingPanel.VirtualizationMode="Recycling"
+                                     PreviewMouseLeftButtonUp="suggestionsListBox_PreviewMouseLeftButtonUp">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid MinWidth="700" Margin="4,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="54"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <!-- Product Image -->
+                                            <Border Width="48" Height="48" CornerRadius="6" Background="#F8F8F8" ClipToBounds="True">
+                                                <Grid>
+                                                    <Image Source="{Binding FullImagePath, Converter={StaticResource PathToImage}}" Stretch="Uniform" Margin="2"/>
+                                                    <TextBlock Text="📦" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#CCC"
+                                                               Visibility="{Binding FullImagePath, Converter={StaticResource InvertedNullToVis}}"/>
+                                                </Grid>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="{Binding Nom}" FontSize="15.5" FontWeight="Bold" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="10,0,12,0" VerticalAlignment="Center"/>
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0">
+                                                <TextBlock Text="{Binding PrixVente, StringFormat={}{0:C}}" FontSize="15.5" Foreground="#2E7D32" FontWeight="Bold"/>
+                                                <TextBlock Foreground="#777" FontSize="13" VerticalAlignment="Bottom" Margin="2,0,0,1">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Text" Value="/Unité"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding TypeVente}" Value="poids">
+                                                                    <Setter Property="Text" Value="/kg"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
                                         </Grid>
-                                    </Border>
-                                    <TextBlock Grid.Column="1" Text="{Binding Nom}" FontWeight="Bold" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="8,0,10,0" VerticalAlignment="Center"/>
-                                    <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding PrixVente, StringFormat={}{0:C}}" Foreground="#2E7D32" FontWeight="Bold"/>
-                                        <TextBlock Foreground="#777" Margin="2,0,0,0">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Setter Property="Text" Value="/Unité"/>
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding TypeVente}" Value="poids">
-                                                            <Setter Property="Text" Value="/kg"/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
-                                    </StackPanel>
-                                </Grid>
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Border>
+                    </Popup>
 
                     <!-- Bouton Effacer -->
                     <Button Grid.Column="2" Content="✕" Command="{Binding ClearSearchCommand}" 

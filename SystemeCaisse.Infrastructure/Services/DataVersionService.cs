@@ -50,7 +50,7 @@ namespace SystemeCaisse.Infrastructure.Services
         public DataVersionMonitor(IDbContextFactory<AppDbContext> factory, TimeSpan? interval = null)
         {
             _factory = factory;
-            _interval = interval ?? TimeSpan.FromSeconds(15);
+            _interval = interval ?? TimeSpan.FromSeconds(5);
         }
 
         public void Start()

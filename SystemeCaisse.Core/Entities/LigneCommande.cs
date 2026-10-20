@@ -38,5 +38,28 @@ namespace SystemeCaisse.Core.Entities
         public string? PromotionAppliquee { get; set; }
 
         public int TaxTier { get; set; } = 1;
+
+        [MaxLength(100)]
+        public string? ClientNom { get; set; }
+
+        [MaxLength(10)]
+        public string? Unite { get; set; }
+
+        [NotMapped]
+        public string UniteDisplay => !string.IsNullOrWhiteSpace(Unite)
+            ? Unite
+            : (Produit?.TypeVente != null && Produit.TypeVente.Equals("poids", System.StringComparison.OrdinalIgnoreCase)
+                ? "kg"
+                : (Quantite % 1 != 0 ? "kg" : "pce"));
+
+        [NotMapped]
+        public string QuantiteDisplay => Quantite % 1 == 0
+            ? $"{Quantite:0} {UniteDisplay}"
+            : $"{Quantite:0.###} {UniteDisplay}";
+
+        [NotMapped]
+        public string ProduitNomWithClient => string.IsNullOrWhiteSpace(ClientNom)
+            ? ProduitNom
+            : $"[{ClientNom}] {ProduitNom}";
     }
 }

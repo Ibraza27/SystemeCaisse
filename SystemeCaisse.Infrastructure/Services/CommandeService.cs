@@ -38,7 +38,14 @@ namespace SystemeCaisse.Infrastructure.Services
             IQueryable<Commande> query = db.Commandes.AsNoTracking().Include(c => c.Lignes);
 
             if (!string.IsNullOrEmpty(filter.Statut))
+            {
                 query = query.Where(c => c.Statut == filter.Statut);
+            }
+            else
+            {
+                // Par défaut, exclure les commandes mises à la corbeille ("supprimee")
+                query = query.Where(c => c.Statut != "supprimee");
+            }
 
             if (filter.DateDebut.HasValue)
             {
@@ -423,6 +430,7 @@ namespace SystemeCaisse.Infrastructure.Services
             Adresse = s.Adresse,
             Ville = s.Ville,
             CodePostal = s.CodePostal,
+            Commentaire = s.Commentaire,
             Total = s.Total,
             TotalRemise = s.TotalRemise,
             MontantPaye = s.MontantPaye,
@@ -447,7 +455,9 @@ namespace SystemeCaisse.Infrastructure.Services
             TotalLigne = l.TotalLigne,
             Remise = l.Remise,
             PromotionAppliquee = l.PromotionAppliquee,
-            TaxTier = l.TaxTier
+            TaxTier = l.TaxTier,
+            ClientNom = l.ClientNom,
+            Unite = l.Unite
         };
 
         private static string Truncate(string? s, int max) => string.IsNullOrEmpty(s) ? string.Empty : (s.Length <= max ? s : s[..max]);

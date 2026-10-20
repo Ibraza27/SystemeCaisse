@@ -26,6 +26,26 @@ namespace SystemeCaisse.UI.ViewModels
         public int? ProduitId => _ligneVente.ProduitId;
         public int TaxTier => _ligneVente.TaxTier;
 
+        private string? _clientNom;
+        public string? ClientNom
+        {
+            get => _clientNom;
+            set { _clientNom = value; OnPropertyChanged(); OnPropertyChanged(nameof(HasClientNom)); }
+        }
+
+        public bool HasClientNom => !string.IsNullOrWhiteSpace(_clientNom);
+
+        private string? _unite;
+        public string Unite
+        {
+            get => !string.IsNullOrWhiteSpace(_unite)
+                ? _unite
+                : (string.Equals(Produit.TypeVente?.Trim(), "poids", System.StringComparison.OrdinalIgnoreCase)
+                    ? "kg"
+                    : (Quantite % 1 != 0 ? "kg" : "pce"));
+            set { _unite = value; OnPropertyChanged(); }
+        }
+
         public decimal TotalLigneStandard => _ligneVente.PrixUnitaire * _ligneVente.Quantite;
 
         public decimal Quantite

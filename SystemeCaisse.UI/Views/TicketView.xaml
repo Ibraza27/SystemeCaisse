@@ -175,8 +175,8 @@
             </Border>
 
             <!-- Mode Payment Buttons -->
-            <UniformGrid Columns="3" Margin="0,0,0,10">
-                <Button Content="💵 Cash" Command="{Binding PaymentModeCommand}" CommandParameter="Especes" Height="45" Margin="0,0,5,0">
+            <UniformGrid Columns="5" Margin="0,0,0,10">
+                <Button Content="💵 Cash" Command="{Binding PaymentModeCommand}" CommandParameter="Especes" Height="45" Margin="0,0,3,0" FontWeight="SemiBold">
                     <Button.Style>
                         <Style TargetType="Button">
                             <Setter Property="Background" Value="#EEE"/>
@@ -189,7 +189,7 @@
                         </Style>
                     </Button.Style>
                 </Button>
-                <Button Content="💳 CB" Command="{Binding PaymentModeCommand}" CommandParameter="CB" Height="45" Margin="5,0,5,0">
+                <Button Content="💳 CB" Command="{Binding PaymentModeCommand}" CommandParameter="CB" Height="45" Margin="3,0,3,0" FontWeight="SemiBold">
                     <Button.Style>
                         <Style TargetType="Button">
                             <Setter Property="Background" Value="#EEE"/>
@@ -202,7 +202,33 @@
                         </Style>
                     </Button.Style>
                 </Button>
-                <Button Content="🔀 Mixte" Command="{Binding PaymentModeCommand}" CommandParameter="Mixte" Height="45" Margin="5,0,0,0">
+                <Button Content="📱 Wero" Command="{Binding PaymentModeCommand}" CommandParameter="Wero" Height="45" Margin="3,0,3,0" FontWeight="SemiBold">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background" Value="#EEE"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedPaiementMode}" Value="Wero">
+                                    <Setter Property="Background" Value="#6A1B9A"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+                <Button Content="🌐 En ligne" Command="{Binding PaymentModeCommand}" CommandParameter="En ligne" Height="45" Margin="3,0,3,0" FontWeight="SemiBold">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background" Value="#EEE"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedPaiementMode}" Value="En ligne">
+                                    <Setter Property="Background" Value="#0277BD"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+                <Button Content="🔀 Mixte" Command="{Binding PaymentModeCommand}" CommandParameter="Mixte" Height="45" Margin="3,0,0,0" FontWeight="SemiBold">
                     <Button.Style>
                         <Style TargetType="Button">
                             <Setter Property="Background" Value="#EEE"/>

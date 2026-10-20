@@ -78,6 +78,7 @@ namespace SystemeCaisse.Infrastructure.Configuration
         private static PosteSettings MigrateLegacy()
         {
             var settings = new PosteSettings();
+            settings.Database.Provider = DatabaseProvider.Sqlite;
             try
             {
                 var legacyJson = Path.Combine(AppPaths.InstallDir, "network_db.json");
@@ -101,6 +102,7 @@ namespace SystemeCaisse.Infrastructure.Configuration
                 if (File.Exists(legacyDb))
                 {
                     // Conserver la base existante à son emplacement actuel : aucune perte de données.
+                    settings.Database.Provider = DatabaseProvider.Sqlite;
                     settings.Database.SqlitePath = legacyDb;
                     AppLog.Info("Settings", $"Reprise de la base locale existante : {legacyDb}");
                 }

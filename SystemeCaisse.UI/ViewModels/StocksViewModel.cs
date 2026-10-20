@@ -254,6 +254,9 @@ namespace SystemeCaisse.UI.ViewModels
                 await _services.Catalog.RecordMovementAsync(produit.Id, produit.Nom, TypeMouvement, QuantiteMouvement,
                     TypeMouvement == "entree" ? PrixUnitaireMouvement : null, CommentaireMouvement);
 
+                if (Application.Current.MainWindow?.DataContext is MainViewModel mainVM)
+                    mainVM.MarkCaisseDirty(catalog: true);
+
                 MessageBox.Show(mainWin, "Mouvement de stock enregistré avec succès !", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
                 ResetForm();
                 await LoadDataAsync();

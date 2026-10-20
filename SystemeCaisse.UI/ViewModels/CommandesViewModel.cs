@@ -22,6 +22,9 @@ namespace SystemeCaisse.UI.ViewModels
         private int? _editingCommandeId = null; // Track if we're editing an existing commande
         private int _loadVersion;
         private Entreprise? _entreprise;
+        private bool _commandesDirty = true;
+        private bool _catalogDirty = true;
+        private bool _suppressPanierEvents = false;
 
         /// <summary>Date du dernier chargement réussi de la liste.</summary>
         public DateTime LastLoaded { get; private set; } = DateTime.MinValue;
@@ -121,8 +124,27 @@ namespace SystemeCaisse.UI.ViewModels
         public decimal TotalWero { get => _totalWero; set { _totalWero = value; OnPropertyChanged(); } }
         private decimal _totalVirement;
         public decimal TotalVirement { get => _totalVirement; set { _totalVirement = value; OnPropertyChanged(); } }
+        private decimal _totalSurPlace;
+        public decimal TotalSurPlace { get => _totalSurPlace; set { _totalSurPlace = value; OnPropertyChanged(); } }
         private decimal _totalGeneral;
         public decimal TotalGeneral { get => _totalGeneral; set { _totalGeneral = value; OnPropertyChanged(); } }
+
+        // ─── Corbeille (Trash) mode ───
+        private bool _isTrashMode;
+        public bool IsTrashMode
+        {
+            get => _isTrashMode;
+            set
+            {
+                if (_isTrashMode != value)
+                {
+                    _isTrashMode = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(IsNormalListMode));
+                }
+            }
+        }
+        public bool IsNormalListMode => !IsTrashMode;
 
         // ─── New Commande mode ───
         private bool _isNewCommandeMode;
@@ -132,6 +154,35 @@ namespace SystemeCaisse.UI.ViewModels
             set { _isNewCommandeMode = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsListMode)); }
         }
         public bool IsListMode => !IsNewCommandeMode;
+
+        // ─── Commandes regroupées (Multi-clients) ───
+        private bool _isGroupedCommandeMode;
+        public bool IsGroupedCommandeMode
+        {
+            get => _isGroupedCommandeMode;
+            set
+            {
+                _isGroupedCommandeMode = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsClassicCommandeMode));
+            }
+        }
+        public bool IsClassicCommandeMode => !IsGroupedCommandeMode;
+
+        public ObservableCollection<SubClientGroup> SubClients { get; } = new();
+
+        private SubClientGroup? _selectedSubClient;
+        public SubClientGroup? SelectedSubClient
+        {
+            get => _selectedSubClient;
+            set
+            {
+                if (_selectedSubClient != null) _selectedSubClient.IsSelected = false;
+                _selectedSubClient = value;
+                if (_selectedSubClient != null) _selectedSubClient.IsSelected = true;
+                OnPropertyChanged();
+            }
+        }
 
         // New commande panier
         public ObservableCollection<CartItemViewModel> CommandePanier { get; set; } = new();
@@ -144,6 +195,7 @@ namespace SystemeCaisse.UI.ViewModels
         private string _clientAdresse = string.Empty;
         private string _clientVille = string.Empty;
         private string _clientCodePostal = string.Empty;
+        private string _clientCommentaire = string.Empty;
 
         private string _commandeModePaiement = "en_ligne";
         public string CommandeModePaiement
@@ -209,26 +261,68 @@ namespace SystemeCaisse.UI.ViewModels
         }
 
         // Products list for new commande
-        public ObservableCollection<Produit> Produits { get; set; } = new();
+        public List<Produit> Produits { get; private set; } = new();
 
         // Suspended commandes (attente)
         public ObservableCollection<SuspendedCommande> SuspendedCommandes { get; set; } = new();
         public bool HasSuspendedCommandes => SuspendedCommandes.Count > 0;
 
         // Search suggestions for new commande
-        public ObservableCollection<Produit> SearchSuggestions { get; set; } = new();
+        public List<Produit> SearchSuggestions { get; private set; } = new();
         private string _newCommandeSearchText = string.Empty;
         public string NewCommandeSearchText
         {
             get => _newCommandeSearchText;
-            set { _newCommandeSearchText = value; OnPropertyChanged(); UpdateNewCommandeSearchSuggestions(); }
+            set
+            {
+                if (_newCommandeSearchText != value)
+                {
+                    _newCommandeSearchText = value;
+                    OnPropertyChanged();
+
+                    if (!string.IsNullOrWhiteSpace(_newCommandeSearchText))
+                    {
+                        string search = _newCommandeSearchText.Trim();
+                        bool isNumeric = search.All(char.IsDigit);
+                        if (!isNumeric)
+                        {
+                            UpdateNewCommandeSearchSuggestions(search);
+                        }
+                        else
+                        {
+                            IsSearchDropDownOpen = false;
+                            if (SearchSuggestions.Count > 0)
+                            {
+                                SearchSuggestions = new List<Produit>();
+                                OnPropertyChanged(nameof(SearchSuggestions));
+                            }
+                        }
+                    }
+                    else
+                    {
+                        IsSearchDropDownOpen = false;
+                        if (SearchSuggestions.Count > 0)
+                        {
+                            SearchSuggestions = new List<Produit>();
+                            OnPropertyChanged(nameof(SearchSuggestions));
+                        }
+                    }
+                }
+            }
         }
 
         private bool _isSearchDropDownOpen;
         public bool IsSearchDropDownOpen
         {
             get => _isSearchDropDownOpen;
-            set { _isSearchDropDownOpen = value; OnPropertyChanged(); }
+            set
+            {
+                if (_isSearchDropDownOpen != value)
+                {
+                    _isSearchDropDownOpen = value;
+                    OnPropertyChanged();
+                }
+            }
         }
 
         private Produit? _selectedSearchProduct;
@@ -237,15 +331,24 @@ namespace SystemeCaisse.UI.ViewModels
             get => _selectedSearchProduct;
             set 
             { 
-                if (value != null)
+                if (_selectedSearchProduct != value)
                 {
                     _selectedSearchProduct = value;
                     OnPropertyChanged();
-                    AddToCommandePanier(value);
-                    NewCommandeSearchText = string.Empty;
-                    IsSearchDropDownOpen = false;
-                    SearchSuggestions.Clear();
-                    _selectedSearchProduct = null;
+                    if (_selectedSearchProduct != null)
+                    {
+                        var prod = _selectedSearchProduct;
+                        _selectedSearchProduct = null;
+                        OnPropertyChanged(nameof(SelectedSearchProduct));
+                        NewCommandeSearchText = string.Empty;
+                        IsSearchDropDownOpen = false;
+                        if (SearchSuggestions.Count > 0)
+                        {
+                            SearchSuggestions = new List<Produit>();
+                            OnPropertyChanged(nameof(SearchSuggestions));
+                        }
+                        AddToCommandePanier(prod);
+                    }
                 }
             }
         }
@@ -254,12 +357,21 @@ namespace SystemeCaisse.UI.ViewModels
         public ICommand LoadCommand { get; }
         public ICommand ClearSearchCommand { get; }
         public ICommand NewCommandeCommand { get; }
+        public ICommand NewGroupedCommandeCommand { get; }
+        public ICommand EnableGroupedModeCommand { get; }
+        public ICommand AddSubClientCommand { get; }
+        public ICommand SelectSubClientCommand { get; }
+        public ICommand RemoveSubClientCommand { get; }
         public ICommand CancelNewCommandeCommand { get; }
         public ICommand ValidateCommandeCommand { get; }
         public ICommand ViewTicketCommand { get; }
         public ICommand PrintTicketCommand { get; }
         public ICommand ChangeStatusCommand { get; }
+        public ICommand QuickValidateCommand { get; }
         public ICommand DeleteCommandeCommand { get; }
+        public ICommand RestoreCommandeCommand { get; }
+        public ICommand PermanentDeleteCommandeCommand { get; }
+        public ICommand ToggleTrashModeCommand { get; }
         public ICommand AddPaymentCommand { get; }
         public ICommand EditCommandeCommand { get; }
         public ICommand AddToCommandePanierCommand { get; }
@@ -279,25 +391,39 @@ namespace SystemeCaisse.UI.ViewModels
         // Batch selection commands
         public ICommand SelectAllCommand { get; }
         public ICommand DeselectAllCommand { get; }
+        public ICommand BatchMarkValideeCommand { get; }
         public ICommand BatchMarkTraiteeCommand { get; }
         public ICommand BatchMarkEnAttenteCommand { get; }
         public ICommand BatchAnnulerCommand { get; }
         public ICommand BatchDeleteCommand { get; }
+        public ICommand BatchRestoreCommand { get; }
+        public ICommand BatchPermanentDeleteCommand { get; }
         public ICommand BatchPrintCommand { get; }
         public ICommand BatchRecapCommand { get; }
         public ICommand PrintClientRecapCommand { get; }
-
-        public ICommand TestSyncCommand { get; }
 
         public CommandesViewModel(CaisseServices services, PrintService printService)
         {
             _services = services;
             _printService = printService;
 
+            _services.Versions.Changed += domains =>
+            {
+                if (domains.Contains(DataDomains.Commandes))
+                    _commandesDirty = true;
+                if (domains.Contains(DataDomains.Produits) || domains.Contains(DataDomains.Promotions) || domains.Contains(DataDomains.Stocks))
+                    _catalogDirty = true;
+            };
+
             LoadCommand = new BasicRelayCommand(_ => _ = LoadDataAsync());
             ClearSearchCommand = new BasicRelayCommand(_ => SearchText = string.Empty);
 
-            NewCommandeCommand = new BasicRelayCommand(_ => StartNewCommande());
+            NewCommandeCommand = new BasicRelayCommand(_ => StartNewCommande(grouped: false));
+            NewGroupedCommandeCommand = new BasicRelayCommand(_ => StartNewCommande(grouped: true));
+            EnableGroupedModeCommand = new BasicRelayCommand(_ => EnableGroupedMode());
+            AddSubClientCommand = new BasicRelayCommand(_ => AddSubClient());
+            SelectSubClientCommand = new BasicRelayCommand(p => { if (p is SubClientGroup sc) SelectedSubClient = sc; });
+            RemoveSubClientCommand = new BasicRelayCommand(p => { if (p is SubClientGroup sc) RemoveSubClient(sc); });
             CancelNewCommandeCommand = new BasicRelayCommand(_ => CancelNewCommande());
             ValidateCommandeCommand = new BasicRelayCommand(_ => OpenClientInfoWindow(), _ => CommandePanier.Count > 0);
 
@@ -309,8 +435,6 @@ namespace SystemeCaisse.UI.ViewModels
             ClearNewCommandeSearchCommand = new BasicRelayCommand(_ => NewCommandeSearchText = string.Empty);
             OpenVilleCPFilterCommand = new BasicRelayCommand(_ => OpenVilleCPFilter());
             
-            TestSyncCommand = new BasicRelayCommand(_ => ExecuteTestSync());
-            
             ClearAllFiltersCommand = new BasicRelayCommand(_ => ClearAllFilters());
             PrintRecapCommand = new BasicRelayCommand(_ => PrintRecap(), _ => Commandes.Count > 0);
             OpenCommandeDiscountCommand = new BasicRelayCommand(_ => ApplyManualDiscount(), _ => CommandePanier.Count > 0);
@@ -321,10 +445,13 @@ namespace SystemeCaisse.UI.ViewModels
             // Batch selection commands
             SelectAllCommand = new BasicRelayCommand(_ => { foreach (var c in Commandes) c.IsSelected = true; NotifySelectionChanged(); });
             DeselectAllCommand = new BasicRelayCommand(_ => { foreach (var c in Commandes) c.IsSelected = false; NotifySelectionChanged(); });
+            BatchMarkValideeCommand = new BasicRelayCommand(_ => BatchChangeStatus("validee"), _ => HasSelection);
             BatchMarkTraiteeCommand = new BasicRelayCommand(_ => BatchChangeStatus("traitee"), _ => HasSelection);
             BatchMarkEnAttenteCommand = new BasicRelayCommand(_ => BatchChangeStatus("en_attente"), _ => HasSelection);
             BatchAnnulerCommand = new BasicRelayCommand(_ => BatchChangeStatus("annulee"), _ => HasSelection);
             BatchDeleteCommand = new BasicRelayCommand(_ => BatchDelete(), _ => HasSelection);
+            BatchRestoreCommand = new BasicRelayCommand(_ => BatchRestore(), _ => HasSelection);
+            BatchPermanentDeleteCommand = new BasicRelayCommand(_ => BatchPermanentDelete(), _ => HasSelection);
             BatchPrintCommand = new BasicRelayCommand(_ => BatchPrint(), _ => HasSelection);
             BatchRecapCommand = new BasicRelayCommand(_ => BatchRecap(), _ => HasSelection);
             PrintClientRecapCommand = new BasicRelayCommand(_ => PrintClientRecap(), _ => Commandes.Count > 0);
@@ -337,9 +464,13 @@ namespace SystemeCaisse.UI.ViewModels
                 if (p is string status && SelectedCommande != null) ChangeStatus(status);
             }, _ => SelectedCommande != null);
 
+            QuickValidateCommand = new BasicRelayCommand(_ => QuickValidate(), _ => SelectedCommande != null && SelectedCommande.Statut != "validee");
             DeleteCommandeCommand = new BasicRelayCommand(_ => DeleteCommande(), _ => SelectedCommande != null);
+            RestoreCommandeCommand = new BasicRelayCommand(_ => RestoreCommande(), _ => SelectedCommande != null);
+            PermanentDeleteCommandeCommand = new BasicRelayCommand(_ => PermanentDeleteCommande(), _ => SelectedCommande != null);
+            ToggleTrashModeCommand = new BasicRelayCommand(_ => ToggleTrashMode());
             AddPaymentCommand = new BasicRelayCommand(_ => AddPayment(), _ => SelectedCommande != null && SelectedCommande.Restant > 0);
-            EditCommandeCommand = new BasicRelayCommand(_ => EditCommande(), _ => SelectedCommande != null && SelectedCommande.Statut != "annulee");
+            EditCommandeCommand = new BasicRelayCommand(_ => EditCommande(), _ => SelectedCommande != null && SelectedCommande.Statut != "annulee" && SelectedCommande.Statut != "supprimee");
 
             CommandePanier.CollectionChanged += (s, e) =>
             {
@@ -349,8 +480,7 @@ namespace SystemeCaisse.UI.ViewModels
                     {
                         item.PropertyChanged += (sender, args) =>
                         {
-                            if (args.PropertyName == nameof(CartItemViewModel.Quantite) ||
-                                args.PropertyName == nameof(CartItemViewModel.TotalLigneStandard))
+                            if (args.PropertyName == nameof(CartItemViewModel.Quantite))
                             {
                                 ApplyCommandePromotions();
                                 UpdateCommandeTotal();
@@ -358,30 +488,18 @@ namespace SystemeCaisse.UI.ViewModels
                         };
                     }
                 }
-                ApplyCommandePromotions();
-                UpdateCommandeTotal();
+                if (!_suppressPanierEvents)
+                {
+                    ApplyCommandePromotions();
+                    UpdateCommandeTotal();
+                }
             };
         }
 
         public void SetMainViewModel(MainViewModel mainVM)
         {
             _mainViewModel = mainVM;
-        }
-
-        // ── SignalR Sync ──
-        private SyncClient? _syncClient;
-
-        private int _newOrderCount;
-        public int NewOrderCount
-        {
-            get => _newOrderCount;
-            set { _newOrderCount = value; OnPropertyChanged(); OnPropertyChanged(nameof(HasNewOrders)); }
-        }
-        public bool HasNewOrders => NewOrderCount > 0;
-
-        public void SetSyncClient(SyncClient client)
-        {
-            _syncClient = client;
+            OnPropertyChanged(nameof(TopProducts));
         }
 
         public async Task InitializeAsync()
@@ -391,41 +509,18 @@ namespace SystemeCaisse.UI.ViewModels
             await LoadDataAsync();
         }
 
-        private async void ExecuteTestSync()
+        /// <summary>
+        /// Appelé lors du passage sur l'onglet Commandes : instantané (0ms) si déjà chargé et à jour.
+        /// </summary>
+        public async Task RefreshIfNeededAsync()
         {
-            var owner = WindowHelper.GetAdminWindow();
-            if (_syncClient == null || !_syncClient.IsConnected)
+            if (LastLoaded == DateTime.MinValue || _commandesDirty)
             {
-                string extraInfo = _services.IsOnline
-                    ? "\n\nVérifiez dans Configuration que la synchronisation est activée et que la clé API est renseignée, puis que ce poste a accès à Internet."
-                    : "\n\n⚠️ La base de données est actuellement injoignable : seule la Caisse fonctionne (les ventes sont mises en attente et seront envoyées au retour du réseau).";
-
-                MessageBox.Show(owner,
-                    $"❌ La caisse n'est pas connectée au serveur Web.{extraInfo}", 
-                    "Test de Synchronisation", 
-                    MessageBoxButton.OK, 
-                    MessageBoxImage.Warning);
-                return;
+                await LoadDataAsync();
             }
-
-            try
+            if (_catalogDirty || Produits.Count == 0)
             {
-                var message = $"Test depuis la Caisse ({_services.Poste.NomPoste}) à {DateTime.Now:HH:mm:ss}";
-                await _syncClient.NotifyTestPing(message);
-                MessageBox.Show(owner,
-                    "Ping envoyé avec succès. Vérifiez l'interface Web Administrateur.", 
-                    "Test de Synchronisation", 
-                    MessageBoxButton.OK, 
-                    MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                AppLog.Warn("Commandes", $"Ping de synchronisation impossible : {ex.Message}");
-                MessageBox.Show(owner,
-                    $"❌ Erreur lors de l'envoi du ping : {ex.Message}", 
-                    "Erreur", 
-                    MessageBoxButton.OK, 
-                    MessageBoxImage.Error);
+                _ = LoadCatalogAsync();
             }
         }
 
@@ -448,13 +543,12 @@ namespace SystemeCaisse.UI.ViewModels
                 var entrepriseTask = _services.Catalog.GetEntrepriseAsync();
                 await Task.WhenAll(productsTask, promosTask, entrepriseTask);
 
-                Produits.Clear();
-                foreach (var p in productsTask.Result) Produits.Add(p);
+                Produits = productsTask.Result;
                 _activePromotions = promosTask.Result;
                 _entreprise = entrepriseTask.Result;
-                OnPropertyChanged(nameof(TopProducts));
+                _catalogDirty = false;
 
-                if (IsNewCommandeMode)
+                if (IsNewCommandeMode && CommandePanier.Count > 0)
                 {
                     ApplyCommandePromotions();
                     UpdateCommandeTotal();
@@ -466,6 +560,13 @@ namespace SystemeCaisse.UI.ViewModels
             }
         }
 
+        private IEnumerable<Produit> GetCatalogProducts()
+        {
+            if (Produits.Count > 0) return Produits;
+            if (_mainViewModel?.Produits != null) return _mainViewModel.Produits;
+            return Array.Empty<Produit>();
+        }
+
         /// <summary>
         /// Recharge la liste. Statut, dates et recherche sont filtrés PAR LA BASE ; paiement et ville
         /// (propriétés calculées) en mémoire. Seul le résultat de la dernière demande est affiché.
@@ -473,18 +574,21 @@ namespace SystemeCaisse.UI.ViewModels
         public async Task LoadDataAsync(bool debounce = false)
         {
             int version = Interlocked.Increment(ref _loadVersion);
-            if (debounce) await Task.Delay(300);
+            if (debounce) await Task.Delay(250);
             if (version != _loadVersion) return;
 
             var filter = new CommandeFilter
             {
-                Statut = StatutFilter switch
-                {
-                    "En attente" => "en_attente",
-                    "Traitée" => "traitee",
-                    "Annulée" => "annulee",
-                    _ => null
-                },
+                Statut = IsTrashMode
+                    ? "supprimee"
+                    : (StatutFilter switch
+                    {
+                        "En attente" => "en_attente",
+                        "Validée" => "validee",
+                        "Traitée" => "traitee",
+                        "Annulée" => "annulee",
+                        _ => null
+                    }),
                 DateDebut = DateDebut,
                 DateFin = DateFin,
                 Recherche = SearchText,
@@ -495,57 +599,61 @@ namespace SystemeCaisse.UI.ViewModels
 
             try
             {
-                var commandesList = await _services.Commandes.SearchAsync(filter);
-                if (version != _loadVersion) return; // une demande plus récente est en cours
-
-                if (paiementFilter != "Tous")
+                var commandesList = await Task.Run(async () =>
                 {
-                    commandesList = paiementFilter switch
-                    {
-                        "Réglé" => commandesList.Where(c => c.StatutPaiement == "regle").ToList(),
-                        "Partiel" => commandesList.Where(c => c.StatutPaiement == "partiel").ToList(),
-                        "Non réglé" => commandesList.Where(c => c.StatutPaiement == "non_regle").ToList(),
-                        _ => commandesList
-                    };
-                }
+                    var list = await _services.Commandes.SearchAsync(filter);
 
-                // Ville/CP filter
-                if (villeFilters.Count > 0)
-                {
-                    commandesList = commandesList.Where(c =>
+                    if (paiementFilter != "Tous")
                     {
-                        string cp = (c.CodePostal ?? "").Trim().ToUpper();
-                        string ville = (c.Ville ?? "").Trim().ToUpper();
-                        string villeCP = (c.VilleCodePostal ?? "").Trim().ToUpper();
-
-                        return villeFilters.Any(filter =>
+                        list = paiementFilter switch
                         {
-                            string f = filter.Trim().ToUpper();
-                            // Direct match on VilleCodePostal display
-                            if (villeCP == f) return true;
-                            // Match on ville name or CP contained in the filter
-                            if (!string.IsNullOrEmpty(cp) && f.Contains(cp)) return true;
-                            if (!string.IsNullOrEmpty(ville) && f.Contains(ville)) return true;
-                            // Also check if commande's villeCP contains the filter
-                            if (!string.IsNullOrEmpty(villeCP) && villeCP.Contains(f)) return true;
-                            return false;
-                        });
-                    }).ToList();
-                }
+                            "Réglé" => list.Where(c => c.StatutPaiement == "regle").ToList(),
+                            "Partiel" => list.Where(c => c.StatutPaiement == "partiel").ToList(),
+                            "Non réglé" => list.Where(c => c.StatutPaiement == "non_regle").ToList(),
+                            _ => list
+                        };
+                    }
+
+                    if (villeFilters.Count > 0)
+                    {
+                        list = list.Where(c =>
+                        {
+                            string cp = (c.CodePostal ?? "").Trim().ToUpper();
+                            string ville = (c.Ville ?? "").Trim().ToUpper();
+                            string villeCP = (c.VilleCodePostal ?? "").Trim().ToUpper();
+
+                            return villeFilters.Any(fRaw =>
+                            {
+                                string f = fRaw.Trim().ToUpper();
+                                if (villeCP == f) return true;
+                                if (!string.IsNullOrEmpty(cp) && f.Contains(cp)) return true;
+                                if (!string.IsNullOrEmpty(ville) && f.Contains(ville)) return true;
+                                if (!string.IsNullOrEmpty(villeCP) && villeCP.Contains(f)) return true;
+                                return false;
+                            });
+                        }).ToList();
+                    }
+
+                    foreach (var c in list)
+                    {
+                        c.PropertyChanged += Commande_IsSelectedChanged;
+                    }
+
+                    return list;
+                });
+
+                if (version != _loadVersion) return;
 
                 int? selectedId = SelectedCommande?.Id;
                 foreach (var old in Commandes) old.PropertyChanged -= Commande_IsSelectedChanged;
-                Commandes.Clear();
-                foreach (var c in commandesList)
-                {
-                    c.PropertyChanged += Commande_IsSelectedChanged;
-                    Commandes.Add(c);
-                }
+
+                Commandes = new ObservableCollection<Commande>(commandesList);
                 OnPropertyChanged(nameof(Commandes));
                 UpdateRecapSummary();
                 NotifySelectionChanged();
                 if (selectedId.HasValue) SelectedCommande = Commandes.FirstOrDefault(c => c.Id == selectedId.Value);
                 LastLoaded = DateTime.Now;
+                _commandesDirty = false;
             }
             catch (Exception ex)
             {
@@ -553,38 +661,179 @@ namespace SystemeCaisse.UI.ViewModels
             }
         }
 
-        // ─── New Commande ───
-        private void StartNewCommande()
+        private void ToggleTrashMode()
         {
-            IsNewCommandeMode = true;
+            IsTrashMode = !IsTrashMode;
+            SelectedCommande = null;
+            _ = LoadDataAsync();
+        }
+
+        // ─── New Commande & Commandes regroupées ───
+        private SubClientGroup CreateSubClientGroup(string nom)
+        {
+            var group = new SubClientGroup(nom);
+            string prevNom = nom;
+            group.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(SubClientGroup.Nom))
+                {
+                    string newNom = group.Nom;
+                    if (!string.IsNullOrWhiteSpace(newNom) && newNom != prevNom)
+                    {
+                        foreach (var item in CommandePanier.Where(i => i.ClientNom == prevNom))
+                        {
+                            item.ClientNom = newNom;
+                        }
+                        prevNom = newNom;
+                        UpdateCommandeTotal();
+                    }
+                }
+            };
+            return group;
+        }
+
+        private void StartNewCommande(bool grouped = false)
+        {
+            _editingCommandeId = null;
+            _suppressPanierEvents = true;
             CommandePanier.Clear();
+            _suppressPanierEvents = false;
+
+            IsGroupedCommandeMode = grouped;
+            SubClients.Clear();
+            if (grouped)
+            {
+                var c1 = CreateSubClientGroup("Client 1");
+                var c2 = CreateSubClientGroup("Client 2");
+                SubClients.Add(c1);
+                SubClients.Add(c2);
+                SelectedSubClient = c1;
+            }
+            else
+            {
+                SelectedSubClient = null;
+            }
+
+            NewCommandeSearchText = string.Empty;
+            IsSearchDropDownOpen = false;
             MontantPaye = 0;
             AvecLivraison = false;
             MontantLivraison = 0;
-            _clientNom = _clientPrenom = _clientTelephone = _clientAdresse = _clientVille = _clientCodePostal = string.Empty;
-            _ = LoadCatalogAsync(); // prix et promotions à jour (les autres postes ont pu les modifier)
+            _clientNom = _clientPrenom = _clientTelephone = _clientAdresse = _clientVille = _clientCodePostal = _clientCommentaire = string.Empty;
+            UpdateCommandeTotal();
+
+            IsNewCommandeMode = true;
+
+            if (_catalogDirty || Produits.Count == 0)
+            {
+                _ = LoadCatalogAsync();
+            }
+        }
+
+        private void EnableGroupedMode()
+        {
+            if (IsGroupedCommandeMode) return;
+            IsGroupedCommandeMode = true;
+            SubClients.Clear();
+            var c1 = CreateSubClientGroup("Client 1");
+            var c2 = CreateSubClientGroup("Client 2");
+            SubClients.Add(c1);
+            SubClients.Add(c2);
+            SelectedSubClient = c1;
+
+            foreach (var item in CommandePanier)
+            {
+                if (string.IsNullOrWhiteSpace(item.ClientNom))
+                    item.ClientNom = c1.Nom;
+            }
+            UpdateCommandeTotal();
+        }
+
+        private void AddSubClient()
+        {
+            if (!IsGroupedCommandeMode)
+            {
+                EnableGroupedMode();
+                return;
+            }
+
+            int nextNum = SubClients.Count + 1;
+            while (SubClients.Any(c => string.Equals(c.Nom, $"Client {nextNum}", StringComparison.OrdinalIgnoreCase)))
+                nextNum++;
+
+            var nextClient = CreateSubClientGroup($"Client {nextNum}");
+            SubClients.Add(nextClient);
+            SelectedSubClient = nextClient;
+            UpdateCommandeTotal();
+        }
+
+        private void RemoveSubClient(SubClientGroup? group)
+        {
+            if (group == null || SubClients.Count <= 1) return;
+
+            var toRemove = CommandePanier.Where(i => i.ClientNom == group.Nom).ToList();
+            _suppressPanierEvents = true;
+            foreach (var item in toRemove)
+                CommandePanier.Remove(item);
+            _suppressPanierEvents = false;
+
+            SubClients.Remove(group);
+            if (SelectedSubClient == group)
+                SelectedSubClient = SubClients.FirstOrDefault();
+
+            ApplyCommandePromotions();
             UpdateCommandeTotal();
         }
 
         private void CancelNewCommande()
         {
-            // If editing, restore original commande (it was never deleted)
-            if (_editingCommandeId.HasValue)
-            {
-                _editingCommandeId = null;
-            }
+            _editingCommandeId = null;
             IsNewCommandeMode = false;
+            IsGroupedCommandeMode = false;
+            SubClients.Clear();
+            SelectedSubClient = null;
+
+            _suppressPanierEvents = true;
             CommandePanier.Clear();
+            _suppressPanierEvents = false;
+
+            NewCommandeSearchText = string.Empty;
+            IsSearchDropDownOpen = false;
             MontantPaye = 0;
             AvecLivraison = false;
             MontantLivraison = 0;
+            _clientCommentaire = string.Empty;
             CommandeModePaiement = "en_ligne";
-            _ = LoadDataAsync();
+            UpdateCommandeTotal();
+        }
+
+        private void InsertCartItemGrouped(CartItemViewModel newItem, string? clientTag)
+        {
+            if (!IsGroupedCommandeMode || string.IsNullOrWhiteSpace(clientTag))
+            {
+                CommandePanier.Add(newItem);
+                return;
+            }
+
+            // Insérer juste après le dernier article du même sous-client pour garder Client 1 puis Client 2, etc.
+            int lastIdx = -1;
+            for (int i = 0; i < CommandePanier.Count; i++)
+            {
+                if (CommandePanier[i].ClientNom == clientTag)
+                    lastIdx = i;
+            }
+
+            if (lastIdx >= 0 && lastIdx < CommandePanier.Count - 1)
+                CommandePanier.Insert(lastIdx + 1, newItem);
+            else
+                CommandePanier.Add(newItem);
         }
 
         private void AddToCommandePanier(Produit produit)
         {
             bool isWeight = string.Equals(produit.TypeVente?.Trim(), "poids", StringComparison.OrdinalIgnoreCase);
+            string? clientTag = IsGroupedCommandeMode ? (SelectedSubClient?.Nom ?? "Client 1") : null;
+            string unite = isWeight ? "kg" : "pce";
 
             if (isWeight)
             {
@@ -595,7 +844,7 @@ namespace SystemeCaisse.UI.ViewModels
                 dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
                 if (dialog.ShowDialog() == true)
                 {
-                    var existing = CommandePanier.FirstOrDefault(i => i.Produit.Id == produit.Id);
+                    var existing = CommandePanier.FirstOrDefault(i => i.Produit.Id == produit.Id && i.ClientNom == clientTag);
                     if (existing != null)
                     {
                         existing.Quantite += dialog.PoidsSaisi;
@@ -613,13 +862,14 @@ namespace SystemeCaisse.UI.ViewModels
                             TotalLigne = produit.PrixVente * dialog.PoidsSaisi,
                             TaxTier = produit.TaxTier
                         };
-                        CommandePanier.Add(new CartItemViewModel(ligne));
+                        var cartItem = new CartItemViewModel(ligne) { ClientNom = clientTag, Unite = unite };
+                        InsertCartItemGrouped(cartItem, clientTag);
                     }
                 }
             }
             else
             {
-                var existing = CommandePanier.FirstOrDefault(i => i.Produit.Id == produit.Id);
+                var existing = CommandePanier.FirstOrDefault(i => i.Produit.Id == produit.Id && i.ClientNom == clientTag);
                 if (existing != null)
                 {
                     existing.Quantite += 1;
@@ -637,7 +887,8 @@ namespace SystemeCaisse.UI.ViewModels
                         TotalLigne = produit.PrixVente,
                         TaxTier = produit.TaxTier
                     };
-                    CommandePanier.Add(new CartItemViewModel(ligne));
+                    var cartItem = new CartItemViewModel(ligne) { ClientNom = clientTag, Unite = unite };
+                    InsertCartItemGrouped(cartItem, clientTag);
                 }
             }
             UpdateCommandeTotal();
@@ -647,36 +898,74 @@ namespace SystemeCaisse.UI.ViewModels
         {
             if (string.IsNullOrWhiteSpace(NewCommandeSearchText)) return;
             var code = NewCommandeSearchText.Trim();
-            var product = Produits.FirstOrDefault(p => p.CodeBarre == code);
+            var catalog = GetCatalogProducts();
+            var product = catalog.FirstOrDefault(p => p.Actif && p.CodeBarre == code);
             if (product == null && int.TryParse(code, out int id) && id < 10000)
-                product = Produits.FirstOrDefault(p => p.Id == id);
+                product = catalog.FirstOrDefault(p => p.Actif && p.Id == id);
             if (product != null)
             {
                 AddToCommandePanier(product);
                 NewCommandeSearchText = string.Empty;
                 IsSearchDropDownOpen = false;
-                SearchSuggestions.Clear();
+                if (SearchSuggestions.Count > 0)
+                {
+                    SearchSuggestions = new List<Produit>();
+                    OnPropertyChanged(nameof(SearchSuggestions));
+                }
             }
         }
 
-        private void UpdateNewCommandeSearchSuggestions()
+        private void UpdateNewCommandeSearchSuggestions(string search)
         {
-            if (string.IsNullOrWhiteSpace(NewCommandeSearchText) || NewCommandeSearchText.Length < 1)
+            if (string.IsNullOrWhiteSpace(search))
             {
-                SearchSuggestions.Clear();
                 IsSearchDropDownOpen = false;
+                if (SearchSuggestions.Count > 0)
+                {
+                    SearchSuggestions = new List<Produit>();
+                    OnPropertyChanged(nameof(SearchSuggestions));
+                }
                 return;
             }
 
-            string q = NewCommandeSearchText.ToLower().Trim();
-            var matches = Produits
-                .Where(p => p.Nom.ToLower().Contains(q) || (p.CodeBarre != null && p.CodeBarre.Contains(q)))
-                .Take(10)
-                .ToList();
+            var catalog = GetCatalogProducts();
+            var startsWithMatches = new List<Produit>(35);
+            var containsMatches = new List<Produit>(35);
 
-            SearchSuggestions.Clear();
-            foreach (var m in matches) SearchSuggestions.Add(m);
-            IsSearchDropDownOpen = matches.Any();
+            foreach (var p in catalog)
+            {
+                if (!p.Actif) continue;
+
+                bool nameStarts = p.Nom != null && p.Nom.StartsWith(search, StringComparison.OrdinalIgnoreCase);
+                if (nameStarts)
+                {
+                    startsWithMatches.Add(p);
+                    if (startsWithMatches.Count >= 35) break;
+                    continue;
+                }
+
+                bool nameContains = p.Nom != null && p.Nom.Contains(search, StringComparison.OrdinalIgnoreCase);
+                bool codeContains = p.CodeBarre != null && p.CodeBarre.Contains(search, StringComparison.OrdinalIgnoreCase);
+                if (nameContains || codeContains)
+                {
+                    containsMatches.Add(p);
+                }
+            }
+
+            var results = new List<Produit>(35);
+            results.AddRange(startsWithMatches);
+            if (results.Count < 35 && containsMatches.Count > 0)
+            {
+                int remaining = 35 - results.Count;
+                for (int i = 0; i < containsMatches.Count && i < remaining; i++)
+                {
+                    results.Add(containsMatches[i]);
+                }
+            }
+
+            SearchSuggestions = results;
+            OnPropertyChanged(nameof(SearchSuggestions));
+            IsSearchDropDownOpen = results.Count > 0;
         }
 
         private void UpdateCommandeTotal()
@@ -688,6 +977,16 @@ namespace SystemeCaisse.UI.ViewModels
             CommandeTotalAvecLivraison = Math.Round(CommandeTotal + (AvecLivraison ? MontantLivraison : 0), 2);
             CommandeRestant = Math.Round(CommandeTotalAvecLivraison - MontantPaye, 2);
             if (CommandeRestant < 0) CommandeRestant = 0;
+
+            if (IsGroupedCommandeMode)
+            {
+                foreach (var sc in SubClients)
+                {
+                    var clientItems = CommandePanier.Where(i => i.ClientNom == sc.Nom).ToList();
+                    sc.Total = clientItems.Sum(i => i.TotalLigne);
+                    sc.NbArticles = (int)Math.Ceiling(clientItems.Sum(i => i.Quantite));
+                }
+            }
         }
 
         // ─── Promotions (reuse MainViewModel logic) ───
@@ -888,7 +1187,8 @@ namespace SystemeCaisse.UI.ViewModels
         {
             var win = new Views.CommandeClientInfoWindow(
                 _clientNom, _clientPrenom, _clientTelephone, 
-                _clientAdresse, _clientVille, _clientCodePostal);
+                _clientAdresse, _clientVille, _clientCodePostal,
+                _clientCommentaire);
             win.Owner = WindowHelper.GetAdminWindow();
             win.WindowStartupLocation = WindowStartupLocation.CenterOwner;
             var result = win.ShowDialog();
@@ -900,6 +1200,7 @@ namespace SystemeCaisse.UI.ViewModels
             _clientAdresse = win.ClientAdresse;
             _clientVille = win.ClientVille;
             _clientCodePostal = win.ClientCodePostal;
+            _clientCommentaire = win.ClientCommentaire;
 
             if (result == true && win.Action == "confirm")
             {
@@ -918,6 +1219,8 @@ namespace SystemeCaisse.UI.ViewModels
             ProduitId = item.ProduitId,
             ProduitNom = item.ProduitNom,
             CategorieNom = item.Produit.Categorie ?? "Autre",
+            ClientNom = string.IsNullOrWhiteSpace(item.ClientNom) ? null : item.ClientNom.Trim(),
+            Unite = item.Unite,
             PrixUnitaire = item.PrixUnitaire,
             Quantite = item.Quantite,
             TotalLigne = item.TotalLigne,
@@ -925,18 +1228,6 @@ namespace SystemeCaisse.UI.ViewModels
             PromotionAppliquee = item.PromotionAppliquee,
             TaxTier = item.TaxTier
         }).ToList();
-
-        /// <summary>Notification TransitManager en arrière-plan (best-effort : une erreur ne bloque jamais la caisse).</summary>
-        private void NotifySync(Func<SyncClient, Task> action, string what)
-        {
-            var client = _syncClient;
-            if (client == null) return;
-            _ = Task.Run(async () =>
-            {
-                try { await action(client); }
-                catch (Exception ex) { AppLog.Warn("Sync", $"Notification {what} impossible : {ex.Message}"); }
-            });
-        }
 
         private async void SaveCommande()
         {
@@ -950,18 +1241,20 @@ namespace SystemeCaisse.UI.ViewModels
                 var adresse = string.IsNullOrWhiteSpace(_clientAdresse) ? null : _clientAdresse;
                 var ville = string.IsNullOrWhiteSpace(_clientVille) ? null : _clientVille;
                 var codePostal = string.IsNullOrWhiteSpace(_clientCodePostal) ? null : _clientCodePostal;
+                var commentaire = string.IsNullOrWhiteSpace(_clientCommentaire) ? null : _clientCommentaire.Trim();
                 var total = CommandeTotal;
                 var totalRemise = CommandeTotalRemise;
                 var montantPaye = MontantPaye;
                 var avecLivraison = AvecLivraison;
                 var montantLivraison = AvecLivraison ? MontantLivraison : 0;
-                var nbArticles = (int)CommandePanier.Sum(i => i.Quantite);
+                var nbArticles = (int)Math.Ceiling(CommandePanier.Sum(i => i.Quantite));
                 var modePaiement = CommandeModePaiement;
 
                 if (_editingCommandeId.HasValue)
                 {
+                    int editId = _editingCommandeId.Value;
                     // Update existing commande
-                    var updated = await _services.Commandes.UpdateAsync(_editingCommandeId.Value, existing =>
+                    var updated = await _services.Commandes.UpdateAsync(editId, existing =>
                     {
                         existing.Nom = nom;
                         existing.Prenom = prenom;
@@ -969,6 +1262,7 @@ namespace SystemeCaisse.UI.ViewModels
                         existing.Adresse = adresse;
                         existing.Ville = ville;
                         existing.CodePostal = codePostal;
+                        existing.Commentaire = commentaire;
                         existing.Total = total;
                         existing.TotalRemise = totalRemise;
                         existing.MontantPaye = montantPaye;
@@ -978,27 +1272,29 @@ namespace SystemeCaisse.UI.ViewModels
                         existing.ModePaiement = modePaiement;
                     }, lignes);
 
+                    _editingCommandeId = null;
+                    _suppressPanierEvents = true;
+                    CommandePanier.Clear();
+                    _suppressPanierEvents = false;
+                    IsGroupedCommandeMode = false;
+                    SubClients.Clear();
+                    SelectedSubClient = null;
+                    IsNewCommandeMode = false;
+
                     if (updated != null)
                     {
-                        // ── SignalR: notifier TransitManager de la mise à jour ──
-                        var syncDto = CommandeService.MapToSync(updated);
-                        NotifySync(c => c.NotifyOrderUpdated(syncDto), "mise à jour commande");
-
+                        _ = LoadDataAsync();
                         MessageBox.Show(owner,
                             $"Commande {updated.NumeroCommande} mise à jour !",
                             "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                     else
                     {
+                        _ = LoadDataAsync();
                         MessageBox.Show(owner,
                             "Cette commande a été supprimée depuis un autre poste : la modification n'a pas pu être enregistrée.",
                             "Commande introuvable", MessageBoxButton.OK, MessageBoxImage.Warning);
                     }
-
-                    _editingCommandeId = null;
-                    IsNewCommandeMode = false;
-                    CommandePanier.Clear();
-                    _ = LoadDataAsync();
                     return;
                 }
 
@@ -1014,6 +1310,7 @@ namespace SystemeCaisse.UI.ViewModels
                     Adresse = adresse,
                     Ville = ville,
                     CodePostal = codePostal,
+                    Commentaire = commentaire,
                     Total = total,
                     TotalRemise = totalRemise,
                     MontantPaye = montantPaye,
@@ -1030,17 +1327,31 @@ namespace SystemeCaisse.UI.ViewModels
 
                 var created = await _services.Commandes.CreateAsync(commande);
 
-                // ── SignalR: notifier TransitManager de la nouvelle commande ──
-                var createdDto = CommandeService.MapToSync(created);
-                NotifySync(c => c.NotifyOrderCreated(createdDto), "nouvelle commande");
+                _suppressPanierEvents = true;
+                CommandePanier.Clear();
+                _suppressPanierEvents = false;
+                IsGroupedCommandeMode = false;
+                SubClients.Clear();
+                SelectedSubClient = null;
+                IsNewCommandeMode = false;
+
+                // Mise à jour immédiate en mémoire pour une transition instantanée
+                if (!IsTrashMode)
+                {
+                    created.PropertyChanged += Commande_IsSelectedChanged;
+                    Commandes.Insert(0, created);
+                    SelectedCommande = created;
+                    UpdateRecapSummary();
+                    _commandesDirty = false;
+                }
+                else
+                {
+                    _ = LoadDataAsync();
+                }
 
                 MessageBox.Show(owner,
                     $"Commande {created.NumeroCommande} créée avec succès !",
                     "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
-
-                IsNewCommandeMode = false;
-                CommandePanier.Clear();
-                _ = LoadDataAsync();
             }
             catch (Exception ex)
             {
@@ -1069,6 +1380,25 @@ namespace SystemeCaisse.UI.ViewModels
             _printService.PrintCommandeTicket(SelectedCommande, entreprise);
         }
 
+        /// <summary>Bouton rapide Validé en 1 clic dans le détail de commande.</summary>
+        private async void QuickValidate()
+        {
+            var selected = SelectedCommande;
+            if (selected == null) return;
+            var owner = WindowHelper.GetAdminWindow();
+
+            try
+            {
+                await _services.Commandes.ChangeStatusAsync(new[] { selected.Id }, "validee");
+                await LoadDataAsync();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error("Commandes", "Validation rapide impossible", ex);
+                MessageBox.Show(owner, $"Erreur : {ex.InnerException?.Message ?? ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private async void ChangeStatus(string newStatus)
         {
             var selected = SelectedCommande;
@@ -1076,7 +1406,9 @@ namespace SystemeCaisse.UI.ViewModels
             var owner = WindowHelper.GetAdminWindow();
             string displayStatus = newStatus switch
             {
+                "validee" => "Validée",
                 "traitee" => "Traitée",
+                "en_attente" => "En attente",
                 "annulee" => "Annulée",
                 _ => newStatus
             };
@@ -1101,6 +1433,12 @@ namespace SystemeCaisse.UI.ViewModels
 
         private async void DeleteCommande()
         {
+            if (IsTrashMode)
+            {
+                PermanentDeleteCommande();
+                return;
+            }
+
             var selected = SelectedCommande;
             if (selected == null) return;
             var owner = WindowHelper.GetAdminWindow();
@@ -1110,8 +1448,55 @@ namespace SystemeCaisse.UI.ViewModels
                 : selected.NumeroCommande;
 
             if (MessageBox.Show(owner,
-                $"Supprimer définitivement la commande {displayName} ?",
-                "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+                $"Mettre la commande {displayName} dans la corbeille ?",
+                "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                return;
+
+            try
+            {
+                await _services.Commandes.ChangeStatusAsync(new[] { selected.Id }, "supprimee");
+                SelectedCommande = null;
+                await LoadDataAsync();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error("Commandes", "Mise à la corbeille impossible", ex);
+                MessageBox.Show(owner, $"Erreur : {ex.InnerException?.Message ?? ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void RestoreCommande()
+        {
+            var selected = SelectedCommande;
+            if (selected == null) return;
+            var owner = WindowHelper.GetAdminWindow();
+
+            try
+            {
+                await _services.Commandes.ChangeStatusAsync(new[] { selected.Id }, "en_attente");
+                SelectedCommande = null;
+                await LoadDataAsync();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error("Commandes", "Restauration de la commande impossible", ex);
+                MessageBox.Show(owner, $"Erreur : {ex.InnerException?.Message ?? ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void PermanentDeleteCommande()
+        {
+            var selected = SelectedCommande;
+            if (selected == null) return;
+            var owner = WindowHelper.GetAdminWindow();
+
+            string displayName = string.IsNullOrWhiteSpace(selected.NumeroCommande)
+                ? $"(commande sans données, ID={selected.Id})"
+                : selected.NumeroCommande;
+
+            if (MessageBox.Show(owner,
+                $"Supprimer définitivement la commande {displayName} ?\nCette action est irréversible.",
+                "Suppression définitive", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
                 return;
 
             try
@@ -1122,7 +1507,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
             catch (Exception ex)
             {
-                AppLog.Error("Commandes", "Suppression de la commande impossible", ex);
+                AppLog.Error("Commandes", "Suppression définitive de la commande impossible", ex);
                 MessageBox.Show(owner, $"Erreur : {ex.InnerException?.Message ?? ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -1158,12 +1543,11 @@ namespace SystemeCaisse.UI.ViewModels
             // Store the ID for update (do NOT delete the commande)
             _editingCommandeId = SelectedCommande.Id;
 
-            // Prix et promotions à jour avant de reconstruire le panier
-            await LoadCatalogAsync();
-            if (SelectedCommande == null) return;
-
-            // Load into panier for editing
-            IsNewCommandeMode = true;
+            if (_catalogDirty || Produits.Count == 0)
+            {
+                await LoadCatalogAsync();
+                if (SelectedCommande == null) return;
+            }
 
             _clientNom = SelectedCommande.Nom;
             _clientPrenom = SelectedCommande.Prenom;
@@ -1171,20 +1555,46 @@ namespace SystemeCaisse.UI.ViewModels
             _clientAdresse = SelectedCommande.Adresse ?? "";
             _clientVille = SelectedCommande.Ville ?? "";
             _clientCodePostal = SelectedCommande.CodePostal ?? "";
+            _clientCommentaire = SelectedCommande.Commentaire ?? "";
             AvecLivraison = SelectedCommande.AvecLivraison;
             MontantLivraison = SelectedCommande.MontantLivraison;
             MontantPaye = SelectedCommande.MontantPaye;
             CommandeModePaiement = SelectedCommande.ModePaiement ?? "espece";
 
+            var catalog = GetCatalogProducts();
+            bool isGrouped = SelectedCommande.IsGroupedCommande;
+            IsGroupedCommandeMode = isGrouped;
+            SubClients.Clear();
+
+            if (isGrouped)
+            {
+                var distinctClients = SelectedCommande.Lignes
+                    .Select(l => string.IsNullOrWhiteSpace(l.ClientNom) ? "Client 1" : l.ClientNom.Trim())
+                    .Distinct()
+                    .ToList();
+
+                foreach (var cName in distinctClients)
+                {
+                    SubClients.Add(CreateSubClientGroup(cName));
+                }
+                SelectedSubClient = SubClients.FirstOrDefault();
+            }
+            else
+            {
+                SelectedSubClient = null;
+            }
+
+            _suppressPanierEvents = true;
             CommandePanier.Clear();
             foreach (var ligne in SelectedCommande.Lignes)
             {
-                var produit = Produits.FirstOrDefault(p => p.Id == ligne.ProduitId) ?? new Produit
+                var produit = catalog.FirstOrDefault(p => p.Id == ligne.ProduitId) ?? new Produit
                 {
                     Id = ligne.ProduitId ?? 0,
                     Nom = ligne.ProduitNom,
                     PrixVente = ligne.PrixUnitaire,
                     Categorie = ligne.CategorieNom,
+                    TypeVente = string.Equals(ligne.Unite, "kg", StringComparison.OrdinalIgnoreCase) ? "poids" : "unite",
                     TaxTier = ligne.TaxTier
                 };
 
@@ -1199,11 +1609,22 @@ namespace SystemeCaisse.UI.ViewModels
                     TotalLigne = ligne.TotalLigne,
                     TaxTier = ligne.TaxTier
                 };
-                CommandePanier.Add(new CartItemViewModel(lv));
+                string? clientTag = isGrouped
+                    ? (string.IsNullOrWhiteSpace(ligne.ClientNom) ? "Client 1" : ligne.ClientNom.Trim())
+                    : null;
+                CommandePanier.Add(new CartItemViewModel(lv)
+                {
+                    ClientNom = clientTag,
+                    Unite = ligne.UniteDisplay
+                });
             }
+            _suppressPanierEvents = false;
 
             ApplyCommandePromotions();
             UpdateCommandeTotal();
+
+            // Switch to edit view after items are prepared
+            IsNewCommandeMode = true;
         }
 
         // ─── New features ───
@@ -1240,14 +1661,13 @@ namespace SystemeCaisse.UI.ViewModels
             _dateFin = null;
             OnPropertyChanged(nameof(DateFin));
             VilleCPFilterList = new List<string>();
-            NewOrderCount = 0;
         }
 
         private void PrintRecap()
         {
             if (Commandes.Count == 0) return;
             var entreprise = GetEntreprise();
-            var win = new Views.CommandeRecapWindow(Commandes.ToList(), _printService, entreprise);
+            var win = new Views.CommandeRecapWindow(Commandes.ToList(), _printService, entreprise, GetCatalogProducts());
             win.Owner = WindowHelper.GetAdminWindow();
             win.WindowStartupLocation = WindowStartupLocation.CenterOwner;
             win.ShowDialog();
@@ -1380,6 +1800,8 @@ namespace SystemeCaisse.UI.ViewModels
                 Id = Guid.NewGuid(),
                 Date = DateTime.Now,
                 Items = CommandePanier.ToList(),
+                IsGrouped = IsGroupedCommandeMode,
+                SubClientNames = SubClients.Select(s => s.Nom).ToList(),
                 MontantPaye = MontantPaye,
                 AvecLivraison = AvecLivraison,
                 MontantLivraison = MontantLivraison,
@@ -1389,6 +1811,7 @@ namespace SystemeCaisse.UI.ViewModels
                 ClientAdresse = _clientAdresse,
                 ClientVille = _clientVille,
                 ClientCodePostal = _clientCodePostal,
+                ClientCommentaire = _clientCommentaire,
                 ModePaiement = _commandeModePaiement,
                 Total = CommandeTotalAvecLivraison
             };
@@ -1397,11 +1820,13 @@ namespace SystemeCaisse.UI.ViewModels
             OnPropertyChanged(nameof(HasSuspendedCommandes));
 
             // Clear panier but stay in new commande mode
+            _suppressPanierEvents = true;
             CommandePanier.Clear();
+            _suppressPanierEvents = false;
             MontantPaye = 0;
             AvecLivraison = false;
             MontantLivraison = 0;
-            _clientNom = _clientPrenom = _clientTelephone = _clientAdresse = _clientVille = _clientCodePostal = string.Empty;
+            _clientNom = _clientPrenom = _clientTelephone = _clientAdresse = _clientVille = _clientCodePostal = _clientCommentaire = string.Empty;
             CommandeModePaiement = "en_ligne";
             UpdateCommandeTotal();
         }
@@ -1415,19 +1840,32 @@ namespace SystemeCaisse.UI.ViewModels
                 suspended = SuspendedCommandes[0];
             else if (SuspendedCommandes.Count > 1)
             {
-                // Let user pick
                 var list = SuspendedCommandes.ToList();
-                var msg = string.Join("\n", list.Select((x, i) => $"{i + 1}. {x.Label}"));
-                // Simple: resume the first one
                 suspended = list[0];
             }
 
             if (suspended == null) return;
 
+            IsGroupedCommandeMode = suspended.IsGrouped;
+            SubClients.Clear();
+            if (suspended.IsGrouped && suspended.SubClientNames.Count > 0)
+            {
+                foreach (var name in suspended.SubClientNames)
+                    SubClients.Add(CreateSubClientGroup(name));
+                SelectedSubClient = SubClients.FirstOrDefault();
+            }
+            else
+            {
+                SelectedSubClient = null;
+            }
+
             // Restore
+            _suppressPanierEvents = true;
             CommandePanier.Clear();
             foreach (var item in suspended.Items)
                 CommandePanier.Add(item);
+            _suppressPanierEvents = false;
+
             MontantPaye = suspended.MontantPaye;
             AvecLivraison = suspended.AvecLivraison;
             MontantLivraison = suspended.MontantLivraison;
@@ -1437,6 +1875,7 @@ namespace SystemeCaisse.UI.ViewModels
             _clientAdresse = suspended.ClientAdresse;
             _clientVille = suspended.ClientVille;
             _clientCodePostal = suspended.ClientCodePostal;
+            _clientCommentaire = suspended.ClientCommentaire;
             CommandeModePaiement = suspended.ModePaiement;
 
             SuspendedCommandes.Remove(suspended);
@@ -1476,6 +1915,7 @@ namespace SystemeCaisse.UI.ViewModels
 
             string displayStatus = newStatus switch
             {
+                "validee" => "Validée",
                 "traitee" => "Traitée",
                 "en_attente" => "En attente",
                 "annulee" => "Annulée",
@@ -1502,12 +1942,59 @@ namespace SystemeCaisse.UI.ViewModels
 
         private async void BatchDelete()
         {
+            if (IsTrashMode)
+            {
+                BatchPermanentDelete();
+                return;
+            }
+
             var selected = SelectedCommandes;
             if (selected.Count == 0) return;
 
             if (MessageBox.Show(WindowHelper.GetAdminWindow(),
-                $"Supprimer définitivement {selected.Count} commande(s) ?",
-                "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+                $"Mettre {selected.Count} commande(s) dans la corbeille ?",
+                "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                return;
+
+            try
+            {
+                await _services.Commandes.ChangeStatusAsync(selected.Select(c => c.Id).ToList(), "supprimee");
+                SelectedCommande = null;
+                await LoadDataAsync();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error("Commandes", "Mise à la corbeille groupée impossible", ex);
+                MessageBox.Show(WindowHelper.GetAdminWindow(), $"Erreur : {ex.InnerException?.Message ?? ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void BatchRestore()
+        {
+            var selected = SelectedCommandes;
+            if (selected.Count == 0) return;
+
+            try
+            {
+                await _services.Commandes.ChangeStatusAsync(selected.Select(c => c.Id).ToList(), "en_attente");
+                SelectedCommande = null;
+                await LoadDataAsync();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error("Commandes", "Restauration groupée impossible", ex);
+                MessageBox.Show(WindowHelper.GetAdminWindow(), $"Erreur : {ex.InnerException?.Message ?? ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void BatchPermanentDelete()
+        {
+            var selected = SelectedCommandes;
+            if (selected.Count == 0) return;
+
+            if (MessageBox.Show(WindowHelper.GetAdminWindow(),
+                $"Supprimer définitivement {selected.Count} commande(s) ?\nCette action est irréversible.",
+                "Suppression définitive", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
                 return;
 
             try
@@ -1518,7 +2005,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
             catch (Exception ex)
             {
-                AppLog.Error("Commandes", "Suppression groupée impossible", ex);
+                AppLog.Error("Commandes", "Suppression définitive groupée impossible", ex);
                 MessageBox.Show(WindowHelper.GetAdminWindow(), $"Erreur : {ex.InnerException?.Message ?? ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -1539,7 +2026,7 @@ namespace SystemeCaisse.UI.ViewModels
             var selected = SelectedCommandes;
             if (selected.Count == 0) return;
             var entreprise = GetEntreprise();
-            var win = new Views.CommandeRecapWindow(selected, _printService, entreprise);
+            var win = new Views.CommandeRecapWindow(selected, _printService, entreprise, GetCatalogProducts());
             win.Owner = WindowHelper.GetAdminWindow();
             win.WindowStartupLocation = WindowStartupLocation.CenterOwner;
             win.ShowDialog();
@@ -1548,19 +2035,42 @@ namespace SystemeCaisse.UI.ViewModels
         // ─── Recap Summary (bottom bar) ───
         private void UpdateRecapSummary()
         {
-            var list = Commandes.ToList();
-            CommandesCount = list.Count;
-            CommandesRegleCount = list.Count(c => c.StatutPaiement == "regle");
-            CommandesPartielCount = list.Count(c => c.StatutPaiement == "partiel");
-            CommandesNonRegleCount = list.Count(c => c.StatutPaiement == "non_regle");
+            int regle = 0, partiel = 0, nonRegle = 0;
+            decimal cb = 0, espece = 0, enLigne = 0, wero = 0, virement = 0, surPlace = 0, general = 0;
 
-            // Amounts by payment mode
-            TotalCB = list.Where(c => c.ModePaiement == "cb").Sum(c => c.MontantPaye);
-            TotalEspece = list.Where(c => c.ModePaiement == "espece").Sum(c => c.MontantPaye);
-            TotalEnLigne = list.Where(c => c.ModePaiement == "en_ligne").Sum(c => c.MontantPaye);
-            TotalWero = list.Where(c => c.ModePaiement == "wero").Sum(c => c.MontantPaye);
-            TotalVirement = list.Where(c => c.ModePaiement == "virement").Sum(c => c.MontantPaye);
-            TotalGeneral = list.Sum(c => c.TotalAvecLivraison);
+            foreach (var c in Commandes)
+            {
+                switch (c.StatutPaiement)
+                {
+                    case "regle": regle++; break;
+                    case "partiel": partiel++; break;
+                    case "non_regle": nonRegle++; break;
+                }
+
+                switch (c.ModePaiement)
+                {
+                    case "cb": cb += c.MontantPaye; break;
+                    case "espece": espece += c.MontantPaye; break;
+                    case "en_ligne": enLigne += c.MontantPaye; break;
+                    case "wero": wero += c.MontantPaye; break;
+                    case "virement": virement += c.MontantPaye; break;
+                    case "sur_place": surPlace += c.MontantPaye; break;
+                }
+
+                general += c.TotalAvecLivraison;
+            }
+
+            CommandesCount = Commandes.Count;
+            CommandesRegleCount = regle;
+            CommandesPartielCount = partiel;
+            CommandesNonRegleCount = nonRegle;
+            TotalCB = cb;
+            TotalEspece = espece;
+            TotalEnLigne = enLigne;
+            TotalWero = wero;
+            TotalVirement = virement;
+            TotalSurPlace = surPlace;
+            TotalGeneral = general;
         }
 
         // ─── Client Recap ───
@@ -1580,11 +2090,87 @@ namespace SystemeCaisse.UI.ViewModels
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
+    /// <summary>Représente un sous-client dans une commande regroupée (ex: Client 1, Client 2...).</summary>
+    public class SubClientGroup : INotifyPropertyChanged
+    {
+        private string _nom;
+        public string Nom
+        {
+            get => _nom;
+            set
+            {
+                if (_nom != value)
+                {
+                    _nom = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(DisplayBadge));
+                }
+            }
+        }
+
+        private decimal _total;
+        public decimal Total
+        {
+            get => _total;
+            set
+            {
+                if (_total != value)
+                {
+                    _total = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(DisplayBadge));
+                }
+            }
+        }
+
+        private int _nbArticles;
+        public int NbArticles
+        {
+            get => _nbArticles;
+            set
+            {
+                if (_nbArticles != value)
+                {
+                    _nbArticles = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(DisplayBadge));
+                }
+            }
+        }
+
+        private bool _isSelected;
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set
+            {
+                if (_isSelected != value)
+                {
+                    _isSelected = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string DisplayBadge => $"{Nom} ({Total:0.00} €)";
+
+        public SubClientGroup(string nom)
+        {
+            _nom = nom;
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        protected void OnPropertyChanged([CallerMemberName] string? name = null)
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    }
+
     public class SuspendedCommande
     {
         public Guid Id { get; set; }
         public DateTime Date { get; set; }
         public List<CartItemViewModel> Items { get; set; } = new();
+        public bool IsGrouped { get; set; }
+        public List<string> SubClientNames { get; set; } = new();
         public decimal MontantPaye { get; set; }
         public bool AvecLivraison { get; set; }
         public decimal MontantLivraison { get; set; }
@@ -1594,6 +2180,7 @@ namespace SystemeCaisse.UI.ViewModels
         public string ClientAdresse { get; set; } = string.Empty;
         public string ClientVille { get; set; } = string.Empty;
         public string ClientCodePostal { get; set; } = string.Empty;
+        public string ClientCommentaire { get; set; } = string.Empty;
         public string ModePaiement { get; set; } = "en_ligne";
         public decimal Total { get; set; }
         public string Label { get; set; } = string.Empty;

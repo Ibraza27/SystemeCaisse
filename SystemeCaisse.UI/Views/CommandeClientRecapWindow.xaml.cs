@@ -107,6 +107,13 @@ namespace SystemeCaisse.UI.Views
 
             // Header
             var headerPara = new Paragraph { TextAlignment = TextAlignment.Center };
+            var bwLogo = PrintService.LoadBlackAndWhiteLogo(_entreprise.LogoPath);
+            if (bwLogo != null)
+            {
+                var image = new Image { Source = bwLogo, Width = 80, Height = 80, Stretch = Stretch.Uniform };
+                headerPara.Inlines.Add(new InlineUIContainer(image));
+                headerPara.Inlines.Add(new LineBreak());
+            }
             headerPara.Inlines.Add(new Bold(new Run(_entreprise.Nom ?? "Magasin")) { FontSize = 14 });
             headerPara.Inlines.Add(new LineBreak());
             headerPara.Inlines.Add(new LineBreak());

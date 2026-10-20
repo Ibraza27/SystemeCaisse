@@ -8,6 +8,10 @@
 *.userosscache
 *.sln.docstates
 BuildOutput/
+publish/
+SystemeCaisse.UI/publish/
+Distribution/
+*.zip
 
 # Binary files
 *.exe
@@ -20,10 +24,15 @@ BuildOutput/
 !PROJECT_GUIDELINES.md
 !README.md
 
-# Data
+# Data & Backups (Sensitive)
 *.db
 *.db-shm
 *.db-wal
+*.caisse-backup
+*.bak
+poste.json
+network_db.json
+network_db_config.json
 
 # Publish & Setup outputs
 publish_*/
@@ -39,9 +48,12 @@ SAVE/
 *.csv
 *.xlsx
 
-# Certificates (keep on disk, not in repo)
+# Certificates & Secrets (keep on disk, NEVER in repo)
 *.cer
 *.pfx
+*.key
+*.pem
+.env*
 
 # IDE
 .idea/

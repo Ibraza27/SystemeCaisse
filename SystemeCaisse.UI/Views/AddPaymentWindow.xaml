@@ -35,17 +35,19 @@
 
             <!-- Mode de paiement -->
             <TextBlock Text="Mode de paiement :" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>
-            <UniformGrid Columns="5" Margin="0,0,0,5">
+            <UniformGrid Columns="3" Margin="0,0,0,5">
                 <RadioButton x:Name="rbEspece" Content="💵 Espèce" GroupName="ModePaiement"
-                             FontSize="11" FontWeight="SemiBold" Margin="0,0,3,0" Padding="3,3"/>
+                             FontSize="12" FontWeight="SemiBold" Margin="0,0,3,4" Padding="3,3"/>
                 <RadioButton x:Name="rbVirement" Content="🏦 Virement" GroupName="ModePaiement"
-                             FontSize="11" FontWeight="SemiBold" Margin="3,0,3,0" Padding="3,3"/>
+                             FontSize="12" FontWeight="SemiBold" Margin="3,0,3,4" Padding="3,3"/>
                 <RadioButton x:Name="rbWero" Content="📱 Wero" GroupName="ModePaiement"
-                             FontSize="11" FontWeight="SemiBold" Margin="3,0,3,0" Padding="3,3"/>
+                             FontSize="12" FontWeight="SemiBold" Margin="3,0,0,4" Padding="3,3"/>
                 <RadioButton x:Name="rbCB" Content="💳 CB" GroupName="ModePaiement"
-                             FontSize="11" FontWeight="SemiBold" Margin="3,0,3,0" Padding="3,3"/>
+                             FontSize="12" FontWeight="SemiBold" Margin="0,0,3,0" Padding="3,3"/>
                 <RadioButton x:Name="rbEnLigne" Content="🌐 En ligne" GroupName="ModePaiement" IsChecked="True"
-                             FontSize="11" FontWeight="SemiBold" Margin="3,0,0,0" Padding="3,3"/>
+                             FontSize="12" FontWeight="SemiBold" Margin="3,0,3,0" Padding="3,3"/>
+                <RadioButton x:Name="rbSurPlace" Content="🏪 Sur place" GroupName="ModePaiement"
+                             FontSize="12" FontWeight="SemiBold" Margin="3,0,0,0" Padding="3,3"/>
             </UniformGrid>
         </StackPanel>
 

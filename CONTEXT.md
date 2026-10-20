@@ -10,18 +10,14 @@ Ce fichier documente les retours d'expérience, les problèmes rencontrés lors 
 ## 2. Fausse "Perte de Données" (Désynchronisation Base Réseau)
 **Problème :** Après la mise à jour via l'installateur, l'utilisateur ouvre la caisse et constate que toutes ses ventes, commandes et produits ont disparu. Seuls 3 produits de test ("Pomme Golden", etc.) sont visibles.
 **Cause :** 
-- L'installateur Inno Setup installe l'application dans un nouveau dossier propre (ex: `C:\Program Files (x86)\SystemeCaisse`).
-- Le fichier `network_db.json` (qui indique à l'application de se connecter à la base réseau de la caisse principale) n'est pas présent dans ce nouveau dossier.
-- En l'absence de ce fichier, l'application bascule par défaut en **Mode Local** et crée une nouvelle base de données `caisse.db` vide dans son dossier d'installation, générant les produits de test.
-- Les vraies données ne sont pas perdues, elles sont toujours dans le dossier réseau partagé (ex: `\\100.113.56.25\SystemeCaisse\caisse.db`).
+- L'installateur Inno Setup installe l'application dans un nouveau dossier propre (ex: `C:\Program Files\SystemeCaisse`).
+- La configuration globale est désormais stockée dans `C:\ProgramData\SystemeCaisse\config\poste.json` afin de survivre aux réinstallations et mises à jour.
+- Si un poste neuf n'est pas encore configuré pour pointer vers le Poste Principal, il démarre par défaut en mode local.
 **Solution :** 
-- Ne pas paniquer. Il suffit d'aller dans **Paramètres > Réseau**, d'activer le Mode Réseau et de pointer vers le chemin du dossier partagé.
-- Des messages d'erreur détaillés ont été ajoutés dans l'UI (tests de synchro) pour expliquer ce phénomène de repli en Mode Local et rassurer l'utilisateur.
+- Aller dans **Paramètres > 🔧 Système > 🌐 Multi-Postes PostgreSQL & Tailscale**, sélectionner **Poste Secondaire**, saisir l'adresse IP Tailscale du Poste Principal (`100.x.y.z`), tester et enregistrer.
 
-## 3. Déconnexion Web / Commandes TransitManager Manquantes
-**Problème :** Le test de synchronisation Web échoue avec un message "Non connecté", et aucune commande en ligne n'arrive dans l'onglet Commandes.
-**Cause :** Les clés d'activation de la synchronisation (`sync_enabled`, `sync_hub_url`, `sync_api_key`) sont stockées *à l'intérieur* de la base de données SQLite (table `Configuration`). Si l'on active la synchronisation sur une base de développement, cela n'active pas magiquement la base de production sur la caisse principale.
-**Solution :** Le script d'activation (`activate_sync_prod.py`) doit être exécuté en ciblant explicitement le fichier `caisse.db` de production (ex: `\\100.113.56.25\SystemeCaisse\caisse.db`). Un redémarrage de l'application est ensuite requis pour relire la configuration.
+## 3. Synchronisation Web TransitManager Désactivée pour les Commandes
+**Décision :** Afin de garantir une fluidité maximale lors de l'ouverture de l'onglet Commandes et de la création de commandes, la synchronisation avec le site TransitManager a été désactivée. Toutes les commandes (simples et regroupées) sont gérées directement via la base locale ou le serveur PostgreSQL du Poste Principal.
 
 ## 4. "Perte" de l'Historique des Ventes (Filtres UI)
 **Problème :** L'utilisateur ouvre l'onglet "Historique des ventes" et voit une liste vide, pensant avoir perdu toutes ses ventes passées.
@@ -29,25 +25,32 @@ Ce fichier documente les retours d'expérience, les problèmes rencontrés lors 
 **Solution :** Dire à l'utilisateur de changer le filtre de date sur "Ce mois" ou "Cette année" pour voir réapparaître ses milliers de ventes.
 
 ## 5. Résilience de l'Installateur (Inno Setup)
-**Règle :** L'installateur ne supprime jamais les bases de données `.db` ou les `.json` qui ne font pas partie du package généré par `dotnet publish`. C'est une sécurité vitale qui empêche l'écrasement accidentel des données si l'utilisateur installe l'application directement dans le dossier réseau partagé.
+**Règle :** L'installateur ne supprime jamais les bases de données `.db` ni le dossier `C:\ProgramData\SystemeCaisse` contenant `poste.json`, les sauvegardes et le cache d'images. C'est une sécurité vitale qui empêche l'écrasement accidentel des données lors des mises à jour.
 
 ## 6. Refonte Multi-Poste (PostgreSQL + SQLite) et Unification des Fabriques
-**Problème :** Lors du passage au moteur PostgreSQL, l'erreur `42P01: relation "Produits" does not exist` apparaissait et les onglets Produits, Stocks et Ventes étaient vides.
+**Problème :** Lors du passage au moteur PostgreSQL, l'erreur `42P01: relation "Produits" does not exist` apparaissait et les onglets Produits, Stocks et Ventes étaient vides. Par ailleurs, un bug dans `LocalSettingsStore` rétrogradait automatiquement PostgreSQL vers SQLite au redémarrage lorsque `Host == "localhost"` sur le Poste Principal.
 **Cause :** 
-- L'injection de dépendances dans `App.xaml.cs` enregistrait deux fabriques en parallèle : un `AddDbContextFactory<AppDbContext>` pointant vers SQLite, et `CaisseDbContextFactory` pointant vers PostgreSQL. Les ViewModels recevaient des contextes ciblant des bases différentes (split-brain).
-- De plus, les migrations EF Core n'étaient jouées qu'au démarrage sur SQLite, laissant la base PostgreSQL cible avec 0 tables créées.
+- L'injection de dépendances dans `App.xaml.cs` enregistrait deux fabriques en parallèle.
+- `LocalSettingsStore.Load()` contenait une règle obsolète qui forçait `Provider = Sqlite` dès que `Host` valait `localhost`.
 **Solution :**
-- `CaisseDbContextFactory` est l'unique source de vérité pour toute l'application. Elle est enregistrée comme singleton pour son type concret et pour l'interface `IDbContextFactory<AppDbContext>`.
-- Le démarrage dans `App.xaml.cs` fait appel à `DatabaseBootstrapper.InitializeAsync()`, qui gère les migrations de schéma avec verrou consultatif PostgreSQL (`pg_advisory_lock`), garantissant la cohérence même si plusieurs postes démarrent en même temps.
-- En cas de base cible neuve/vide, `DataTransferService.ImportSqliteAsync` est déclenché automatiquement pour migrer l'intégralité des données existantes (produits, ventes, commandes, historiques, images) depuis le fichier `caisse.db`.
+- `CaisseDbContextFactory` est l'unique source de vérité pour toute l'application.
+- Suppression de la rétrogradation forcée dans `LocalSettingsStore` : un Poste Principal configuré en PostgreSQL sur `localhost` conserve son moteur PostgreSQL après redémarrage.
+- `DatabaseBootstrapper.InitializeAsync()` crée automatiquement la base `caisse` si elle n'existe pas (`EnsurePostgresDatabaseExistsAsync`), applique les migrations avec verrou consultatif PostgreSQL (`pg_advisory_lock`), vérifie toutes les colonnes récentes (`PreparePostgresAsync`) et importe automatiquement les données + images de `caisse.db` si la base PostgreSQL est vide.
 
-## 7. Fluidité de Navigation des Onglets (WPF TabControl Caching)
-**Problème :** Le passage entre les onglets présentait des ralentissements, des micro-gels de l'interface et des rechargements intempestifs.
-**Cause :**
-- Le `TabControl` natif de WPF détruit l'arborescence visuelle (`VisualTree`) de l'onglet actif et reconstruit de zéro l'arborescence de l'onglet cible à chaque clic. Sur des vues avec de lourds DataGrids (plus de 1 300 produits avec images, 3 700 ventes), cela provoque un coût de layout et de rendu important.
-- Certains chargements s'exécutaient de manière synchrone sur le thread UI lors du basculement d'onglet.
+## 7. Fluidité de Navigation des Onglets et Réactivité Caisse / Commandes
+**Problème :** Le passage entre les onglets ou la validation d'un panier présentait des ralentissements, et la saisie dans la barre de recherche manquait de fluidité.
 **Solution :**
-- Implémentation du composant `TabContent.IsCached="True"` (`SystemeCaisse.UI.Controls.TabContent`) sur le `TabControl` principal. Les arborescences visuelles sont conservées en mémoire et seule la visibilité (`Visibility.Visible` / `Visibility.Collapsed`) bascule. Le temps de passage d'un onglet à un autre passe à 0 ms.
-- Déport des lectures en base hors du thread UI (`Task.Run` / chargements asynchrones dans `MainViewModel.cs`).
-- Remplacement des popups d'erreur bloquantes (`MessageBox.Show`) par du logging silencieux `AppLog.Error` lors des rafraîchissements en arrière-plan.
+- Implémentation de `TabContent.IsCached="True"` sur le `TabControl` principal pour conserver l'arborescence visuelle en mémoire (commutation 0 ms).
+- Pré-filtrage en mémoire des produits actifs (`Actif == true`), désactivation de l'auto-complétion intrusive (`IsTextSearchEnabled="False"`), et élargissement du menu déroulant (`MaxDropDownHeight="420"`, `MinWidth="680"`).
+- Dans `Checkout`, la remise à zéro du panier et la reprise de main par le caissier sont immédiates ; le rechargement des statistiques et des Top Produits s'effectue de manière asynchrone en arrière-plan sans bloquer l'interface.
 
+## 8. Déploiement Production Multi-Postes avec PostgreSQL & Tailscale Autonome
+**Objectif :** Permettre d'installer l'application sur un **Poste Principal** qui configure de manière 100 % autonome PostgreSQL et le réseau Tailscale, et d'y connecter facilement des **Postes Secondaires**.
+**Solution mise en place (`PostgresProvisioningService`) :**
+- **Sur le Poste Principal** (via l'option d'installation Inno Setup `--setup-principal` ou le bouton **⚡ Configurer automatiquement ce Poste Principal** dans *Paramètres > Système*) :
+  - Détection/démarrage du service Windows `Tailscale` en mode Automatique et affichage de l'IP Tailscale (`100.x.y.z`).
+  - Détection ou installation silencieuse de PostgreSQL, configuration de `postgresql.conf` (`listen_addresses = '*'`, `tcp_keepalives`) et de `pg_hba.conf` (autorisation du sous-réseau Tailscale `100.64.0.0/10` et du LAN en `md5`).
+  - Ouverture automatique des ports TCP `5432` et `5433` dans le Pare-feu Windows et configuration du service PostgreSQL en démarrage Automatique avec redémarrage sur erreur.
+  - Création autonome du rôle `caisse`, de la base `caisse`, de toutes les tables et migration automatique des données SQLite locales (`caisse.db`) et des photos produits (`ImagesStockees`).
+- **Sur les Postes Secondaires** :
+  - Saisie de l'IP Tailscale du Poste Principal, détection automatique du port (`5432` ou `5433`), synchronisation temps réel (toutes les 5 secondes) du catalogue et des images, purge automatique des connexions TCP fantômes (`NpgsqlConnection.ClearAllPools()`) en cas de micro-coupure VPN et file d'attente hors-ligne (`OfflineQueueService`) pour ne jamais bloquer l'encaissement.

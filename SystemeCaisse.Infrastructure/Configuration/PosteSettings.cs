@@ -16,7 +16,7 @@ namespace SystemeCaisse.Infrastructure.Configuration
     /// <summary>Paramètres de connexion à la base de données (propres au poste).</summary>
     public class DatabaseSettings
     {
-        public DatabaseProvider Provider { get; set; } = DatabaseProvider.PostgreSql;
+        public DatabaseProvider Provider { get; set; } = DatabaseProvider.Sqlite;
 
         /// <summary>Chemin du fichier SQLite. Null = emplacement par défaut (ProgramData).</summary>
         public string? SqlitePath { get; set; }

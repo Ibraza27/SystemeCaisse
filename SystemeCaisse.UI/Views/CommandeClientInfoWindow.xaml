@@ -1,7 +1,7 @@
 <Window x:Class="SystemeCaisse.UI.Views.CommandeClientInfoWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Informations Client" Width="520" Height="650"
+        Title="Informations Client" Width="540" Height="740"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         Background="#F5F5F5">
     <Grid Margin="25">
@@ -11,50 +11,79 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Text="📋 Informations du Client" FontSize="20" FontWeight="Bold" Foreground="#1565C0" Margin="0,0,0,20"/>
+        <TextBlock Text="📋 Informations du Client" FontSize="20" FontWeight="Bold" Foreground="#1565C0" Margin="0,0,0,15"/>
 
-        <StackPanel Grid.Row="1">
-            <!-- Nom -->
-            <TextBlock Text="Nom *" FontWeight="SemiBold" Margin="0,0,0,3"/>
-            <TextBox x:Name="tbNom" FontSize="14" Padding="8,6" Margin="0,0,0,12" CharacterCasing="Upper"/>
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <!-- Nom -->
+                <TextBlock Text="Nom *" FontWeight="SemiBold" Margin="0,0,0,3"/>
+                <TextBox x:Name="tbNom" FontSize="14" Padding="8,6" Margin="0,0,0,10" CharacterCasing="Upper"/>
 
-            <!-- Prénom -->
-            <TextBlock Text="Prénom *" FontWeight="SemiBold" Margin="0,0,0,3"/>
-            <TextBox x:Name="tbPrenom" FontSize="14" Padding="8,6" Margin="0,0,0,12" CharacterCasing="Upper"/>
+                <!-- Prénom -->
+                <TextBlock Text="Prénom *" FontWeight="SemiBold" Margin="0,0,0,3"/>
+                <TextBox x:Name="tbPrenom" FontSize="14" Padding="8,6" Margin="0,0,0,10" CharacterCasing="Upper"/>
 
-            <!-- Téléphone -->
-            <TextBlock Text="Téléphone *" FontWeight="SemiBold" Margin="0,0,0,3"/>
-            <TextBox x:Name="tbTelephone" FontSize="14" Padding="8,6" Margin="0,0,0,12"/>
+                <!-- Téléphone -->
+                <TextBlock Text="Téléphone *" FontWeight="SemiBold" Margin="0,0,0,3"/>
+                <TextBox x:Name="tbTelephone" FontSize="14" Padding="8,6" Margin="0,0,0,10"/>
 
-            <!-- Adresse -->
-            <TextBlock Text="Adresse" FontWeight="SemiBold" Foreground="#666" Margin="0,0,0,3"/>
-            <TextBox x:Name="tbAdresse" FontSize="14" Padding="8,6" Margin="0,0,0,12"/>
+                <!-- Adresse -->
+                <TextBlock Text="Adresse" FontWeight="SemiBold" Foreground="#666" Margin="0,0,0,3"/>
+                <TextBox x:Name="tbAdresse" FontSize="14" Padding="8,6" Margin="0,0,0,10"/>
 
-            <!-- Ville / Code Postal -->
-            <TextBlock Text="Ville / Code Postal *" FontWeight="SemiBold" Margin="0,0,0,3"/>
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-                <TextBox x:Name="tbVilleSearch" FontSize="14" Padding="8,6" 
-                         TextChanged="TbVilleSearch_TextChanged"
-                         ToolTip="Tapez un code postal ou un nom de ville"/>
-                <ListBox x:Name="lbVilleSuggestions" Grid.Row="1" MaxHeight="160" 
-                         SelectionChanged="LbVilleSuggestions_SelectionChanged"
-                         BorderBrush="#DDD" BorderThickness="1" Margin="0,2,0,0"
-                         Visibility="Collapsed">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding Display}" FontSize="13" Padding="4,3"/>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-            </Grid>
-        </StackPanel>
+                <!-- Code Postal & Ville -->
+                <Grid Margin="0,0,0,10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Code Postal" FontWeight="SemiBold" Margin="0,0,0,3"/>
+                    <TextBlock Grid.Row="0" Grid.Column="2" Text="Ville" FontWeight="SemiBold" Margin="0,0,0,3"/>
+
+                    <TextBox x:Name="tbCodePostal" Grid.Row="1" Grid.Column="0" FontSize="14" Padding="8,6"
+                             TextChanged="TbCodePostal_TextChanged"
+                             PreviewKeyDown="VilleInput_PreviewKeyDown"
+                             ToolTip="Tapez le code postal (ex: 75001, 27000)"/>
+
+                    <TextBox x:Name="tbVilleSearch" Grid.Row="1" Grid.Column="2" FontSize="14" Padding="8,6"
+                             TextChanged="TbVilleSearch_TextChanged"
+                             PreviewKeyDown="VilleInput_PreviewKeyDown"
+                             ToolTip="Tapez le nom de la ville ou un code postal"/>
+
+                    <ListBox x:Name="lbVilleSuggestions" Grid.Row="2" Grid.ColumnSpan="3" MaxHeight="160"
+                             PreviewMouseLeftButtonUp="LbVilleSuggestions_PreviewMouseLeftButtonUp"
+                             PreviewKeyDown="LbVilleSuggestions_PreviewKeyDown"
+                             BorderBrush="#1565C0" BorderThickness="1" Background="White" Margin="0,3,0,0"
+                             Visibility="Collapsed">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="4,2">
+                                    <TextBlock Text="{Binding CodePostal}" FontWeight="Bold" Foreground="#1565C0" Width="55"/>
+                                    <TextBlock Text="— " Foreground="#999"/>
+                                    <TextBlock Text="{Binding Ville}" FontWeight="SemiBold" Foreground="#333"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+
+                <!-- Commentaire -->
+                <TextBlock Text="💬 Commentaire (visible dans le détail et sur le ticket)" FontWeight="SemiBold" Foreground="#555" Margin="0,0,0,3"/>
+                <TextBox x:Name="tbCommentaire" FontSize="13" Padding="8,6" Height="65"
+                         AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
+                         ToolTip="Instructions spéciales, heure de retrait, digicode, note client..."/>
+            </StackPanel>
+        </ScrollViewer>
 
         <!-- Buttons -->
-        <Grid Grid.Row="2" Margin="0,20,0,0">
+        <Grid Grid.Row="2" Margin="0,15,0,0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>

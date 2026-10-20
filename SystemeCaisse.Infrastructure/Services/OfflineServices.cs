@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Npgsql;
 using SystemeCaisse.Core.Entities;
 using SystemeCaisse.Infrastructure.Configuration;
 using SystemeCaisse.Infrastructure.Data;
@@ -7,7 +9,9 @@ using SystemeCaisse.Infrastructure.Data;
 namespace SystemeCaisse.Infrastructure.Services
 {
     /// <summary>
-    /// Surveille la disponibilité de la base (SELECT 1 toutes les N secondes, hors thread UI).
+    /// Surveille la disponibilité de la base (SELECT 1 toutes les N secondes, hors thread UI)
+    /// et maintient activement la connexion PostgreSQL / Tailscale (purge des connexions TCP mortes,
+    /// relance du service Tailscale si arrêté).
     /// </summary>
     public sealed class ConnectivityMonitor : IDisposable
     {
@@ -16,6 +20,7 @@ namespace SystemeCaisse.Infrastructure.Services
         private readonly TimeSpan _offlineInterval;
         private CancellationTokenSource? _cts;
         private volatile bool _isOnline = true;
+        private DateTime _lastHealAttempt = DateTime.MinValue;
 
         /// <summary>Déclenché (thread de fond) à chaque changement d'état : true = base joignable.</summary>
         public event Action<bool, string?>? StatusChanged;
@@ -26,8 +31,8 @@ namespace SystemeCaisse.Infrastructure.Services
         public ConnectivityMonitor(CaisseDbContextFactory factory, TimeSpan? onlineInterval = null, TimeSpan? offlineInterval = null)
         {
             _factory = factory;
-            _onlineInterval = onlineInterval ?? TimeSpan.FromSeconds(10);
-            _offlineInterval = offlineInterval ?? TimeSpan.FromSeconds(5);
+            _onlineInterval = onlineInterval ?? TimeSpan.FromSeconds(8);
+            _offlineInterval = offlineInterval ?? TimeSpan.FromSeconds(4);
         }
 
         public void Start(bool initialOnline = true)
@@ -63,8 +68,19 @@ namespace SystemeCaisse.Infrastructure.Services
             var error = await _factory.TestConnectionAsync(ct);
             bool online = error == null;
             LastError = error;
+
+            if (!online && _factory.Provider == DatabaseProvider.PostgreSql)
+            {
+                TryHealPostgresAndTailscale();
+            }
+
             if (online != _isOnline)
             {
+                if (online && _factory.Provider == DatabaseProvider.PostgreSql)
+                {
+                    try { NpgsqlConnection.ClearAllPools(); } catch { }
+                }
+
                 _isOnline = online;
                 AppLog.Info("Connectivity", online ? "Base de données de nouveau joignable." : $"Base injoignable : {error}");
                 try { StatusChanged?.Invoke(online, error); }
@@ -76,12 +92,48 @@ namespace SystemeCaisse.Infrastructure.Services
         /// <summary>Signale une erreur de connexion constatée par un service (bascule immédiate hors-ligne).</summary>
         public void ReportFailure(string error)
         {
+            if (_factory.Provider == DatabaseProvider.PostgreSql)
+            {
+                try { NpgsqlConnection.ClearAllPools(); } catch { }
+            }
             if (!_isOnline) return;
             _isOnline = false;
             LastError = error;
             AppLog.Warn("Connectivity", $"Échec signalé : {error}");
             try { StatusChanged?.Invoke(false, error); }
             catch (Exception ex) { AppLog.Error("Connectivity", "Erreur dans un abonné StatusChanged", ex); }
+        }
+
+        private void TryHealPostgresAndTailscale()
+        {
+            try
+            {
+                // Purger le pool Npgsql pour éviter de réutiliser un socket TCP mort après micro-coupure VPN/Wi-Fi
+                NpgsqlConnection.ClearAllPools();
+
+                if ((DateTime.Now - _lastHealAttempt).TotalSeconds < 20) return;
+                _lastHealAttempt = DateTime.Now;
+
+                var tsStatus = PostgresProvisioningService.GetNetworkAndTailscaleStatus();
+                if (tsStatus.IsInstalled && !tsStatus.IsConnected)
+                {
+                    var exe = File.Exists(@"C:\Program Files\Tailscale\tailscale.exe")
+                        ? @"C:\Program Files\Tailscale\tailscale.exe"
+                        : @"C:\Program Files (x86)\Tailscale\tailscale.exe";
+                    if (File.Exists(exe))
+                    {
+                        Process.Start(new ProcessStartInfo(exe, "up --unattended")
+                        {
+                            CreateNoWindow = true,
+                            UseShellExecute = false
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn("Connectivity", $"Auto-maintien réseau : {ex.Message}");
+            }
         }
 
         public void Dispose()

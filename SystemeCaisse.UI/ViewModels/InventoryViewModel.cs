@@ -56,7 +56,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur chargement historique : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                System.Diagnostics.Debug.WriteLine($"Erreur chargement historique inventaire : {ex.Message}");
             }
         }
 
@@ -124,12 +124,6 @@ namespace SystemeCaisse.UI.ViewModels
                 ActiveInventory.Statut = "Validé";
                 ActiveInventory.DateValidation = DateTime.Now;
                 
-                // Attach without duplicates if possible, or just add new
-                // Context tracking can be tricky with detached entities.
-                // Safest to re-fetch products or attach properly.
-                
-                // Let's add the inventory object graph. EF Core should handle new Lignes.
-                // We need to ensure Products are attached as Unchanged to avoid duplicating them.
                 foreach (var ligne in ActiveInventory.Lignes)
                 {
                     context.Attach(ligne.Produit); // Attach product as existing
@@ -156,6 +150,13 @@ namespace SystemeCaisse.UI.ViewModels
 
                 context.Inventaires.Add(ActiveInventory);
                 await context.SaveChangesAsync();
+                await SystemeCaisse.Infrastructure.Services.DataVersionBump.BumpAsync(
+                    context, default, DataDomains.Produits, DataDomains.Stocks);
+
+                if (Application.Current.MainWindow?.DataContext is MainViewModel mainVM)
+                {
+                    mainVM.MarkCaisseDirty(catalog: true);
+                }
 
                 MessageBox.Show(Services.WindowHelper.GetAdminWindow(), "Inventaire validé et stocks mis à jour !", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
                 IsInventoryActive = false;

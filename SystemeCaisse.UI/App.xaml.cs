@@ -53,12 +53,6 @@ namespace SystemeCaisse.UI
             var networkDbService = new NetworkDatabaseService();
             string dbPath = networkDbService.ResolveDbPath();
 
-            // Set the static flag BEFORE any DbContext is created
-            // AppDbContext.IsNetworkDatabaseMode is removed.
-
-            // Simple connection string for all modes (WAL removed, no shared cache needed)
-            string connectionString = $"Data Source={dbPath}";
-
             _host = Host.CreateDefaultBuilder()
                 .ConfigureServices((context, services) =>
                 {
@@ -69,7 +63,12 @@ namespace SystemeCaisse.UI
                     services.AddSingleton(sp => 
                     {
                         var store = sp.GetRequiredService<LocalSettingsStore>();
-                        return new CaisseDbContextFactory(store.Current.Database);
+                        if (store.Current.Database.Provider == DatabaseProvider.Sqlite &&
+                            !string.Equals(store.Current.Database.SqlitePath, dbPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            store.Update(s => s.Database.SqlitePath = dbPath);
+                        }
+                        return new CaisseDbContextFactory(store.Current.Database, $"SystemeCaisse-{store.Current.NomPoste}");
                     });
                     services.AddSingleton<IDbContextFactory<AppDbContext>>(sp => sp.GetRequiredService<CaisseDbContextFactory>());
                     services.AddSingleton<CaisseServices>();
@@ -103,9 +102,6 @@ namespace SystemeCaisse.UI
                 // This allows the user to continue using other tabs even if an error occurred in Analysis.
                 e.Handled = true;
 
-                // v22: Silent Stability. We removed the MessageBox.Show here because it causes
-                // a "Modal Loop" (the popup refresh triggers another error) which freezes the UI.
-                // The error is still logged to crash_log.txt for developer diagnosis.
                 System.Diagnostics.Debug.WriteLine($"SILENT STABILITY: Handled background error: {e.Exception.Message}");
             };
             TaskScheduler.UnobservedTaskException += (s, e) => { LogException(e.Exception, "TaskScheduler"); e.SetObserved(); };
@@ -122,9 +118,10 @@ namespace SystemeCaisse.UI
                 new FrameworkPropertyMetadata(
                     System.Windows.Markup.XmlLanguage.GetLanguage(culture.IetfLanguageTag)));
 
-            // Wire image path resolution for network-shared product images
             var networkSvc = _host.Services.GetRequiredService<NetworkDatabaseService>();
             Core.Entities.Produit.ImagePathResolver = networkSvc.ResolveImagePath;
+
+            bool setupPrincipalRequested = e.Args.Any(a => string.Equals(a, "--setup-principal", StringComparison.OrdinalIgnoreCase));
 
             try
             {
@@ -146,16 +143,31 @@ namespace SystemeCaisse.UI
                     try 
                     {
                         System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Task.Run: Création dossier Images...\n");
-                        // Ensure Images directory exists for logo and product images
                         string imagesDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images");
                         if (!System.IO.Directory.Exists(imagesDir))
                         {
                             System.IO.Directory.CreateDirectory(imagesDir);
                         }
 
+                        var store = _host.Services.GetRequiredService<LocalSettingsStore>();
+
+                        // Si l'installateur a demandé la configuration autonome du Poste Principal (--setup-principal)
+                        if (setupPrincipalRequested)
+                        {
+                            System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Task.Run: Provisioning autonome Poste Principal (--setup-principal)...\n");
+                            var provisioning = new PostgresProvisioningService(store);
+                            var provRes = await provisioning.ProvisionPrincipalServerAsync();
+                            System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Task.Run: Provisioning result: {provRes.Success} - {provRes.Message}\n");
+                        }
+
                         System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Task.Run: Bootstrap DB...\n");
                         var dbFactory = _host.Services.GetRequiredService<CaisseDbContextFactory>();
                         var caisseServices = _host.Services.GetRequiredService<CaisseServices>();
+
+                        // Résolution des images : cache/base PostgreSQL prioritaire, puis dossier local/SMB en repli
+                        Core.Entities.Produit.ImagePathResolver = path =>
+                            caisseServices.Images.Resolve(path) ?? networkSvc.ResolveImagePath(path);
+
                         var bootstrapper = new DatabaseBootstrapper(dbFactory);
                         var bootResult = await bootstrapper.InitializeAsync();
                         System.IO.File.AppendAllText("startup_log_v2.txt", $"[{DateTime.Now}] Task.Run: Bootstrap result: {bootResult.Status}, {bootResult.Message}\n");
@@ -168,7 +180,6 @@ namespace SystemeCaisse.UI
                             // on importe automatiquement l'ancienne base SQLite si elle existe.
                             if (await bootstrapper.IsDatabaseEmptyAsync())
                             {
-                                var store = _host.Services.GetRequiredService<LocalSettingsStore>();
                                 var legacyCandidate = store.Current.Database.SqlitePath;
                                 if (string.IsNullOrWhiteSpace(legacyCandidate) || !System.IO.File.Exists(legacyCandidate))
                                     legacyCandidate = AppPaths.DefaultSqlitePath;
@@ -196,8 +207,11 @@ namespace SystemeCaisse.UI
                             var entreprise = await context.Entreprise.AsNoTracking().FirstOrDefaultAsync();
                             if (entreprise != null)
                             {
-                                var logoPath = !string.IsNullOrEmpty(entreprise.LogoPath) && System.IO.File.Exists(entreprise.LogoPath) 
-                                    ? entreprise.LogoPath : null;
+                                var resolvedLogo = !string.IsNullOrEmpty(entreprise.LogoPath)
+                                    ? (caisseServices.Images.Resolve(entreprise.LogoPath) ?? entreprise.LogoPath)
+                                    : null;
+                                var logoPath = !string.IsNullOrEmpty(resolvedLogo) && System.IO.File.Exists(resolvedLogo) 
+                                    ? resolvedLogo : null;
                                 await Application.Current.Dispatcher.InvokeAsync(() => {
                                     try { splash.SetLogo(logoPath); } catch { }
                                 });
@@ -215,9 +229,6 @@ namespace SystemeCaisse.UI
                         System.IO.File.AppendAllText("startup_log_v2.txt", $"[FAIL] Task Error: {innerEx}\n");
                         throw;
                     }
-                    
-                    // Artificial delay for Splash Screen effect
-                    await Task.Delay(2000);
                 });
 
                 var mainWindow = _host.Services.GetRequiredService<MainWindow>();
@@ -261,4 +272,3 @@ namespace SystemeCaisse.UI
         }
     }
 }
-

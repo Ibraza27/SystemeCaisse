@@ -56,8 +56,24 @@ namespace SystemeCaisse.Core.Entities
         public DateTime UpdatedAt { get; set; } = DateTime.Now;
 
         // Image path relative to app directory (e.g. "Images/Produits/produit_42.png")
+        private string? _imagePath;
+        private string? _cachedFullImagePath;
+        private bool _fullImagePathResolved;
+
         [MaxLength(255)]
-        public string? ImagePath { get; set; }
+        public string? ImagePath
+        {
+            get => _imagePath;
+            set
+            {
+                if (_imagePath != value)
+                {
+                    _imagePath = value;
+                    _fullImagePathResolved = false;
+                    _cachedFullImagePath = null;
+                }
+            }
+        }
 
         /// <summary>
         /// Static delegate for resolving image paths. Set by the UI layer at startup
@@ -71,16 +87,31 @@ namespace SystemeCaisse.Core.Entities
         {
             get
             {
-                if (string.IsNullOrWhiteSpace(ImagePath)) return null;
+                if (_fullImagePathResolved) return _cachedFullImagePath;
+                _fullImagePathResolved = true;
+
+                if (string.IsNullOrWhiteSpace(_imagePath))
+                {
+                    _cachedFullImagePath = null;
+                    return null;
+                }
                 
                 // Use the delegate if set (supports network images)
                 if (ImagePathResolver != null)
-                    return ImagePathResolver(ImagePath);
+                {
+                    _cachedFullImagePath = ImagePathResolver(_imagePath);
+                    return _cachedFullImagePath;
+                }
 
                 // Fallback: resolve locally
-                if (Path.IsPathRooted(ImagePath)) return File.Exists(ImagePath) ? ImagePath : null;
-                var fullPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ImagePath);
-                return File.Exists(fullPath) ? fullPath : null;
+                if (Path.IsPathRooted(_imagePath))
+                {
+                    _cachedFullImagePath = File.Exists(_imagePath) ? _imagePath : null;
+                    return _cachedFullImagePath;
+                }
+                var fullPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, _imagePath);
+                _cachedFullImagePath = File.Exists(fullPath) ? fullPath : null;
+                return _cachedFullImagePath;
             }
         }
 

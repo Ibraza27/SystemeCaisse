@@ -1,5 +1,6 @@
 using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using SystemeCaisse.Core.Entities;
 using SystemeCaisse.Infrastructure.Configuration;
 using SystemeCaisse.Infrastructure.Data;
@@ -51,6 +52,11 @@ namespace SystemeCaisse.Infrastructure.Services
         public async Task<BootstrapResult> InitializeAsync(Func<IReadOnlyList<string>, bool>? confirmMigration = null, CancellationToken ct = default,
             bool backupBeforeMigration = true)
         {
+            if (_factory.Provider == DatabaseProvider.PostgreSql)
+            {
+                await EnsurePostgresDatabaseExistsAsync(ct);
+            }
+
             var error = await _factory.TestConnectionAsync(ct);
             if (error != null)
             {
@@ -62,6 +68,8 @@ namespace SystemeCaisse.Infrastructure.Services
             {
                 if (_factory.Provider == DatabaseProvider.Sqlite)
                     await PrepareSqliteAsync(ct);
+                else if (_factory.Provider == DatabaseProvider.PostgreSql)
+                    await PreparePostgresAsync(ct);
 
                 await using var db = await _factory.CreateDbContextAsync(ct);
 
@@ -90,7 +98,15 @@ namespace SystemeCaisse.Infrastructure.Services
                         BackupSqliteFileBeforeMigration();
 
                     await MigrateAsync(db, ct);
+                    if (_factory.Provider == DatabaseProvider.Sqlite)
+                        await PrepareSqliteAsync(ct);
+                    else if (_factory.Provider == DatabaseProvider.PostgreSql)
+                        await PreparePostgresAsync(ct);
                     AppLog.Info("Bootstrap", $"Migrations appliquées : {string.Join(", ", pending)}");
+                }
+                else if (_factory.Provider == DatabaseProvider.PostgreSql)
+                {
+                    await PreparePostgresAsync(ct);
                 }
 
                 await SeedAsync(ct);
@@ -100,6 +116,51 @@ namespace SystemeCaisse.Infrastructure.Services
             {
                 AppLog.Error("Bootstrap", "Initialisation de la base impossible", ex);
                 return new BootstrapResult(BootstrapStatus.Failed, ex.InnerException?.Message ?? ex.Message, Array.Empty<string>());
+            }
+        }
+
+        /// <summary>
+        /// Si le serveur PostgreSQL répond mais que la base cible (ex: "caisse") n'existe pas encore,
+        /// tente de la créer automatiquement via la base de maintenance "postgres".
+        /// </summary>
+        private async Task EnsurePostgresDatabaseExistsAsync(CancellationToken ct)
+        {
+            var dbName = _factory.Settings.Database?.Trim();
+            if (string.IsNullOrWhiteSpace(dbName)) return;
+
+            try
+            {
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(TimeSpan.FromSeconds(5));
+                await using var db = _factory.CreateDbContext();
+                var conn = db.Database.GetDbConnection();
+                await conn.OpenAsync(cts.Token);
+                await conn.CloseAsync();
+                return;
+            }
+            catch (PostgresException pex) when (pex.SqlState == "3D000")
+            {
+                // La base n'existe pas encore : on se connecte à "postgres" pour la créer.
+                try
+                {
+                    var adminSettings = _factory.Settings.Clone();
+                    adminSettings.Database = "postgres";
+                    var adminCs = CaisseDbContextFactory.BuildPostgresConnectionString(adminSettings, "SystemeCaisse-AutoCreateDb");
+                    await using var adminConn = new NpgsqlConnection(adminCs);
+                    await adminConn.OpenAsync(ct);
+                    var safeDbName = dbName.Replace("\"", "\"\"");
+                    await using var cmd = new NpgsqlCommand($"CREATE DATABASE \"{safeDbName}\" ENCODING 'UTF8'", adminConn);
+                    await cmd.ExecuteNonQueryAsync(ct);
+                    AppLog.Info("Bootstrap", $"Base PostgreSQL « {dbName} » créée automatiquement.");
+                }
+                catch (Exception createEx)
+                {
+                    AppLog.Warn("Bootstrap", $"Création automatique de la base PostgreSQL « {dbName} » impossible : {createEx.Message}");
+                }
+            }
+            catch
+            {
+                // Autre erreur de connexion : gérée par TestConnectionAsync.
             }
         }
 
@@ -136,6 +197,34 @@ namespace SystemeCaisse.Infrastructure.Services
         }
 
         /// <summary>
+        /// Garantit que toutes les colonnes récentes existent sur PostgreSQL
+        /// (Commandes.Commentaire, LignesCommande.ClientNom, LignesCommande.Unite, etc.).
+        /// </summary>
+        private async Task PreparePostgresAsync(CancellationToken ct)
+        {
+            await using var db = await _factory.CreateDbContextAsync(ct);
+            var conn = db.Database.GetDbConnection();
+            await conn.OpenAsync(ct);
+            try
+            {
+                await ExecAsync(conn, @"ALTER TABLE IF EXISTS ""Commandes"" ADD COLUMN IF NOT EXISTS ""SyncId"" character varying(36) NULL;", ct);
+                await ExecAsync(conn, @"ALTER TABLE IF EXISTS ""Commandes"" ADD COLUMN IF NOT EXISTS ""Source"" character varying(10) NOT NULL DEFAULT 'caisse';", ct);
+                await ExecAsync(conn, @"ALTER TABLE IF EXISTS ""Commandes"" ADD COLUMN IF NOT EXISTS ""Email"" character varying(200) NULL;", ct);
+                await ExecAsync(conn, @"ALTER TABLE IF EXISTS ""Commandes"" ADD COLUMN IF NOT EXISTS ""Commentaire"" character varying(500) NULL;", ct);
+                await ExecAsync(conn, @"ALTER TABLE IF EXISTS ""LignesCommande"" ADD COLUMN IF NOT EXISTS ""ClientNom"" character varying(100) NULL;", ct);
+                await ExecAsync(conn, @"ALTER TABLE IF EXISTS ""LignesCommande"" ADD COLUMN IF NOT EXISTS ""Unite"" character varying(10) NULL;", ct);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn("Bootstrap", $"PreparePostgresAsync avertissement : {ex.Message}");
+            }
+            finally
+            {
+                await conn.CloseAsync();
+            }
+        }
+
+        /// <summary>
         /// Réglages SQLite à appliquer une seule fois (persistants dans le fichier) +
         /// rattrapage des colonnes historiquement ajoutées hors migration (SyncId, Source, Email).
         /// </summary>
@@ -150,12 +239,31 @@ namespace SystemeCaisse.Infrastructure.Services
                 var mode = _factory.IsSqliteOnNetworkShare ? "DELETE" : "WAL";
                 await ExecAsync(conn, $"PRAGMA journal_mode={mode};", ct);
 
+                bool hasMigrationsTable = await TableExistsAsync(conn, "__EFMigrationsHistory", ct);
+
                 if (await TableExistsAsync(conn, "Commandes", ct))
                 {
                     var columns = await GetColumnsAsync(conn, "Commandes", ct);
                     if (!columns.Contains("SyncId")) await ExecAsync(conn, "ALTER TABLE Commandes ADD COLUMN SyncId TEXT NULL;", ct);
                     if (!columns.Contains("Source")) await ExecAsync(conn, "ALTER TABLE Commandes ADD COLUMN Source TEXT NOT NULL DEFAULT 'caisse';", ct);
                     if (!columns.Contains("Email")) await ExecAsync(conn, "ALTER TABLE Commandes ADD COLUMN Email TEXT NULL;", ct);
+                    if (!columns.Contains("Commentaire")) await ExecAsync(conn, "ALTER TABLE Commandes ADD COLUMN Commentaire TEXT NULL;", ct);
+
+                    if (hasMigrationsTable)
+                    {
+                        await ExecAsync(conn, "INSERT OR IGNORE INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES ('20260611174448_AddCommandes', '8.0.11');", ct);
+                        if (columns.Contains("ModePaiement"))
+                        {
+                            await ExecAsync(conn, "INSERT OR IGNORE INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES ('20260612154906_AddModePaiement', '8.0.11');", ct);
+                        }
+                    }
+                }
+
+                if (await TableExistsAsync(conn, "LignesCommande", ct))
+                {
+                    var lineCols = await GetColumnsAsync(conn, "LignesCommande", ct);
+                    if (!lineCols.Contains("ClientNom")) await ExecAsync(conn, "ALTER TABLE LignesCommande ADD COLUMN ClientNom TEXT NULL;", ct);
+                    if (!lineCols.Contains("Unite")) await ExecAsync(conn, "ALTER TABLE LignesCommande ADD COLUMN Unite TEXT NULL;", ct);
                 }
             }
             finally
@@ -199,7 +307,7 @@ namespace SystemeCaisse.Infrastructure.Services
                 ("version", "1.0.0", "Version de l'application"),
                 ("theme", "default", null),
                 ("sync_enabled", "false", "Activer la sync SignalR avec TransitManager"),
-                ("sync_hub_url", "https://hippocampetransitmanager.com/hubs/sync", "URL du hub SignalR TransitManager"),
+                ("sync_hub_url", "", "URL du hub SignalR TransitManager"),
                 ("sync_api_key", "", "Clé API pour authentification SignalR"),
             };
             var existingKeys = await db.Configuration.Select(c => c.Cle).ToListAsync(ct);

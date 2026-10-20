@@ -26,19 +26,12 @@
             <Setter Property="CornerRadius" Value="8"/>
             <Setter Property="Padding" Value="10"/>
             <Setter Property="Margin" Value="5"/>
-            <Setter Property="Effect">
-                <Setter.Value>
-                    <DropShadowEffect Color="#DDDDDD" BlurRadius="5" ShadowDepth="2" Direction="270" Opacity="0.5"/>
-                </Setter.Value>
-            </Setter>
+            <Setter Property="BorderBrush" Value="#E0E0E0"/>
+            <Setter Property="BorderThickness" Value="1"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Effect">
-                        <Setter.Value>
-                            <DropShadowEffect Color="#BBBBBB" BlurRadius="10" ShadowDepth="4" Direction="270" Opacity="0.7"/>
-                        </Setter.Value>
-                    </Setter>
-                    <Setter Property="Background" Value="#FAFAFA"/>
+                    <Setter Property="BorderBrush" Value="#2E7D32"/>
+                    <Setter Property="Background" Value="#F5FBF5"/>
                     <Setter Property="Cursor" Value="Hand"/>
                 </Trigger>
             </Style.Triggers>
@@ -55,6 +48,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
@@ -63,20 +57,6 @@
                 <Grid Margin="0,0,0,10">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="📋 Commandes" FontSize="22" FontWeight="Bold" Foreground="#333"/>
-                        <!-- Badge compteur nouvelles commandes web -->
-                        <Border Background="#E53935" CornerRadius="10" Padding="8,2" Margin="8,0,0,0"
-                                VerticalAlignment="Center"
-                                Visibility="{Binding HasNewOrders, Converter={StaticResource BoolToVis}}"
-                                Cursor="Hand" ToolTip="Nouvelles commandes web — cliquer pour acquitter">
-                            <Border.InputBindings>
-                                <MouseBinding MouseAction="LeftClick" 
-                                              Command="{Binding ClearAllFiltersCommand}"/>
-                            </Border.InputBindings>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="🛒 " Foreground="White" FontSize="11" VerticalAlignment="Center"/>
-                                <TextBlock Text="{Binding NewOrderCount}" Foreground="White" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Border>
                         <Button Content="📊 Récap Produits" Command="{Binding PrintRecapCommand}" Margin="15,0,0,0"
                                 Padding="12,6" Background="#E3F2FD" Foreground="#1565C0" FontWeight="SemiBold"
                                 Style="{StaticResource BaseButtonStyle}" ToolTip="Récapitulatif des produits de la liste filtrée"/>
@@ -85,9 +65,9 @@
                                 Style="{StaticResource BaseButtonStyle}" ToolTip="Récapitulatif des clients de la liste filtrée"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button Content="📡 Test Sync" Command="{Binding TestSyncCommand}" Margin="0,0,10,0"
-                                Padding="12,6" Background="#FFF9C4" Foreground="#F57F17" FontWeight="SemiBold"
-                                Style="{StaticResource BaseButtonStyle}" ToolTip="Tester la connexion au serveur Web"/>
+                        <Button Content="👥 Commandes Regroupées" Command="{Binding NewGroupedCommandeCommand}"
+                                Padding="14,8" Margin="0,0,8,0" Background="#5E35B1" Foreground="White" FontWeight="Bold" FontSize="13.5"
+                                Style="{StaticResource BaseButtonStyle}" ToolTip="Créer une commande regroupant plusieurs clients (Client 1, Client 2...)"/>
                         <Button Content="+ Nouvelle Commande" Command="{Binding NewCommandeCommand}"
                                 Padding="15,8" Background="#2E7D32" Foreground="White" FontWeight="Bold" FontSize="14"
                                 Style="{StaticResource BaseButtonStyle}"/>
@@ -103,9 +83,10 @@
                                      VerticalContentAlignment="Center" Padding="5,3"/>
 
                             <TextBlock Text="Statut :" VerticalAlignment="Center" Margin="15,0,5,0" FontWeight="Bold"/>
-                            <ComboBox SelectedValue="{Binding StatutFilter}" Width="100">
+                            <ComboBox SelectedValue="{Binding StatutFilter}" Width="105" IsEnabled="{Binding IsNormalListMode}">
                                 <sys:String>Tous</sys:String>
                                 <sys:String>En attente</sys:String>
+                                <sys:String>Validée</sys:String>
                                 <sys:String>Traitée</sys:String>
                                 <sys:String>Annulée</sys:String>
                             </ComboBox>
@@ -134,14 +115,41 @@
                                     Background="#E3F2FD" Foreground="#1565C0" Style="{StaticResource BaseButtonStyle}" Margin="0,0,5,0"/>
                             <Button Content="🔄 Effacer filtres" Command="{Binding ClearAllFiltersCommand}" Padding="8,3"
                                     Background="#FFF3E0" Foreground="#E65100" Style="{StaticResource BaseButtonStyle}" Margin="0,0,5,0"/>
-                            <Button Content="🔄" Command="{Binding LoadCommand}" Padding="8,3"
+                            <Button Content="🔄" Command="{Binding LoadCommand}" Padding="8,3" Margin="0,0,5,0"
                                     Background="#EEE" Style="{StaticResource BaseButtonStyle}" ToolTip="Actualiser"/>
+                            <Button Content="🗑️" Command="{Binding ToggleTrashModeCommand}" Padding="8,3"
+                                    ToolTip="Corbeille (commandes supprimées)">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource BaseButtonStyle}">
+                                        <Setter Property="Background" Value="#EEE"/>
+                                        <Setter Property="Foreground" Value="#555"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsTrashMode}" Value="True">
+                                                <Setter Property="Background" Value="#C62828"/>
+                                                <Setter Property="Foreground" Value="White"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
                         </StackPanel>
                     </StackPanel>
                 </Border>
 
+                <!-- Trash Mode Banner -->
+                <Border Grid.Row="2" Background="#FFEBEE" Padding="10,6" Margin="0,0,0,8" CornerRadius="4" BorderBrush="#EF9A9A" BorderThickness="1"
+                        Visibility="{Binding IsTrashMode, Converter={StaticResource BoolToVis}}">
+                    <DockPanel>
+                        <TextBlock Text="🗑️ CORBEILLE — Commandes supprimées (sélectionnez une commande pour la restaurer ou la supprimer définitivement)"
+                                   FontWeight="Bold" Foreground="#C62828" VerticalAlignment="Center"/>
+                        <Button Content="◀ Retour aux commandes actives" Command="{Binding ToggleTrashModeCommand}"
+                                DockPanel.Dock="Right" HorizontalAlignment="Right" Padding="10,4"
+                                Background="White" Foreground="#C62828" FontWeight="SemiBold" Style="{StaticResource BaseButtonStyle}"/>
+                    </DockPanel>
+                </Border>
+
                 <!-- Batch Action Bar (visible when selection exists) -->
-                <Border Grid.Row="2" Background="#FFF8E1" Padding="8" Margin="0,0,0,8" CornerRadius="4" BorderBrush="#FFE082" BorderThickness="1"
+                <Border Grid.Row="3" Background="#FFF8E1" Padding="8" Margin="0,0,0,8" CornerRadius="4" BorderBrush="#FFE082" BorderThickness="1"
                         Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}}">
                     <DockPanel>
                         <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
@@ -158,28 +166,43 @@
                                     Background="#EFEBE9" Foreground="#795548" FontSize="11" Style="{StaticResource BaseButtonStyle}"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" HorizontalAlignment="Right">
-                            <Button Content="✅ Traitée" Command="{Binding BatchMarkTraiteeCommand}" Padding="8,4" Margin="0,0,3,0"
-                                    Background="#E8F5E9" Foreground="#2E7D32" FontWeight="SemiBold" FontSize="11" Style="{StaticResource BaseButtonStyle}"/>
-                            <Button Content="⏳ En attente" Command="{Binding BatchMarkEnAttenteCommand}" Padding="8,4" Margin="0,0,3,0"
-                                    Background="#FFF8E1" Foreground="#F57F17" FontWeight="SemiBold" FontSize="11" Style="{StaticResource BaseButtonStyle}"/>
-                            <Button Content="❌ Annuler" Command="{Binding BatchAnnulerCommand}" Padding="8,4" Margin="0,0,3,0"
-                                    Background="#FFEBEE" Foreground="#C62828" FontWeight="SemiBold" FontSize="11" Style="{StaticResource BaseButtonStyle}"/>
-                            <Button Content="🗑 Supprimer" Command="{Binding BatchDeleteCommand}" Padding="8,4" Margin="0,0,3,0"
-                                    Background="#FFCDD2" Foreground="#B71C1C" FontWeight="SemiBold" FontSize="11" Style="{StaticResource BaseButtonStyle}"/>
-                            <Button Content="🖨 Imprimer" Command="{Binding BatchPrintCommand}" Padding="8,4" Margin="0,0,3,0"
-                                    Background="#E3F2FD" Foreground="#1565C0" FontWeight="SemiBold" FontSize="11" Style="{StaticResource BaseButtonStyle}"/>
-                            <Button Content="📊 Récap" Command="{Binding BatchRecapCommand}" Padding="8,4"
-                                    Background="#E8EAF6" Foreground="#283593" FontWeight="SemiBold" FontSize="11" Style="{StaticResource BaseButtonStyle}"/>
+                            <!-- Actions en mode normal -->
+                            <StackPanel Orientation="Horizontal" Visibility="{Binding IsNormalListMode, Converter={StaticResource BoolToVis}}">
+                                <Button Content="✔️ Valider" Command="{Binding BatchMarkValideeCommand}" Padding="8,4" Margin="0,0,3,0"
+                                        Background="#E3F2FD" Foreground="#1565C0" FontWeight="SemiBold" FontSize="11" Style="{StaticResource BaseButtonStyle}"/>
+                                <Button Content="✅ Traitée" Command="{Binding BatchMarkTraiteeCommand}" Padding="8,4" Margin="0,0,3,0"
+                                        Background="#E8F5E9" Foreground="#2E7D32" FontWeight="SemiBold" FontSize="11" Style="{StaticResource BaseButtonStyle}"/>
+                                <Button Content="⏳ En attente" Command="{Binding BatchMarkEnAttenteCommand}" Padding="8,4" Margin="0,0,3,0"
+                                        Background="#FFF8E1" Foreground="#F57F17" FontWeight="SemiBold" FontSize="11" Style="{StaticResource BaseButtonStyle}"/>
+                                <Button Content="❌ Annuler" Command="{Binding BatchAnnulerCommand}" Padding="8,4" Margin="0,0,3,0"
+                                        Background="#FFEBEE" Foreground="#C62828" FontWeight="SemiBold" FontSize="11" Style="{StaticResource BaseButtonStyle}"/>
+                                <Button Content="🗑 Corbeille" Command="{Binding BatchDeleteCommand}" Padding="8,4" Margin="0,0,3,0"
+                                        Background="#FFCDD2" Foreground="#B71C1C" FontWeight="SemiBold" FontSize="11" Style="{StaticResource BaseButtonStyle}"/>
+                                <Button Content="🖨 Imprimer" Command="{Binding BatchPrintCommand}" Padding="8,4" Margin="0,0,3,0"
+                                        Background="#E3F2FD" Foreground="#1565C0" FontWeight="SemiBold" FontSize="11" Style="{StaticResource BaseButtonStyle}"/>
+                                <Button Content="📊 Récap" Command="{Binding BatchRecapCommand}" Padding="8,4"
+                                        Background="#E8EAF6" Foreground="#283593" FontWeight="SemiBold" FontSize="11" Style="{StaticResource BaseButtonStyle}"/>
+                            </StackPanel>
+                            <!-- Actions en mode Corbeille -->
+                            <StackPanel Orientation="Horizontal" Visibility="{Binding IsTrashMode, Converter={StaticResource BoolToVis}}">
+                                <Button Content="♻️ Restaurer" Command="{Binding BatchRestoreCommand}" Padding="8,4" Margin="0,0,5,0"
+                                        Background="#E8F5E9" Foreground="#2E7D32" FontWeight="Bold" FontSize="11" Style="{StaticResource BaseButtonStyle}"/>
+                                <Button Content="🗑️ Supprimer définitivement" Command="{Binding BatchPermanentDeleteCommand}" Padding="8,4"
+                                        Background="#C62828" Foreground="White" FontWeight="Bold" FontSize="11" Style="{StaticResource BaseButtonStyle}"/>
+                            </StackPanel>
                         </StackPanel>
                     </DockPanel>
                 </Border>
 
                 <!-- DataGrid -->
-                <DataGrid Grid.Row="3" ItemsSource="{Binding Commandes}" SelectedItem="{Binding SelectedCommande}"
+                <DataGrid Grid.Row="4" ItemsSource="{Binding Commandes}" SelectedItem="{Binding SelectedCommande}"
                           AutoGenerateColumns="False" IsReadOnly="False" SelectionMode="Single"
                           Background="White" BorderBrush="#DDD" BorderThickness="1" 
                           GridLinesVisibility="Horizontal" RowHeight="38" HeadersVisibility="Column"
-                          CanUserSortColumns="True" CanUserAddRows="False">
+                          CanUserSortColumns="True" CanUserAddRows="False"
+                          EnableRowVirtualization="True" EnableColumnVirtualization="True"
+                          VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                          VirtualizingPanel.ScrollUnit="Item">
                     <DataGrid.Columns>
                         <!-- Checkbox column -->
                         <DataGridTemplateColumn Width="40">
@@ -235,11 +258,17 @@
                                             <Style TargetType="TextBlock">
                                                 <Setter Property="Foreground" Value="#F57F17"/>
                                                 <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Statut}" Value="validee">
+                                                        <Setter Property="Foreground" Value="#1565C0"/>
+                                                    </DataTrigger>
                                                     <DataTrigger Binding="{Binding Statut}" Value="traitee">
                                                         <Setter Property="Foreground" Value="#2E7D32"/>
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding Statut}" Value="annulee">
                                                         <Setter Property="Foreground" Value="#C62828"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Statut}" Value="supprimee">
+                                                        <Setter Property="Foreground" Value="#757575"/>
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
@@ -271,7 +300,7 @@
                 </DataGrid>
 
                 <!-- Recap Summary Bar (bottom) -->
-                <Border Grid.Row="4" Background="#E8F5E9" Padding="10,8" Margin="0,8,0,0" CornerRadius="4">
+                <Border Grid.Row="5" Background="#E8F5E9" Padding="10,8" Margin="0,8,0,0" CornerRadius="4">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -332,6 +361,11 @@
                                 <Run Text="🏦 Virement : "/>
                                 <Run Text="{Binding TotalVirement, StringFormat='{}{0:0.00} €', Mode=OneWay}"/>
                             </TextBlock>
+                            <TextBlock Text=" | " Foreground="#CCC" Margin="8,0"/>
+                            <TextBlock FontWeight="SemiBold" Foreground="#00695C" VerticalAlignment="Center">
+                                <Run Text="🏪 Sur place : "/>
+                                <Run Text="{Binding TotalSurPlace, StringFormat='{}{0:0.00} €', Mode=OneWay}"/>
+                            </TextBlock>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -352,15 +386,20 @@
                 </Grid.RowDefinitions>
 
                 <Grid Margin="0,0,0,10">
-                    <TextBlock Text="📋 Nouvelle Commande" FontSize="22" FontWeight="Bold" Foreground="#1565C0"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="📋 Nouvelle Commande" FontSize="22" FontWeight="Bold" Foreground="#1565C0"
+                                   Visibility="{Binding IsClassicCommandeMode, Converter={StaticResource BoolToVis}}"/>
+                        <TextBlock Text="👥 Commande Regroupée (Multi-clients)" FontSize="22" FontWeight="Bold" Foreground="#5E35B1"
+                                   Visibility="{Binding IsGroupedCommandeMode, Converter={StaticResource BoolToVis}}"/>
+                    </StackPanel>
                     <Button Content="◀ Retour à la liste" Command="{Binding CancelNewCommandeCommand}"
                             HorizontalAlignment="Right" Padding="12,6"
                             Background="#FFEBEE" Foreground="#C62828" FontWeight="Bold"
                             Style="{StaticResource BaseButtonStyle}"/>
                 </Grid>
 
-                <!-- Search Bar (exact copy from SalesView) -->
-                <Border Grid.Row="1" Background="White" CornerRadius="20" Padding="15,5" Margin="0,0,0,20" BorderBrush="#EEEEEE" BorderThickness="1">
+                <!-- Barre de recherche fluide (sans auto-complétion intrusive) -->
+                <Border x:Name="searchBarBorderCmd" Grid.Row="1" Background="White" CornerRadius="20" Padding="15,5" Margin="0,0,0,20" BorderBrush="#EEEEEE" BorderThickness="1">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
@@ -369,59 +408,97 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="🔍" VerticalAlignment="Center" Margin="5,0,10,0" Foreground="Gray" FontSize="16"/>
 
-                        <ComboBox x:Name="searchComboCmd" Grid.Column="1"
-                                  IsEditable="True" IsTextSearchEnabled="False"
-                                  IsTextSearchCaseSensitive="False" StaysOpenOnEdit="True"
-                                  BorderThickness="0" VerticalAlignment="Center" FontSize="16"
-                                  ItemsSource="{Binding SearchSuggestions}"
-                                  Text="{Binding NewCommandeSearchText, UpdateSourceTrigger=PropertyChanged}"
-                                  SelectedItem="{Binding SelectedSearchProduct}"
-                                  IsDropDownOpen="{Binding IsSearchDropDownOpen, Mode=TwoWay}"
-                                  Loaded="searchComboCmd_Loaded"
-                                  Foreground="#333">
-                            <ComboBox.InputBindings>
-                                <KeyBinding Key="Enter" Command="{Binding ScanNewCommandeCommand}"/>
-                            </ComboBox.InputBindings>
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate>
-                                    <Grid Width="550" Margin="0,2">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="45"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <!-- Product Image -->
-                                        <Border Width="40" Height="40" CornerRadius="4" Background="#F8F8F8" ClipToBounds="True">
-                                            <Grid>
-                                                <Image Source="{Binding FullImagePath, Converter={StaticResource PathToImage}}" Stretch="Uniform" Margin="2"/>
-                                                <TextBlock Text="📦" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#CCC"
-                                                           Visibility="{Binding FullImagePath, Converter={StaticResource InvertedNullToVis}}"/>
+                        <TextBox x:Name="searchTextBoxCmd" Grid.Column="1"
+                                 BorderThickness="0"
+                                 Background="Transparent"
+                                 VerticalAlignment="Center"
+                                 VerticalContentAlignment="Center"
+                                 FontSize="16"
+                                 Foreground="#333"
+                                 CaretBrush="#333"
+                                 Text="{Binding NewCommandeSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                 PreviewKeyDown="searchTextBoxCmd_PreviewKeyDown"
+                                 LostKeyboardFocus="searchTextBoxCmd_LostKeyboardFocus"
+                                 IsVisibleChanged="searchTextBoxCmd_IsVisibleChanged"/>
+
+                        <Popup x:Name="searchPopupCmd"
+                               PlacementTarget="{Binding ElementName=searchBarBorderCmd}"
+                               Placement="Bottom"
+                               StaysOpen="True"
+                               AllowsTransparency="True"
+                               Focusable="False"
+                               IsOpen="{Binding IsSearchDropDownOpen, Mode=TwoWay}">
+                            <Border Background="White" BorderBrush="#CCCCCC" BorderThickness="1" CornerRadius="8" Margin="0,2,0,0"
+                                    MaxHeight="520" MinWidth="750" Width="{Binding ActualWidth, ElementName=searchBarBorderCmd}">
+                                <ListBox x:Name="suggestionsListBoxCmd"
+                                         ItemsSource="{Binding SearchSuggestions}"
+                                         BorderThickness="0"
+                                         Background="Transparent"
+                                         Focusable="False"
+                                         HorizontalContentAlignment="Stretch"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                         VirtualizingPanel.IsVirtualizing="True"
+                                         VirtualizingPanel.VirtualizationMode="Recycling"
+                                         PreviewMouseLeftButtonUp="suggestionsListBoxCmd_PreviewMouseLeftButtonUp">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid MinWidth="700" Margin="4,4">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="54"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <!-- Product Image -->
+                                                <Border Width="48" Height="48" CornerRadius="6" Background="#F8F8F8" ClipToBounds="True">
+                                                    <Grid>
+                                                        <Image Source="{Binding FullImagePath, Converter={StaticResource PathToImage}}" Stretch="Uniform" Margin="2"/>
+                                                        <TextBlock Text="📦" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#CCC"
+                                                                   Visibility="{Binding FullImagePath, Converter={StaticResource InvertedNullToVis}}"/>
+                                                    </Grid>
+                                                </Border>
+                                                <TextBlock Grid.Column="1" Text="{Binding Nom}" FontSize="15.5" FontWeight="Bold" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="10,0,12,0" VerticalAlignment="Center"/>
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0">
+                                                    <TextBlock Text="{Binding PrixVente, StringFormat={}{0:C}}" FontSize="15.5" Foreground="#2E7D32" FontWeight="Bold"/>
+                                                    <TextBlock Foreground="#777" FontSize="13" VerticalAlignment="Bottom" Margin="2,0,0,1">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Text" Value="/Unité"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding TypeVente}" Value="poids">
+                                                                        <Setter Property="Text" Value="/kg"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </StackPanel>
                                             </Grid>
-                                        </Border>
-                                        <TextBlock Grid.Column="1" Text="{Binding Nom}" FontWeight="Bold" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="8,0,10,0" VerticalAlignment="Center"/>
-                                        <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding PrixVente, StringFormat={}{0:C}}" Foreground="#2E7D32" FontWeight="Bold"/>
-                                            <TextBlock Foreground="#777" Margin="2,0,0,0">
-                                                <TextBlock.Style>
-                                                    <Style TargetType="TextBlock">
-                                                        <Setter Property="Text" Value="/Unité"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding TypeVente}" Value="poids">
-                                                                <Setter Property="Text" Value="/kg"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </TextBlock.Style>
-                                            </TextBlock>
-                                        </StackPanel>
-                                    </Grid>
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Border>
+                        </Popup>
 
                         <Button Grid.Column="2" Content="✕" Command="{Binding ClearNewCommandeSearchCommand}"
                                 Background="Transparent" BorderThickness="0" Foreground="#999" FontSize="18" Padding="8" Cursor="Hand"
-                                ToolTip="Effacer la recherche"/>
+                                ToolTip="Effacer la recherche">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding NewCommandeSearchText}" Value="{x:Null}">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding NewCommandeSearchText}" Value="">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Foreground" Value="#D32F2F"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
                     </Grid>
                 </Border>
 

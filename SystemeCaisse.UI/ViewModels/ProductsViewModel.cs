@@ -263,6 +263,8 @@ namespace SystemeCaisse.UI.ViewModels
                     _snapshots.Remove(product);
                     Products.Remove(product);
                     SelectedProduct = null;
+                    if (Application.Current.MainWindow?.DataContext is MainViewModel mainVM)
+                        mainVM.MarkCaisseDirty(catalog: true);
                 }
             }
             catch (Exception ex)
@@ -298,6 +300,8 @@ namespace SystemeCaisse.UI.ViewModels
 
                 await _services.Catalog.SaveProductsAsync(changes);
                 _pendingNewProduct = null;
+                if (Application.Current.MainWindow?.DataContext is MainViewModel mainVM)
+                    mainVM.MarkCaisseDirty(catalog: true);
                 MessageBox.Show(owner, "Enregistré avec succès !", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
 
                 // Relire : récupère les Id des nouveaux produits et le stock réel (ventes des autres postes incluses).
@@ -376,6 +380,14 @@ namespace SystemeCaisse.UI.ViewModels
                 var ext = Path.GetExtension(openDlg.FileName).ToLowerInvariant();
                 var name = product.Id > 0 ? $"produit_{product.Id}_{DateTime.Now.Ticks}{ext}" : $"produit_new_{DateTime.Now.Ticks}{ext}";
                 var key = await _services.Images.SaveFileAsync($"Images/Produits/{name}", openDlg.FileName);
+
+                try
+                {
+                    var localDestDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images", "Produits");
+                    Directory.CreateDirectory(localDestDir);
+                    File.Copy(openDlg.FileName, Path.Combine(localDestDir, name), overwrite: true);
+                }
+                catch { }
 
                 product.ImagePath = key;
                 OnPropertyChanged(nameof(SelectedProduct));

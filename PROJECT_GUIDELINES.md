@@ -39,9 +39,10 @@ L'application est conçue pour fonctionner avec deux écrans (un pour le vendeur
 
 ## 4. Intégrité des Données et Panier
 
-- **Mise en Attente (Suspending Sales)** : Lorsque l'on suspend une vente, tous les paramètres du panier doivent être sauvegardés, y compris les **remises manuelles globale du panier** (`BasketRemiseManuelle`).
+- **Mise en Attente (Suspending Sales)** : Lorsque l'on suspend une vente, tous les paramètres du panier doivent être sauvegardés, y compris les **remises manuelles globales du panier** (`BasketRemiseManuelle`).
 - **Calcul des Totaux** : La méthode `UpdateTotal()` dans `MainViewModel` est la source unique de vérité pour le calcul du montant final. Elle prend en compte les remises par article (auto/manuelles) et la remise globale.
 - **Événements Panier** : Un seul abonnement `Panier.CollectionChanged` doit exister dans le constructeur. Ne JAMAIS dupliquer ce bloc.
+- **Validation Fluide (`Checkout`)** : Après l'encaissement d'un panier, la réinitialisation du panier (`ResetSale()`) est immédiate pour permettre au caissier d'encaisser le client suivant ou de taper dans la barre de recherche sans aucune latence. Le rafraîchissement des Top Produits et du Dashboard s'exécute en arrière-plan.
 
 ## 5. Synchronisation en Temps Réel
 
@@ -64,16 +65,15 @@ L'initialisation de l'application (`MainViewModel.InitializeAsync`) doit être *
 - **Anti-double promotion par unité** : Un même **article (par ID produit)** ne peut PAS recevoir de double remise sur la **même unité**. Si un article a une quantité de 3 et qu'une promo en consomme 2, l'unité restante reste disponible pour d'autres promotions.
   - **Mécanisme** : `ApplyAutomaticPromotions()` utilise un `Dictionary<CartItemViewModel, decimal>` (`consumedQty`) pour suivre combien d'unités de chaque ligne ont été consommées par les promos. Les helpers `GetAvailableQty()` et `ConsumeQty()` gèrent le suivi.
   - **Multi-label** : Si une ligne panier bénéficie de plusieurs promos (sur des unités différentes), les noms de promos sont concaténés avec ` + ` via `AppendPromoLabel()`.
-  - **Exemple validé** :
-    - 3 CUISSES + 1 AILES → Phase 1 (`prix_degressif`) : 2 CUISSES → 45€ (1 restante) → Phase 2 (`offre_combine`) : 1 CUISSE + 1 AILES → 45€ → **Total = 90€**
-    - 3 CUISSES seuls → 2 CUISSES → 45€ + 1 CUISSE au prix normal (25.90€) → **Total = 70.90€**
   - **Exclusion** : Les promotions de type `remise_total` et `seuil_panier` (remises globales sur le panier) ne sont PAS concernées par cette règle et s'appliquent toujours en complément.
 
-## 8. Mode de Paiement par Défaut
+## 8. Modes de Paiement Caisse et Impression Noir & Blanc
 
-- **CB par défaut** : Le mode de paiement par défaut est **CB** (Carte Bancaire), et non Espèces.
+- **CB par défaut** : Le mode de paiement par défaut en Caisse est **CB** (Carte Bancaire).
   - `_selectedPaiementMode` est initialisé à `"CB"`.
   - `ResetSale()` remet le mode à `"CB"` après chaque validation de vente.
+- **Modes supportés en Caisse** : `CB`, `Espèces`, `Wero`, `En ligne`, et `Mixte` (combinable). Tous les moyens utilisés apparaissent clairement sur le ticket de caisse.
+- **Logo Ticket Noir & Blanc** : Lors de l'impression d'un ticket de caisse ou d'un ticket de commande, `PrintService.LoadMonochromeLogo()` convertit automatiquement le logo en niveaux de gris / noir et blanc contrasté (`FormatConvertedBitmap` `PixelFormats.Gray8`) pour garantir une impression nette sur imprimante thermique.
 
 ## 9. Paiement Espèces — Précision et Bouton Somme Exacte
 
@@ -83,7 +83,6 @@ L'initialisation de l'application (`MainViewModel.InitializeAsync`) doit être *
 ### Bouton "= Exact" :
 - Un bouton **"= Exact"** est affiché à côté du champ "Reçu" dans le TicketView lorsque le mode de paiement est Espèces ou Mixte.
 - Au clic, il remplit automatiquement le champ `MontantRecu` avec la valeur exacte de `Total` via `FillExactAmountCommand`.
-- Cela permet au caissier de valider rapidement lorsque le client paie le montant exact.
 
 ## 10. Remise "Prix de Vente" (Price Override)
 
@@ -95,42 +94,27 @@ Permet de modifier le prix de vente d'un article **dans le panier courant unique
 - La remise est calculée comme `(PrixOriginal - NouveauPrix) × Quantité` et stockée dans `RemiseManuelleFixed`.
 - La propriété `PriceOverridePerUnit` dans `CartItemViewModel` conserve la différence par unité, ce qui permet de **recalculer automatiquement** la remise lorsque la quantité change.
 
-### Règles :
-- Le prix override s'applique **quelle que soit la quantité** — la remise se recalcule proportionnellement.
-- Le prix initial dans l'onglet **Produits** n'est **jamais modifié**.
-- Si l'utilisateur applique ensuite une remise classique (% ou €) sur le même article, le price override est automatiquement effacé (`PriceOverridePerUnit = 0`).
-- Le scope `DiscountScope.PriceOverride` est distinct de `Basket` et `Item` dans l'enum `DiscountScope`.
+## 11. Hygiène du Code, Sécurité et Dépôt Git
 
-## 11. Hygiène du Code et du Projet
-
-### Fichiers interdits dans le dépôt :
-- Aucun `.exe`, `.dll`, `.pdb` (sauf NuGet packages)
-- Aucun fichier `.log`, `.txt` de debug
-- Aucun fichier `.db` (base de données)
-- Aucun dossier `publish_*`, `setup_*`, `temp_*`, `BuildOutput/`, `SAVE/`
+### Fichiers interdits dans le dépôt Git :
+- Aucun `.exe`, `.dll`, `.pdb`, `.zip`
+- Aucun fichier `.log`, `.txt` de debug (`startup_log_v2.txt`, `build.log`, etc.)
+- Aucun fichier `.db` (base de données SQLite) ou `.caisse-backup`
+- Aucun fichier de configuration local (`poste.json`, `network_db.json`, `network_db_config.json`)
+- Aucun certificat privé (`.pfx`, `.cer`)
+- Aucune adresse IP Tailscale réelle ou clé API en dur dans le code ou la documentation (utiliser toujours `100.x.y.z` dans la documentation)
+- Aucun dossier `publish/`, `Distribution/`, `BuildOutput/`, `SAVE/`, `.vs/`
 
 ### Règles de code :
-- **Pas de `MessageBox.Show` de debug** en production. Utiliser `Debug.WriteLine` ou des logs fichier.
+- **Pas de `MessageBox.Show` de debug** en production. Utiliser `Debug.WriteLine` ou `AppLog`.
 - **Pas de code dupliqué**. Si un bloc est copié-collé, le refactoriser en méthode.
-- **Pas de `catch { }` vide**. Toujours logger l'erreur au minimum.
+- **Pas de `catch { }` vide** sans raison justifiée. Toujours logger l'erreur au minimum.
 
-## 12. Déploiement et Sécurité (Signature)
+## 12. Déploiement et Sécurité (Signature & Inno Setup)
 
 Pour garantir un déploiement fluide et professionnel sans blocages "Éditeur inconnu" ou "Smart App Control" :
-
-### Procédure de Confiance (Installation Initiale) :
-Sur chaque nouvel ordinateur, avant de lancer l'installateur pour la première fois :
-1.  **Certificat** : Récupérer le fichier `HippocampeEnterprise.cer`.
-2.  **Installation** : 
-    - Double-cliquer sur le fichier.
-    - Choisir **Ordinateur local** (nécessite des droits admin).
-    - Choisir **Placer tous les certificats dans le magasin suivant**.
-    - Sélectionner **Autorités de certification racines de confiance**.
-3.  **Validation** : Une fois installé, Windows reconnaîtra "Hippocampe Systeme de Caisse" comme un éditeur de confiance.
-
-### Maintenance :
-- **Signature** : Toute nouvelle version de `SystemeCaisse.UI.exe` ou de l'installateur DOIT être signée avec le certificat `.pfx` correspondant en utilisant l'outil `signtool.exe`.
-- **Identité** : Ne jamais modifier les métadonnées d'assemblage (Company, Product) sans mettre à jour le certificat, sous peine d'invalidation de la signature.
+- Le script `BuildAndPackage.ps1` compile l'application en mode `Release` `win-x64` `--self-contained true`, signe les binaires `SystemeCaisse*` avec le certificat local, génère l'installateur `Distribution\Setup_SystemeCaisse.exe` via Inno Setup (`systemecaisse.iss`), et exporte `SystemeCaisseCert.cer` + `InstallerAutorisationSecurite.bat` dans `Distribution\`.
+- L'installateur `systemecaisse.iss` propose une tâche optionnelle : **"Configurer ce poste en tant que Poste Principal (Serveur PostgreSQL + Tailscale autonome)"** qui lance l'application avec `--setup-principal`.
 
 ## 13. Intégration Balance RS-232 (Adam Equipment Swift SWZ)
 
@@ -142,389 +126,83 @@ L'application supporte une balance connectée via un adaptateur USB-RS232 (FTDI 
 - **Configuration** : Section "Balance (RS-232)" dans l'onglet Périphériques des paramètres
 - **Initialisation** : Le service est démarré dans `MainViewModel.InitializeAsync()` si activé en config
 
-### Configuration matérielle optimale :
-
-| Composant | Paramètre | Valeur optimale |
-|-----------|-----------|-----------------|
-| **Balance** | Mode RS-232 | `PC` (Continuous to PC) |
-| **Balance** | Format | `Format 3` (poids seul : `+ 0.200kg`) |
-| **Balance** | Baud Rate | `115200` |
-| **FTDI (Gestionnaire périph.)** | Latency Timer | `1 ms` |
-| **FTDI** | Réception (Octets) | `64` (minimum) |
-| **FTDI** | Transmission (Octets) | `64` (minimum) |
-| **Application** | Baud Rate | `115200` (doit correspondre à la balance) |
-
-### Règles de code :
-- **Thread dédié** : Ne JAMAIS utiliser `DataReceived` event de SerialPort (latence ThreadPool ~15ms). Toujours utiliser un thread dédié avec `ThreadPriority.Highest`.
-- **Regex compilé** : Le pattern de parsing du poids doit être `static readonly` avec `RegexOptions.Compiled`.
-- **Dernière ligne seulement** : En mode continu, ne traiter que la DERNIÈRE ligne reçue pour éviter la latence cumulée.
-- **Dispatcher Send** : Les mises à jour UI depuis le thread série doivent utiliser `DispatcherPriority.Send` (priorité maximale).
-- **Brushes frozen** : Tous les `SolidColorBrush` dans `WeightInputWindow` doivent être `static readonly` et `.Freeze()` pour le cross-thread.
-- **Test connexion** : `TestConnection()` doit vérifier si le service actif utilise déjà le port (sinon erreur "port occupé").
-- **Redémarrage** : Toute modification des paramètres balance doit proposer un redémarrage automatique après sauvegarde.
-
-### Commandes RS-232 Adam Equipment SWZ :
-| Commande | Format | Description |
-|----------|--------|-------------|
-| **Tare** | `T\r\n` | Tarer la balance |
-| **Zéro** | `Z\r\n` | Remettre à zéro |
-| **Print** | `P\r\n` | Demander le poids |
-| **Prix unitaire** | `$XX.XX\r\n` | Envoyer le prix/kg à l'afficheur |
-
-> **Important** : Toutes les commandes DOIVENT être en lettres MAJUSCULES.
-
-### Produits connectés :
-- **Adaptateur** : FTDI FT232R (VID: 0403, PID: 6001)
-- **Balance** : Adam Equipment Swift SWZ (série)
-- **Port par défaut** : COM3
-- **Trame** : 8 bits, pas de parité, 1 stop bit, pas de contrôle de flux
-
-## 14. Gestion des Images Produits
+## 14. Gestion des Images Produits (Local & Multi-Postes PostgreSQL)
 
 ### Règles :
-- **Stockage** : Dossier `Images/Produits/` à la racine de l'exécutable.
+- **Stockage local** : Dossier `Images/Produits/` à la racine de l'exécutable et cache local dans `C:\ProgramData\SystemeCaisse\cache\images\`.
+- **Stockage Multi-Postes PostgreSQL** : Table `ImagesStockees` gérée par `ImageStorageService`. Lorsqu'une image produit ou un logo est ajouté/modifié sur un poste, il est envoyé dans PostgreSQL (`UpsertAsync`), la version `DataDomains.Images` est incrémentée, et tous les autres postes téléchargent automatiquement l'image dans leur cache local (`SyncCacheAsync`).
 - **Nommage** : `produit_{Id}_{ticks}.png` — le timestamp force le rechargement du cache WPF.
-- **Remplacement** : Lors du remplacement d'une image, SUPPRIMER l'ancien fichier avant d'écrire le nouveau.
-- **Suppression** : Quand l'image d'un produit est supprimée, le fichier physique doit aussi être supprimé.
-- **Affichage** : Les images doivent apparaître dans : Panier admin, Panier client, Fenêtre poids, Remise article, Promotions, Écran client, Dashboard, Stocks.
+- **Affichage** : Les images apparaissent dans : Panier admin, Panier client, Fenêtre poids, Remise article, Promotions, Écran client, Dashboard, Stocks, Commandes.
 
 ## 15. Intégration TPE Verifone (USB/Série)
 
 L'application supporte un Terminal de Paiement Électronique (TPE) Verifone connecté via USB (port COM virtuel) pour envoyer le montant CB au terminal et recevoir un statut (Accepté/Refusé).
-
 **IMPORTANT** : L'application n'a JAMAIS accès aux données de carte bancaire. Elle envoie uniquement le montant et reçoit un statut.
 
-### Architecture :
-- **Service** : `VerifonePaymentTerminalService.cs` (communication série via `System.IO.Ports.SerialPort`)
-- **UI** : Bouton "Payer par TPE" dans `TicketView`, visible uniquement si mode CB/Mixte + TPE connecté
-- **Erreur** : `TPEPaymentErrorWindow` — modale avec Réessayer/Annuler en cas d'échec
-- **Configuration** : Section "Terminal de Paiement (TPE)" dans l'onglet Périphériques des paramètres
-- **Initialisation** : Le service est démarré dans `MainViewModel.InitializeAsync()` si activé en config
-
-### Configuration :
-
-| Paramètre | Clé Config | Valeur par défaut |
-|-----------|------------|-------------------|
-| **Activer TPE** | `tpe_enabled` | `False` |
-| **Port COM** | `tpe_port_name` | `COM1` |
-| **Baud Rate** | `tpe_baud_rate` | `9600` |
-| **Timeout (sec)** | `tpe_timeout` | `60` |
-
-### Protocole CONCERT simplifié :
-
-| Étape | Caisse | TPE |
-|-------|--------|-----|
-| 1 | ENQ (0x05) | → |
-| 2 | ← | ACK (0x06) |
-| 3 | STX + données + ETX + LRC | → |
-| 4 | ← | ACK (0x06) |
-| 5 | EOT (0x04) | → |
-| 6 | ← | Réponse (STX + statut + ETX + LRC) |
-
-### Codes réponse :
-| Code | Signification |
-|------|---------------|
-| `0` | Paiement accepté |
-| `1` | Refusé par la banque |
-| `2` | Carte invalide |
-| `3` | Erreur communication bancaire |
-| `4` | Annulé par le client |
-| `5` | Code PIN incorrect |
-| `7` | Carte retirée prématurément |
-
-### Règles de code :
-- **Pas de données carte** : JAMAIS de numéro de carte, date d'expiration ou CVV dans l'application.
-- **Bouton "Valider" préservé** : Le bouton de validation classique reste toujours disponible pour valider sans TPE.
-- **Auto-validation** : Dès que le TPE retourne un succès, le panier est validé automatiquement (appel direct à `Checkout`).
-- **Retry loop** : En cas d'échec, la modale d'erreur propose "Réessayer" qui relance le paiement sans perdre le panier.
-- **Timeout configurable** : Le timeout de transaction est configurable (15-120 sec) car le client peut mettre du temps à saisir son code PIN.
-- **Prérequis matériel** : Le driver USB Verifone doit être installé pour que le port COM virtuel apparaisse. Le TPE doit être en mode "Caisse" (intégré).
-
-## 16. Module Commandes
-
-L'onglet **📋 Commandes** (index 2, entre Caisse et Produits) permet de gérer des commandes clients avec paiement partiel, livraison optionnelle et promotions.
-
-### Architecture :
-- **Entités** : `Commande` (client + montants + statuts + mode paiement) et `LigneCommande` (miroir de `LigneVente`)
-- **ViewModel** : `CommandesViewModel` — gère la liste, les filtres, la création, et les actions CRUD. Reçoit le `MainViewModel` via `SetMainViewModel()` pour accéder aux TopProducts et au ScaleService.
-- **Vues** :
-  - `CommandesView` (liste filtrable + catalogue nouvelle commande) — contient uniquement la partie gauche
-  - `CommandesSidebarView` (détail commande en mode liste + panier commande en mode création) — panneau latéral droit pleine hauteur
-  - `CommandeClientInfoWindow` (modale client avec TextBox+ListBox filtrable)
-  - `AddPaymentWindow` (modale ajout paiement avec sélection mode)
-- **Services** : `CommuneService` (chargement communes.json), `PrintService.GenerateCommandeTicketDocument()`
-
-### Layout Sidebar Pleine Hauteur (même pattern que la Caisse) :
-- Le panneau droit (détail/panier) est un `UserControl` séparé (`CommandesSidebarView`) injecté dans `Grid.Column="1"` du `MainWindow.xaml`, **en dehors du TabControl**.
-- Le `DataContext` est partagé : `commandesSidebar.DataContext = viewModel.CommandesVM` (dans `MainWindow.xaml.cs`).
-- La visibilité est contrôlée par un `DataTrigger` sur `mainTabs.SelectedIndex == 2`.
-- Le header et la barre de statut sont masqués quand l'onglet Commandes est actif (même comportement que l'onglet Caisse).
-- **Règle** : Ne JAMAIS remettre le panneau droit dans le `CommandesView.xaml` — il doit rester dans le sidebar du MainWindow pour prendre toute la hauteur.
-
-### Interface Nouvelle Commande (identique à la Caisse) :
-- **Barre de recherche** : ComboBox éditable avec `Loaded` handler anti-auto-sélection (même code que SalesView)
-- **Top Produits** : Délégués au `MainViewModel.TopProducts` — mêmes produits, même ordre, mêmes photos
-- **Produits au poids** : Ouverture de `WeightInputWindow` avec `ScaleService` partagé
-- **Panier** : Colonnes Image, Produit, P.U (/u ou /kg), Qté (+/-, double-clic → `QuantityInputWindow`), Total (barré si promo), ❌
-- **Remise** : Même flux complet que la Caisse — `ManualDiscountSelectionWindow` → `CartItemSelectionWindow` → `DiscountValueInputWindow`
-- **Attente** : Système `SuspendedCommande` avec ComboBox + bouton 📂 dans le coin haut droit du panier (même pattern que `TicketView`/`SuspendedSale`). Le panier est vidé mais on reste en mode nouvelle commande.
-
-### Types de paiement :
-Les commandes supportent 5 modes de paiement, stockés en BDD comme strings :
-
-| Mode | Clé BDD | Affichage Ticket |
-|------|---------|-----------------|
-| Espèce | `espece` | 💵 Espèce |
-| Virement | `virement` | 🏦 Virement |
-| Wero | `wero` | 📱 Wero |
-| Carte Bancaire | `cb` | 💳 CB |
-| En ligne | `en_ligne` | 🌐 En ligne |
-
-- **Mode par défaut** : `en_ligne` — initialisé dans `_commandeModePaiement`, `ResetCommandeForm()`, et `SuspendedCommande.ModePaiement`.
-- **Ajout paiement** : La fenêtre `AddPaymentWindow` propose aussi les 5 modes avec `en_ligne` coché par défaut.
-- **Affichage** : Le mode de paiement apparaît sur le détail de commande, le ticket imprimé, et le panier commande.
-
-### Modification de commande :
-- **Édition** : La commande originale n'est PAS supprimée. L'ID est stocké dans `_editingCommandeId`. Si l'utilisateur valide, la commande est mise à jour en BDD (UPDATE). Si l'utilisateur annule ("Retour à la liste"), la commande est restaurée intacte.
-
-### Filtres Liste :
-- **Recherche** : Par nom, prénom, téléphone, numéro de commande
-- **Statut** : Tous / En attente / Traitée / Annulée
-- **Paiement** : Tous / Réglé / Partiel / Non réglé
-- **Ville/CP** : `VilleCPFilterWindow` — affiche par défaut les villes existantes des commandes pour sélection rapide + recherche dans la base communes. Multi-sélection avec pills (tags).
-- **Effacer filtres** : Remet tous les filtres à zéro
-- **Récap Produits** : `CommandeRecapWindow` — agrège les articles de la liste filtrée avec impression ticket
-
-### Index des onglets (après ajout) :
-| Index | Onglet |
-|-------|--------|
-| 0 | Tableau de Bord |
-| 1 | Caisse |
-| 2 | **Commandes** |
-| 3 | Produits |
-| 4 | Stocks |
-| 5 | Ventes |
-| 6 | Analyses |
-| 7 | Configuration |
-
-### Statuts :
-- **Commande** : `en_attente` (défaut), `traitee`, `annulee`
-- **Paiement** (calculé) : `regle` (Restant ≤ 0), `partiel` (MontantPaye > 0), `non_regle`
-
-### Règles de stock :
-- **Création** : Le stock n'est PAS décrémenté à la création.
-- **Passage en "traitée"** : Le stock EST décrémenté et un `MouvementStock` est créé.
-- **Annulation** : Le stock n'est PAS restauré (à gérer manuellement si nécessaire).
-
-### Numéro de commande :
-- Format : `CMD-{YYYYMMDD}-{NNN}` (ex: `CMD-20260611-001`)
-- Compteur journalier basé sur `COUNT(NumeroCommande LIKE 'CMD-{date}%') + 1`
-
-### Ticket commande :
-- Même structure que le ticket vente mais avec en haut : N° Commande, Nom, Prénom, Téléphone, Adresse (si dispo), Ville/CP
-- En bas : **"RÉGLÉ"** ou **"NON RÉGLÉ — Restant : XX.XX€"** en gras
-- **Mode de paiement** affiché sur le ticket (ex: "Mode : 🌐 En ligne")
-
-### Données villes/CP :
-- Fichier `Data/communes.json` (~3 Mo) embarqué depuis `geo.api.gouv.fr`
-- Chargé au démarrage par `CommuneService.Load()`
-- Recherche combinée CP + nom de ville (la requête est testée à la fois comme préfixe de code postal ET comme sous-chaîne du nom de ville, ce qui couvre les cas où une ville est difficile à trouver par nom seul)
-- `maxResults` : 25 résultats maximum
-
-### Sélection multiple et actions batch :
-- Chaque ligne de commande possède une case à cocher (`IsSelected`, `[NotMapped]`, `INotifyPropertyChanged`).
-- Le header du DataGrid contient une case "Tout sélectionner / Désélectionner" gérée via `Click` en code-behind (`SelectAllCheckBox_Click` dans `CommandesView.xaml.cs`).
-- **Important** : Ne PAS utiliser de binding WPF pour la checkbox du header DataGrid — le DataContext du header ne résout pas correctement les `RelativeSource` dans WPF. Utiliser un handler `Click` en code-behind.
-- `CanUserAddRows="False"` est obligatoire sur le DataGrid pour éviter une ligne fantôme vide en bas de la liste.
-- Barre d'actions batch (visible quand sélection active) :
-  - ✅ Traitée — marque les commandes sélectionnées comme traitées
-  - ⏳ En attente — remet en attente
-  - ❌ Annuler — annule la sélection
-  - 🗑 Supprimer — supprime avec confirmation
-  - 🖨 Imprimer — imprime tous les tickets de la sélection
-  - 📊 Récap — affiche le récapitulatif des produits de la sélection
-
-### Récap Clients :
-- Fenêtre `CommandeClientRecapWindow` accessible via le bouton "👥 Récap Clients" dans le header.
-- Agrège les commandes par client (Nom + Prénom + Téléphone).
-- **Groupé par Ville** (pas par code postal) — une grande ville avec plusieurs codes postaux est regroupée sous un seul en-tête.
-- Le DataGrid utilise `CollectionViewSource.GetDefaultView` + `PropertyGroupDescription("Ville")` pour le groupement visuel.
-- Le ticket imprimé est aussi organisé par sections ville avec en-têtes `📍 VILLE`.
-- Colonnes : Client, Téléphone, Nb Commandes, Total, Payé, Restant (coloré vert/rouge).
-
-### Barre récapitulative en bas :
-- Bandeau vert en bas de la liste (même style que `HistoryView`).
-- Ligne 1 : Compteurs — total commandes, réglées, partielles, non réglées + Total général.
-- Ligne 2 : Ventilation par mode de paiement — 💳 CB, 💵 Espèce, 🌐 En ligne, 📱 Wero, 🏦 Virement.
-- Propriétés calculées dans `CommandesViewModel` : `CommandesCount`, `CommandesRegleCount`, `CommandesPartielCount`, `CommandesNonRegleCount`, `TotalGeneral`, `TotalCB`, `TotalEspece`, `TotalEnLigne`, `TotalWero`, `TotalVirement`.
-
-### Formatage et affichage :
-- **Téléphone espacé** : `PhoneSpacingConverter` (enregistré globalement dans `App.xaml` sous clé `PhoneSpacing`). Formate `0612345678` → `06 12 34 56 78`. Appliqué dans la colonne téléphone de la liste, le détail sidebar, et le ticket imprimé (via `PrintService.FormatPhone()`).
-- **Mise en évidence texte** : Dans le détail sidebar, N° commande en 22px Bold, nom client en 17px Bold, téléphone en 15px SemiBold, statut paiement en 15px. Dans le ticket imprimé, N° commande en 16px, nom en 14px Bold, téléphone en 12px Bold.
-- **Symbole Euro** : Les montants affichés dans les `Run` bindings du récap bar et de la sidebar utilisent `StringFormat='{}{0:0.00} €'` au lieu de `StringFormat=C` pour garantir le symbole € (le `StringFormat=C` dans les `Run` WPF ignore parfois la culture `FrameworkElement.Language`).
-
-### Précision décimale (fix bouton "= Exact") :
-- `Math.Round(..., 2)` appliqué systématiquement dans :
-  - `Commande.Restant` et `Commande.StatutPaiement` (entité)
-  - `FillExactAmountCommand` (ViewModel)
-  - `UpdateCommandeTotal()` — arrondit `CommandeTotalAvecLivraison` et `CommandeRestant`
-  - `AddPayment()` — arrondit `MontantPaye` après ajout
-  - `AddPaymentWindow` — `FillExact_Click` et `Confirm_Click` utilisent des comparaisons arrondies
-- **Règle** : Toute opération qui compare ou assigne un montant de paiement DOIT arrondir à 2 décimales pour éviter les faux statuts "Non réglé" causés par les erreurs de virgule flottante.
-
-### Suppression de commande :
-- `DeleteCommande()` gère les commandes fantômes (sans données) : affiche le nom ou `(commande sans données, ID=X)` dans la confirmation.
-- Fallback : si la recherche par `Id` échoue en BDD, tente une recherche par `NumeroCommande`.
-
-## 17. Sauvegarde et Restauration de la Base de Données
-
-La sauvegarde/restauration fonctionne par **copie binaire intégrale** du fichier `caisse.db` (SQLite). Cela garantit que **toutes les tables** sont incluses, y compris les commandes.
-
-### Tables sauvegardées (exhaustif) :
-- `Entreprise`, `Configuration`, `Produits`, `Categories`
-- `Ventes`, `LignesVente`, `Paiements`
-- `MouvementsStock`, `CommandesFournisseurs`
-- **`Commandes`**, **`LignesCommande`** (module Commandes)
-- `Promotions`
-
-### Fonctionnement :
-- **Sauvegarde** : `File.Copy(dbPath, saveDlg.FileName, true)` — copie complète du fichier `.db`
-- **Restauration** : `File.Copy(openDlg.FileName, dbPath, true)` — remplacement du fichier `.db` + réparation automatique des chemins d'images (`RepairProductImagePaths`) + redémarrage proposé
-- **Réinitialisation** : `EnsureDeleted()` + `Migrate()` — efface TOUT et recrée le schéma vide
-
-### Règles :
-- La restauration remplace **toutes** les données sans exception.
-- Un message d'avertissement est affiché avant restauration.
-- Le redémarrage est fortement recommandé après restauration.
-- Les images produits ne sont PAS incluses dans le fichier `.db` — elles restent dans le dossier `Images/Produits/`.
-
-## 18. Mode Multi-Poste — Partage Base de Données Réseau (Tailscale/SMB)
-
-L'application supporte un fonctionnement multi-poste où plusieurs ordinateurs partagent la même base de données SQLite via un partage réseau SMB (ex: Tailscale VPN).
-
-### Architecture :
-- **Service** : `NetworkDatabaseService.cs` — détecte et gère le basculement entre BDD locale et réseau
-- **Configuration** : Fichier `network_db_config.json` (à côté de l'exécutable), **non** en BDD pour rester indépendant
-- **UI Config** : Section « Base de données partagée » dans l'onglet Configuration
-- **Flag statique** : `AppDbContext.IsNetworkDatabaseMode` — propagé au démarrage pour adapter le comportement EF Core
-
-### Modes de fonctionnement :
-
-| Poste | Mode | BDD | Config réseau |
-|-------|------|-----|---------------|
-| **Principal** (serveur) | LOCAL | `caisse.db` local | Désactivé |
-| **Secondaire** (client) | RÉSEAU | `\\100.113.56.25\SystemeCaisse\caisse.db` | Activé |
-
-### Configuration réseau :
-```json
-{
-  "Enabled": true,
-  "NetworkDbPath": "\\\\100.113.56.25\\SystemeCaisse\\caisse.db"
-}
-```
-
-- **Chemin par défaut** pré-rempli : `\\100.113.56.25\SystemeCaisse\caisse.db`
-- **Bouton "Tester"** : Vérifie l'accessibilité du chemin réseau avant activation
-- **Indicateur** : Pastille verte/rouge + texte "Mode RÉSEAU" / "Mode LOCAL" visible en permanence
-
-### Contraintes SQLite sur SMB :
-
-> **CRITIQUE** : Le mode WAL (Write-Ahead Logging) est **INTERDIT** sur les partages SMB.
-
-| Mode Journal | Compatible SMB | Raison |
-|--------------|---------------|--------|
-| `WAL` | ❌ NON | Utilise `mmap()` (memory-mapped I/O) — incompatible avec SMB |
-| `DELETE` | ✅ OUI | Verrouillage fichier classique — fonctionne sur SMB |
-
-- **PRAGMA obligatoire** : `journal_mode=DELETE` est forcé dans le constructeur `AppDbContext` pour TOUS les postes (local ET réseau).
-- **busy_timeout** : `PRAGMA busy_timeout=10000` (10 secondes d'attente si la BDD est verrouillée par un autre poste).
-- **Fermeture connexion** : Après l'exécution des PRAGMAs dans le constructeur, `connection.Close()` est **OBLIGATOIRE** pour libérer le verrou fichier. Sans cela, le poste principal bloque les écritures des secondaires.
-- **Nettoyage WAL** : `CleanupWalFiles()` dans `NetworkDatabaseService` supprime automatiquement les fichiers `-wal` (si vide) et `-shm` résiduels au démarrage en mode réseau.
-
-### Permissions NTFS et partage SMB :
-
-> **CRITIQUE** : Le dossier partagé doit accorder les droits **Modifier** (pas juste Lecture) aux utilisateurs réseau.
-
-**Erreur typique** : `SQLite Error 8: 'attempt to write a readonly database'` → permissions insuffisantes.
-
-**Fix (sur l'ordi principal, en admin)** :
-```cmd
-icacls "C:\chemin\vers\SystemeCaisse" /grant "Tout le monde:(OI)(CI)M" /T
-```
-
-Deux niveaux de permissions doivent être configurés :
-1. **Partage SMB** : Clic droit → Propriétés → Partage → Partage avancé → Autorisations → Tout le monde → Contrôle total
-2. **NTFS** : Clic droit → Propriétés → Sécurité → Modifier → Tout le monde → Modifier
-
-### Images partagées :
-- Le dossier `Images` est aussi résolu depuis le partage réseau : `\\100.113.56.25\SystemeCaisse\Images`
-- `NetworkDatabaseService.ImagesBasePath` pointe vers le dossier réseau si disponible, sinon fallback local
-- `Produit.FullImagePath` utilise `ImagesBasePath` pour construire le chemin absolu
-
-### Démarrage en mode réseau (postes secondaires) :
-- **Pas de migration** : `MigrateAsync()` et `EnsureCreated()` ne sont PAS exécutés (la BDD est gérée par le principal)
-- **Pas de seed** : Les données initiales (Entreprise, Configuration) ne sont PAS créées
-- **Lecture entreprise** : Les infos entreprise (nom, adresse, logo) sont lues en lecture seule depuis la BDD réseau pour initialiser l'UI
-- **Fallback** : Si le chemin réseau est inaccessible au démarrage, l'application bascule automatiquement en mode local
-
-### Vérification connexion :
-- Vérification périodique toutes les 30 secondes (`DispatcherTimer` dans `MainWindow`)
-- Alerte visuelle si la connexion réseau est perdue en cours d'utilisation
-- `NetworkDatabaseService.TestNetworkPath()` teste l'accessibilité du fichier BDD
-
-### Synchronisation paramètres :
-- Les postes secondaires partagent automatiquement les paramètres entreprise du poste principal
-- Toute modification de l'entreprise sur le principal est visible sur les secondaires au prochain chargement
-
-### Connection string :
-```csharp
-// CORRECT — simple, sans options problématiques
-builder.DataSource = resolvedDbPath;
-
-// INTERDIT — Cache=Shared cause des conflits de verrous sur SMB
-builder.Cache = SqliteCacheMode.Shared; // ❌
-```
-
-### Règles de code :
-- **Connection.Close()** : TOUJOURS fermer la connexion après les PRAGMAs dans le constructeur AppDbContext
-- **InnerException** : TOUJOURS afficher `ex.InnerException?.Message ?? ex.Message` dans les catch de SaveChanges — EF Core encapsule l'erreur SQLite réelle dans une outer exception générique
-- **Pas de migration réseau** : Les postes secondaires ne doivent JAMAIS tenter de migrer ou seeder la BDD réseau
-- **Config hors BDD** : La config réseau est stockée en JSON local, pas en BDD (sinon problème d'œuf et poule)
-
-## 19. Bouton Actualiser (Onglet Produits)
-
-- **Bouton** : « 🔄 Actualiser » dans le footer de `ProductsView`, à côté de « Nouveau »
-- **Command** : `RefreshProductsCommand` dans `ProductsViewModel` — appelle `LoadDataInternalAsync()` pour recharger la liste depuis la BDD
-- **Usage** : Utile en mode multi-poste pour voir les produits ajoutés/modifiés depuis un autre poste
-
-## 20. Résilience Déploiement et Configuration
-
-### Déploiement Self-Contained
-- **Règle absolue** : Pour publier l'application en mode `SelfContained` sans que les utilisateurs ne subissent de fenêtres de demande d'installation du runtime .NET, il faut **obligatoirement** ajouter `<SelfContained>true</SelfContained>` directement dans le `<PropertyGroup>` de `SystemeCaisse.UI.csproj`. Le passage du paramètre `--self-contained true` en ligne de commande avec `dotnet publish` ne suffit pas à garantir l'intégration du runtime sous .NET 8+.
-
-### Résilience de la Base de Données
-- Lors d'une nouvelle installation (ou mise à jour majeure modifiant le dossier d'installation), le fichier local `network_db.json` est perdu. L'application démarre alors en **Mode Local** et génère une base `caisse.db` de test.
-- **Règle UI** : L'interface et les popups de test de connexion (`SettingsViewModel`, `CommandesViewModel`) doivent explicitement avertir l'utilisateur que "L'application est en Mode Local" et que ses données "ne sont pas perdues mais inaccessibles sur le réseau" au lieu de générer des messages d'erreur génériques de type "Réseau indisponible".
-
-### Synchronisation Web TransitManager
-- **Paramètres en BDD** : Les paramètres d'activation de la synchronisation Web (`sync_enabled`, `sync_hub_url`, `sync_api_key`) résident dans la table `Configuration` de la BDD SQLite.
-- **Attention au multi-poste** : L'activation de la synchronisation sur le poste développeur n'a **aucun effet** sur la production. Les scripts d'injection de configuration (`activate_sync_prod.py`) doivent impérativement être joués sur la BDD physique utilisée par la caisse principale (ex: `\\100.113.56.25\SystemeCaisse\caisse.db`).
-
-## 21. Architecture Multi-Poste Hybride (PostgreSQL / SQLite) et Bootstrapper
-
-### Règles architecturales :
-- **Fabrique de contextes unifiée** : `CaisseDbContextFactory` est l'UNIQUE fabrique enregistrée dans l'injecteur de dépendances (DI), à la fois sous son type concret et sous `IDbContextFactory<AppDbContext>`. Aucun service ne doit créer de `DbContextOptions` ad-hoc sous peine de créer un état "split-brain" (moitié SQLite, moitié PostgreSQL).
-- **Initialisation par Bootstrapper** : Toute initialisation de base de données (test de connectivité, migrations, vérification de version du schéma et seed) passe impérativement par `DatabaseBootstrapper.InitializeAsync()`.
-- **Verrou consultatif PostgreSQL** : Les migrations sur PostgreSQL sont protégées par `pg_advisory_lock` pour éviter tout conflit si plusieurs postes démarrent simultanément.
-- **Reprise automatique** : Si la base cible est vide et qu'une base SQLite `caisse.db` existe sur le poste, `DataTransferService.ImportSqliteAsync` est exécuté automatiquement pour restaurer les données et réaligner les séquences (`setval`).
-- **Mode hors-ligne résilient** : En cas de serveur PostgreSQL injoignable, l'application démarre en mode dégradé avec le cache catalogue local (`CatalogCache`) et empile les ventes dans la file locale (`OfflineSalesQueue`) pour envoi automatique au rétablissement réseau.
-
-## 22. Fluidité de Navigation et Maintien en Mémoire des Vues (TabContent.IsCached)
-
-### Règles pour le TabControl principal :
-- **Conservation du Visual Tree** : Le `TabControl` de navigation dans `MainWindow.xaml` doit obligatoirement porter l'attribut `controls:TabContent.IsCached="True"`.
-- **Mécanisme** : Au lieu de détruire et reconstruire les contrôles WPF lourds (DataGrid, images, listes de plus de 1 000 articles), `TabContent` conserve chaque vue dans un `Grid` et bascule uniquement la propriété `Visibility` (`Visible` / `Collapsed`). Le temps de commutation est instantané (0 ms).
-- **Pas de chargement bloquant sur le thread UI** : Lors du changement d'onglet, aucun rechargement synchrone de données ne doit s'exécuter sur le thread UI. Utiliser `Task.Run` ou des appels asynchrones avec rafraîchissement différé.
-- **Gestion des erreurs en arrière-plan** : Les rechargements automatiques d'onglets ne doivent JAMAIS afficher de `MessageBox` modale en cas d'erreur réseau passagère. Logger avec `AppLog.Error` et réserver les popups aux actions manuelles explicites de l'utilisateur (bouton "Actualiser").
-
-
+## 16. Module Commandes (Simples & Regroupées)
+
+L'onglet **📋 Commandes** (index 2, entre Caisse et Produits) permet de gérer des commandes clients avec paiement partiel, livraison optionnelle, promotions et commandes regroupées multi-clients.
+
+### Architecture & Ergonomie :
+- **Barre de recherche Caisse & Commandes** :
+  - Produits inactifs strictement exclus (`Actif == true`).
+  - Auto-complétion native désactivée (`IsTextSearchEnabled="False"`) pour une saisie fluide et rapide.
+  - Liste déroulante élargie (`MaxDropDownHeight="420"`, `MinWidth="680"`) pour une meilleure lisibilité.
+- **Types de paiement Commandes (sur une seule ligne compacte)** :
+  - `en_ligne` (🌐 En ligne — par défaut), `cb` (💳 CB), `espece` (💵 Espèce), `virement` (🏦 Virement), `wero` (📱 Wero), `sur_place` (🏪 Sur place).
+- **Statuts de commande** :
+  - `en_attente` (⏳ En attente), `validee` (✔️ Validée — avec bouton rapide dans le détail de commande et les actions batch), `traitee` (✅ Traitée — décrémente le stock), `annulee` (❌ Annulée).
+- **Champ Commentaire** :
+  - Présent dans `CommandeClientInfoWindow`, affiché dans le détail de la commande (encadré jaune) et imprimé sur le ticket de commande.
+- **Recherche Villes & Codes Postaux (`CommuneService`)** :
+  - Indexation normalisée en mémoire (sans accents ni tirets), permettant de chercher indifféremment par code postal, nom partiel ou combinaison des deux.
+- **Corbeille des Commandes Supprimées** :
+  - Bouton icône 🗑️ avec compteur à côté du bouton Actualiser permettant d'afficher les commandes mises à la corbeille, de les **Restaurer** ou de les **Supprimer définitivement**.
+- **Commandes Regroupées Multi-Clients (`👥 Cmd Regroupée`)** :
+  - Permet d'ajouter plusieurs clients (`Client 1`, `Client 2`, etc.) dans une même commande.
+  - Chaque ligne du panier est rattachée au sous-client actif (`LigneCommande.ClientNom`).
+  - Le récapitulatif des sous-totaux par client dans le panier est affiché dans une liste déroulante compacte (`MaxHeight="58"`, affichant 2 lignes visibles) pour laisser un maximum d'espace aux articles du panier, tout en affichant le **Total Global à payer** de l'ensemble des commandes regroupées.
+  - La fiche client finale regroupe la livraison, le mode de paiement et le client référent, tandis que le détail et le ticket imprimé détaillent le panier et le sous-total de chaque client.
+- **Ticket Récapitulatif Produits (`CommandeRecapWindow`)** :
+  - Affiche des petits pointillés de guidage visuel jusqu'à la colonne quantité et précise systématiquement l'unité (`kg` ou `pce`) dans la colonne quantité.
+
+## 17. Sauvegarde et Restauration Universelles (`.caisse-backup` & `.db`)
+
+- **Compatibilité SQLite & PostgreSQL** : `DataTransferService` permet d'exporter et de restaurer l'intégralité de la base (produits, ventes, commandes, stocks, promotions, entreprise, configuration et images) au format `.caisse-backup` (ou d'importer un fichier SQLite `.db`), que le poste soit en mode SQLite local ou en mode PostgreSQL Multi-Postes.
+- **Sauvegarde automatique** : Le Poste Principal effectue automatiquement une sauvegarde quotidienne dans `C:\ProgramData\SystemeCaisse\backups\` (conservation des 30 dernières sauvegardes).
+
+## 18. Déploiement Production Multi-Postes (PostgreSQL + Tailscale Autonome)
+
+L'application fonctionne en production sur une architecture **Client-Serveur PostgreSQL via Tailscale VPN**, gérée de bout en bout par `PostgresProvisioningService`, `CaisseDbContextFactory`, `DatabaseBootstrapper` et `ConnectivityMonitor`.
+
+### 1. Rôles des Postes (`C:\ProgramData\SystemeCaisse\config\poste.json`)
+| Rôle | Moteur | Hôte PostgreSQL | Description |
+|------|--------|-----------------|-------------|
+| **Poste Principal (Serveur)** | `PostgreSql` | `localhost` (`5432`/`5433`) | Héberge la base PostgreSQL `caisse`, accepte les connexions Tailscale & LAN, effectue les sauvegardes auto |
+| **Poste Secondaire (Client)** | `PostgreSql` | IP Tailscale du Principal (`100.x.y.z`) | Se connecte au serveur PostgreSQL du Poste Principal via Tailscale |
+| **Poste Autonome (Local)** | `Sqlite` | Fichier `caisse.db` local | Mode mono-poste sans serveur PostgreSQL |
+
+### 2. Provisionnement Autonome du Poste Principal (`PostgresProvisioningService`)
+Accessible lors de l'installation (`--setup-principal`) ou en 1 clic dans **Paramètres > 🔧 Système** :
+1. **Service Tailscale** : Vérifie et démarre le service Windows `Tailscale` en mode `Automatic` et détecte l'IP `100.x.y.z`.
+2. **Moteur PostgreSQL** : Détecte le service PostgreSQL existant ou installe PostgreSQL 16 silencieusement. Configure le service Windows en mode `Automatic` avec redémarrage automatique en cas d'arrêt (`sc.exe failure`).
+3. **Configuration Réseau PostgreSQL** :
+   - `postgresql.conf` : `listen_addresses = '*'`, `tcp_keepalives_idle = 30`, `tcp_keepalives_interval = 10`, `tcp_keepalives_count = 5`.
+   - `pg_hba.conf` : Autorise `127.0.0.1/32` et `::1/128` (`trust`), ainsi que le sous-réseau Tailscale `100.64.0.0/10` et les sous-réseaux privés LAN (`md5`).
+4. **Pare-feu Windows** : Ouvre automatiquement les ports TCP `5432` et `5433`.
+5. **Base, Schéma & Migration** : Crée le rôle `caisse` et la base `caisse`, exécute `DatabaseBootstrapper.InitializeAsync()` pour créer toutes les tables/colonnes, et importe automatiquement les données de `caisse.db` + toutes les photos produits (`ImagesStockees`) si la base PostgreSQL vient d'être créée.
+
+### 3. Connexion des Postes Secondaires & Maintien Réseau
+- **Auto-détection du port** : `TestAndPrepareSecondaryConnectionAsync` teste le port configuré (`5432`) et bascule automatiquement sur `5433` si nécessaire.
+- **Résilience aux micro-coupures VPN (`ConnectivityMonitor`)** :
+  - Test de connectivité toutes les 10 secondes.
+  - En cas de perte ou de rétablissement de la connexion, exécute `NpgsqlConnection.ClearAllPools()` pour purger immédiatement les connexions TCP mortes et relance `tailscale up --unattended` si le tunnel est tombé.
+- **Mode Hors-Ligne Transparent (`OfflineQueueService` & `CatalogCacheService`)** :
+  - Si le Poste Principal est temporairement injoignable, le Poste Secondaire continue d'encaisser les ventes dans sa file locale et les synchronise automatiquement dès le retour de la connexion.
+- **Synchronisation Temps Réel (`DataVersionMonitor`)** :
+  - Polling léger toutes les 5 secondes sur la table `DataVersions`. Tout changement de produit, stock, prix, promotion, entreprise ou image sur un poste rafraîchit automatiquement les autres postes.
+
+## 19. Fluidité de Navigation et Maintien en Mémoire des Vues (`TabContent.IsCached`)
+
+- **Conservation du Visual Tree** : Le `TabControl` de navigation dans `MainWindow.xaml` porte l'attribut `controls:TabContent.IsCached="True"` pour conserver chaque vue en mémoire et commuter en 0 ms.
+- **Pas de chargement bloquant sur le thread UI** : Lors du changement d'onglet, aucun rechargement synchrone de données ne doit s'exécuter sur le thread UI.

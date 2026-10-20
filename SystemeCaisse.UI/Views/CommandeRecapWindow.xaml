@@ -20,8 +20,22 @@
                   GridLinesVisibility="Horizontal" HeadersVisibility="Column" Background="White"
                   BorderBrush="#DDD" BorderThickness="1" RowHeight="35">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Produit" Binding="{Binding ProduitNom}" Width="*" FontWeight="SemiBold"/>
-                <DataGridTextColumn Header="Quantité" Binding="{Binding QuantiteTotale, StringFormat=N2}" Width="100" FontWeight="Bold"/>
+                <DataGridTemplateColumn Header="Produit" Width="*">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Grid VerticalAlignment="Center" Margin="6,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding ProduitNom}" FontWeight="SemiBold" Margin="0,0,6,0"/>
+                                <TextBlock Grid.Column="1" Text=" . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . ."
+                                           Foreground="#BBBBBB" TextWrapping="NoWrap" ClipToBounds="True" VerticalAlignment="Bottom" Margin="0,0,4,1"/>
+                            </Grid>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Quantité" Binding="{Binding QuantiteDisplay}" Width="110" FontWeight="Bold"/>
             </DataGrid.Columns>
         </DataGrid>
 

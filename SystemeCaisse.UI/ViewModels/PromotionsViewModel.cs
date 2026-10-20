@@ -227,7 +227,7 @@ namespace SystemeCaisse.UI.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show(Services.WindowHelper.GetAdminWindow(), $"Erreur lors du chargement des promotions : {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                System.Diagnostics.Debug.WriteLine($"Erreur lors du chargement des promotions : {ex.Message}");
             }
         }
 
@@ -308,6 +308,8 @@ namespace SystemeCaisse.UI.ViewModels
 
                 await context.SaveChangesAsync();
                 WeakReferenceMessenger.Default.Send(new PromotionsChangedMessage());
+                if (Application.Current.MainWindow?.DataContext is MainViewModel mainVM1)
+                    mainVM1.MarkCaisseDirty(catalog: false, promotions: true);
 
                 if (!IsEditing) Promotions.Add(promo);
                 else await LoadPromotionsAsync(); // Refresh list to show changes
@@ -429,6 +431,8 @@ namespace SystemeCaisse.UI.ViewModels
                 Promotions.Remove(promo);
                 Application.Current.Dispatcher.Invoke(() => {
                     WeakReferenceMessenger.Default.Send(new PromotionsChangedMessage());
+                    if (Application.Current.MainWindow?.DataContext is MainViewModel mainVM2)
+                        mainVM2.MarkCaisseDirty(catalog: false, promotions: true);
                 });
             }
             catch (Exception ex)
@@ -449,6 +453,8 @@ namespace SystemeCaisse.UI.ViewModels
                  {
                      existing.Actif = promo.Actif;
                      await context.SaveChangesAsync();
+                     if (Application.Current.MainWindow?.DataContext is MainViewModel mainVM3)
+                         mainVM3.MarkCaisseDirty(catalog: false, promotions: true);
                  }
              }
              catch(Exception ex)

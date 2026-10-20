@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO;
 using System.Windows.Data;
@@ -7,29 +8,36 @@ using System.Windows.Media.Imaging;
 namespace SystemeCaisse.UI.Converters
 {
     /// <summary>
-    /// Converts an image file path to a BitmapImage with CacheOption.OnLoad,
-    /// ensuring the file is not locked by WPF and can be replaced/deleted.
+    /// Converts an image file path to a cached, frozen BitmapImage with CacheOption.OnLoad,
+    /// ensuring the file is not locked by WPF and eliminating repeated disk I/O during UI virtualized scrolling and search.
     /// </summary>
     public class PathToImageConverter : IValueConverter
     {
+        private static readonly ConcurrentDictionary<string, BitmapImage?> ImageCache = new(StringComparer.OrdinalIgnoreCase);
+
         public object? Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            if (value is string path && !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            if (value is string path && !string.IsNullOrWhiteSpace(path))
             {
-                try
+                return ImageCache.GetOrAdd(path, static p =>
                 {
-                    var bitmap = new BitmapImage();
-                    bitmap.BeginInit();
-                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                    bitmap.UriSource = new Uri(path, UriKind.Absolute);
-                    bitmap.EndInit();
-                    bitmap.Freeze(); // Make thread-safe
-                    return bitmap;
-                }
-                catch
-                {
-                    return null;
-                }
+                    if (!File.Exists(p)) return null;
+                    try
+                    {
+                        var bitmap = new BitmapImage();
+                        bitmap.BeginInit();
+                        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                        bitmap.DecodePixelWidth = 160;
+                        bitmap.UriSource = new Uri(p, UriKind.Absolute);
+                        bitmap.EndInit();
+                        bitmap.Freeze(); // Make thread-safe
+                        return bitmap;
+                    }
+                    catch
+                    {
+                        return null;
+                    }
+                });
             }
             return null;
         }

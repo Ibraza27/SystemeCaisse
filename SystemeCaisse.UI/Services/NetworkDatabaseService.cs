@@ -192,18 +192,47 @@ namespace SystemeCaisse.UI.Services
         public string? ResolveImagePath(string? relativePath)
         {
             if (string.IsNullOrWhiteSpace(relativePath)) return null;
-            if (Path.IsPathRooted(relativePath)) return File.Exists(relativePath) ? relativePath : null;
+            if (Path.IsPathRooted(relativePath) && File.Exists(relativePath)) return relativePath;
 
-            // Try network path first if in network mode
+            var normalized = relativePath.Replace('/', Path.DirectorySeparatorChar).TrimStart(Path.DirectorySeparatorChar);
+
+            // 1. Try network path first if in network mode
             if (IsNetworkMode && !string.IsNullOrWhiteSpace(ImagesBasePath))
             {
-                var networkPath = Path.Combine(ImagesBasePath, relativePath);
+                var networkPath = Path.Combine(ImagesBasePath, normalized);
                 if (File.Exists(networkPath)) return networkPath;
             }
 
-            // Fallback to local
-            var localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, relativePath);
-            return File.Exists(localPath) ? localPath : null;
+            // 2. Try local BaseDirectory (Images\Produits\...)
+            var localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, normalized);
+            if (File.Exists(localPath)) return localPath;
+
+            // 3. Try ProgramData cache (C:\ProgramData\SystemeCaisse\cache\images\...)
+            var cachePath = Path.Combine(SystemeCaisse.Infrastructure.Configuration.AppPaths.ImagesCacheDir, normalized);
+            if (File.Exists(cachePath)) return cachePath;
+
+            // 4. Fallback by product ID prefix (e.g. produit_42_*) if timestamp changed after backup/restore
+            try
+            {
+                var fileNameNoExt = Path.GetFileNameWithoutExtension(normalized);
+                if (fileNameNoExt.StartsWith("produit_", StringComparison.OrdinalIgnoreCase))
+                {
+                    var parts = fileNameNoExt.Split('_');
+                    if (parts.Length >= 2 && int.TryParse(parts[1], out int prodId))
+                    {
+                        var produitsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images", "Produits");
+                        if (Directory.Exists(produitsDir))
+                        {
+                            var match = Directory.EnumerateFiles(produitsDir, $"produit_{prodId}_*").FirstOrDefault()
+                                     ?? Directory.EnumerateFiles(produitsDir, $"produit_{prodId}.*").FirstOrDefault();
+                            if (match != null) return match;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            return null;
         }
 
         /// <summary>
@@ -253,7 +282,7 @@ namespace SystemeCaisse.UI.Services
                 return new NetworkDbConfig
                 {
                     Enabled = false,
-                    NetworkDbPath = @"\\100.113.56.25\SystemeCaisse\caisse.db"
+                    NetworkDbPath = @"\\100.x.y.z\SystemeCaisse\caisse.db"
                 };
             }
 
@@ -301,6 +330,6 @@ namespace SystemeCaisse.UI.Services
     public class NetworkDbConfig
     {
         public bool Enabled { get; set; }
-        public string NetworkDbPath { get; set; } = @"\\100.113.56.25\SystemeCaisse\caisse.db";
+        public string NetworkDbPath { get; set; } = @"\\100.x.y.z\SystemeCaisse\caisse.db";
     }
 }

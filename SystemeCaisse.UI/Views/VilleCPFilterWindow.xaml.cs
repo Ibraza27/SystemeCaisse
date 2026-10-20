@@ -42,14 +42,15 @@ namespace SystemeCaisse.UI.Views
         private void TbSearch_TextChanged(object sender, TextChangedEventArgs e)
         {
             string query = tbSearch.Text?.Trim() ?? "";
-            if (query.Length >= 2)
+            string qNorm = CommuneService.NormalizeText(query);
+            if (qNorm.Length >= 1)
             {
                 // Search in existing cities first, then communes database
                 var existingMatches = _existingVillesCPs
-                    .Where(v => v.ToUpper().Contains(query.ToUpper()) && !SelectedVillesCPs.Contains(v))
+                    .Where(v => CommuneService.NormalizeText(v).Contains(qNorm) && !SelectedVillesCPs.Contains(v))
                     .ToList();
 
-                var communeMatches = CommuneService.Search(query, 20)
+                var communeMatches = CommuneService.Search(query, 25)
                     .Select(c => c.Display)
                     .Where(d => !SelectedVillesCPs.Contains(d) && !existingMatches.Contains(d))
                     .ToList();
@@ -62,14 +63,14 @@ namespace SystemeCaisse.UI.Views
             }
 
             // Also filter existing list
-            if (string.IsNullOrWhiteSpace(query))
+            if (string.IsNullOrWhiteSpace(qNorm))
             {
                 ShowExistingVilles();
             }
             else
             {
                 var filtered = _existingVillesCPs
-                    .Where(v => v.ToUpper().Contains(query.ToUpper()) && !SelectedVillesCPs.Contains(v))
+                    .Where(v => CommuneService.NormalizeText(v).Contains(qNorm) && !SelectedVillesCPs.Contains(v))
                     .ToList();
                 lbExisting.ItemsSource = filtered;
             }

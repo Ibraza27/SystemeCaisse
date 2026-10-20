@@ -15,6 +15,10 @@ namespace SystemeCaisse.UI.Views
     {
         public string ProduitNom { get; set; } = string.Empty;
         public decimal QuantiteTotale { get; set; }
+        public string Unite { get; set; } = "pce";
+        public string QuantiteDisplay => QuantiteTotale % 1 == 0
+            ? $"{QuantiteTotale:0} {Unite}"
+            : $"{QuantiteTotale:0.###} {Unite}";
     }
 
     public partial class CommandeRecapWindow : Window
@@ -24,27 +28,54 @@ namespace SystemeCaisse.UI.Views
         private readonly Entreprise _entreprise;
         private readonly int _nbCommandes;
 
-        public CommandeRecapWindow(List<Commande> commandes, PrintService printService, Entreprise entreprise)
+        public CommandeRecapWindow(List<Commande> commandes, PrintService printService, Entreprise entreprise, IEnumerable<Produit>? catalog = null)
         {
             InitializeComponent();
             _printService = printService;
             _entreprise = entreprise;
             _nbCommandes = commandes.Count;
 
+            var weightProductIds = new HashSet<int>();
+            var weightProductNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (catalog != null)
+            {
+                foreach (var p in catalog)
+                {
+                    if (string.Equals(p.TypeVente?.Trim(), "poids", StringComparison.OrdinalIgnoreCase))
+                    {
+                        weightProductIds.Add(p.Id);
+                        if (!string.IsNullOrWhiteSpace(p.Nom))
+                            weightProductNames.Add(p.Nom.Trim());
+                    }
+                }
+            }
+
             // Aggregate all products
             _lines = commandes
+                .Where(c => c.Lignes != null)
                 .SelectMany(c => c.Lignes)
-                .GroupBy(l => l.ProduitNom)
-                .Select(g => new RecapLine
+                .Where(l => !string.IsNullOrWhiteSpace(l.ProduitNom))
+                .GroupBy(l => l.ProduitNom!.Trim())
+                .Select(g =>
                 {
-                    ProduitNom = g.Key,
-                    QuantiteTotale = g.Sum(l => l.Quantite)
+                    bool isKg = g.Any(l =>
+                        string.Equals(l.Unite, "kg", StringComparison.OrdinalIgnoreCase) ||
+                        (l.ProduitId.HasValue && weightProductIds.Contains(l.ProduitId.Value)) ||
+                        weightProductNames.Contains((l.ProduitNom ?? "").Trim()) ||
+                        l.Quantite % 1 != 0);
+
+                    return new RecapLine
+                    {
+                        ProduitNom = g.Key,
+                        QuantiteTotale = g.Sum(l => l.Quantite),
+                        Unite = isKg ? "kg" : "pce"
+                    };
                 })
                 .OrderBy(l => l.ProduitNom)
                 .ToList();
 
             dgRecap.ItemsSource = _lines;
-            tbSubtitle.Text = $"{_nbCommandes} commande(s) — {_lines.Count} produit(s) différent(s) — {_lines.Sum(l => l.QuantiteTotale):N0} articles au total";
+            tbSubtitle.Text = $"{_nbCommandes} commande(s) — {_lines.Count} produit(s) différent(s)";
         }
 
         private void Print_Click(object sender, RoutedEventArgs e)
@@ -78,6 +109,13 @@ namespace SystemeCaisse.UI.Views
 
             // Header
             var headerPara = new Paragraph { TextAlignment = TextAlignment.Center };
+            var bwLogo = PrintService.LoadBlackAndWhiteLogo(_entreprise.LogoPath);
+            if (bwLogo != null)
+            {
+                var image = new Image { Source = bwLogo, Width = 80, Height = 80, Stretch = Stretch.Uniform };
+                headerPara.Inlines.Add(new InlineUIContainer(image));
+                headerPara.Inlines.Add(new LineBreak());
+            }
             headerPara.Inlines.Add(new Bold(new Run(_entreprise.Nom ?? "Magasin")) { FontSize = 14 });
             headerPara.Inlines.Add(new LineBreak());
             headerPara.Inlines.Add(new LineBreak());
@@ -114,15 +152,46 @@ namespace SystemeCaisse.UI.Views
             {
                 var row = new TableRow();
                 var cell = new TableCell();
-                var panel = new DockPanel();
-                var nameText = new TextBlock { Text = line.ProduitNom, FontSize = 11 };
-                DockPanel.SetDock(nameText, Dock.Left);
-                panel.Children.Add(nameText);
-                string qtyStr = line.QuantiteTotale % 1 == 0 ? $"{line.QuantiteTotale:0}" : $"{line.QuantiteTotale:0.000}";
-                var qtyText = new TextBlock { Text = qtyStr, FontWeight = FontWeights.Bold, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Right };
-                DockPanel.SetDock(qtyText, Dock.Right);
-                panel.Children.Add(qtyText);
-                cell.Blocks.Add(new BlockUIContainer(panel));
+
+                var lineGrid = new Grid { Margin = new Thickness(0, 2, 0, 2) };
+                lineGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                lineGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                lineGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                var nameText = new TextBlock
+                {
+                    Text = line.ProduitNom,
+                    FontSize = 11,
+                    MaxWidth = Math.Max(120, width - 115),
+                    TextTrimming = TextTrimming.CharacterEllipsis
+                };
+                Grid.SetColumn(nameText, 0);
+                lineGrid.Children.Add(nameText);
+
+                var dotsText = new TextBlock
+                {
+                    Text = new string('.', 120),
+                    FontSize = 10,
+                    Foreground = Brushes.DimGray,
+                    Margin = new Thickness(3, 0, 3, 1),
+                    VerticalAlignment = VerticalAlignment.Bottom,
+                    TextWrapping = TextWrapping.NoWrap,
+                    ClipToBounds = true
+                };
+                Grid.SetColumn(dotsText, 1);
+                lineGrid.Children.Add(dotsText);
+
+                var qtyText = new TextBlock
+                {
+                    Text = line.QuantiteDisplay,
+                    FontWeight = FontWeights.Bold,
+                    FontSize = 11,
+                    HorizontalAlignment = HorizontalAlignment.Right
+                };
+                Grid.SetColumn(qtyText, 2);
+                lineGrid.Children.Add(qtyText);
+
+                cell.Blocks.Add(new BlockUIContainer(lineGrid));
                 row.Cells.Add(cell);
                 rowGroup.Rows.Add(row);
             }
@@ -134,7 +203,12 @@ namespace SystemeCaisse.UI.Views
 
             // Total
             var totalPara = new Paragraph { TextAlignment = TextAlignment.Center };
-            totalPara.Inlines.Add(new Bold(new Run($"Total : {_lines.Sum(l => l.QuantiteTotale):N0} articles")));
+            int nbPce = (int)_lines.Where(l => l.Unite == "pce").Sum(l => l.QuantiteTotale);
+            decimal totalKg = _lines.Where(l => l.Unite == "kg").Sum(l => l.QuantiteTotale);
+            string summaryStr = totalKg > 0
+                ? $"Total : {nbPce} pce | {totalKg:0.###} kg"
+                : $"Total : {nbPce} pce";
+            totalPara.Inlines.Add(new Bold(new Run(summaryStr)));
             doc.Blocks.Add(totalPara);
 
             return doc;

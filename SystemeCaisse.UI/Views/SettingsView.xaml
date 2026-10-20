@@ -7,7 +7,7 @@
              xmlns:views="clr-namespace:SystemeCaisse.UI.Views"
              mc:Ignorable="d" 
              d:DataContext="{d:DesignInstance Type=vm:SettingsViewModel}"
-             d:DesignHeight="450" d:DesignWidth="800">
+             d:DesignHeight="650" d:DesignWidth="900">
     <Grid Background="#F5F5F7">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -308,71 +308,242 @@
 
                 <!-- System Tab -->
                 <TabItem Header="🔧 Système">
-                    <StackPanel Margin="20" MaxWidth="600" HorizontalAlignment="Left">
-                         <!-- Training Mode -->
-                         <GroupBox Header="Mode Formation" Padding="15" Margin="0,0,0,15" BorderBrush="#FF9500">
+                    <StackPanel Margin="20" MaxWidth="780" HorizontalAlignment="Left">
+                        <!-- Multi-Postes PostgreSQL & Tailscale Section -->
+                        <GroupBox Header="🌐 Multi-Postes PostgreSQL &amp; Tailscale (Production)" Padding="16" Margin="0,0,0,20" BorderBrush="#1565C0">
+                            <StackPanel>
+                                <!-- État de la base et de Tailscale -->
+                                <Border Background="#E8F5E9" BorderBrush="#A5D6A7" BorderThickness="1" Padding="12,10" CornerRadius="6" Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding CurrentDbModeDisplay}" FontWeight="Bold" FontSize="13.5" Foreground="#1B5E20" TextWrapping="Wrap"/>
+                                        <Grid Margin="0,6,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding TailscaleStatusDisplay}" FontSize="12.5" FontWeight="SemiBold" Foreground="#0D47A1" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                            <Button Grid.Column="1" Content="📋 Copier l'IP" Command="{Binding CopyTailscaleIpCommand}"
+                                                    IsEnabled="{Binding HasTailscaleIp}"
+                                                    Background="#1565C0" Foreground="White" FontSize="11.5" Padding="8,4" Margin="8,0,0,0" Cursor="Hand">
+                                                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></Button.Resources>
+                                            </Button>
+                                            <Button Grid.Column="2" Content="🔄 Actualiser" Command="{Binding RefreshTailscaleStatusCommand}"
+                                                    Background="#546E7A" Foreground="White" FontSize="11.5" Padding="8,4" Margin="6,0,0,0" Cursor="Hand">
+                                                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></Button.Resources>
+                                            </Button>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Nom de ce poste -->
+                                <Grid Margin="0,0,0,12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Nom de ce poste (Ticket / Suivi) :" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                                    <TextBox Grid.Column="1" Text="{Binding NomPoste, UpdateSourceTrigger=PropertyChanged}" Padding="6,5" FontWeight="Bold" FontFamily="Consolas"/>
+                                </Grid>
+
+                                <!-- Sélection du rôle du poste -->
+                                <TextBlock Text="Choisissez le rôle de ce poste :" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                <Grid Margin="0,0,0,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <RadioButton Grid.Column="0" GroupName="PosteRoleGroup"
+                                                 Content="🖥️ Poste Principal (Serveur PostgreSQL)"
+                                                 IsChecked="{Binding IsPrincipalPostgresMode, Mode=OneWay}"
+                                                 Command="{Binding SelectPosteModeCommand}" CommandParameter="PrincipalPostgres"
+                                                 FontWeight="Bold" FontSize="13" Foreground="#1565C0" Margin="0,0,10,0"/>
+                                    <RadioButton Grid.Column="1" GroupName="PosteRoleGroup"
+                                                 Content="💻 Poste Secondaire (Connecté via Tailscale)"
+                                                 IsChecked="{Binding IsSecondairePostgresMode, Mode=OneWay}"
+                                                 Command="{Binding SelectPosteModeCommand}" CommandParameter="SecondairePostgres"
+                                                 FontWeight="Bold" FontSize="13" Foreground="#2E7D32" Margin="0,0,10,0"/>
+                                    <RadioButton Grid.Column="2" GroupName="PosteRoleGroup"
+                                                 Content="📁 SQLite Local"
+                                                 IsChecked="{Binding IsLocalSqliteMode, Mode=OneWay}"
+                                                 Command="{Binding SelectPosteModeCommand}" CommandParameter="LocalSqlite"
+                                                 FontSize="12.5" Foreground="#666"/>
+                                </Grid>
+
+                                <!-- Panneau POSTE PRINCIPAL -->
+                                <Border Background="#F0F7FF" BorderBrush="#90CAF9" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,0,10">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsPrincipalPostgresMode}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel>
+                                        <TextBlock Text="🖥️ Configuration du Poste Principal (Serveur PostgreSQL)" FontWeight="Bold" FontSize="14" Foreground="#0D47A1" Margin="0,0,0,6"/>
+                                        <TextBlock Text="Ce poste héberge la base de données PostgreSQL. Le bouton ci-dessous configure de manière 100% autonome PostgreSQL, toutes les tables, l'accès réseau Tailscale (pg_hba.conf / postgresql.conf), le Pare-feu Windows et reprend automatiquement vos produits/ventes/images existants."
+                                                   TextWrapping="Wrap" FontSize="12" Foreground="#444" Margin="0,0,0,12"/>
+
+                                        <Grid Margin="0,0,0,12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="120"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                                <TextBlock Text="Port TCP" FontSize="11.5" Foreground="#555" Margin="0,0,0,2"/>
+                                                <TextBox Text="{Binding PgPort, UpdateSourceTrigger=PropertyChanged}" Padding="5" FontFamily="Consolas"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                                                <TextBlock Text="Nom de la Base" FontSize="11.5" Foreground="#555" Margin="0,0,0,2"/>
+                                                <TextBox Text="{Binding PgDatabase, UpdateSourceTrigger=PropertyChanged}" Padding="5" FontFamily="Consolas"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2" Margin="0,0,8,0">
+                                                <TextBlock Text="Utilisateur" FontSize="11.5" Foreground="#555" Margin="0,0,0,2"/>
+                                                <TextBox Text="{Binding PgUsername, UpdateSourceTrigger=PropertyChanged}" Padding="5" FontFamily="Consolas"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="3">
+                                                <TextBlock Text="Mot de passe" FontSize="11.5" Foreground="#555" Margin="0,0,0,2"/>
+                                                <TextBox Text="{Binding PgPassword, UpdateSourceTrigger=PropertyChanged}" Padding="5" FontFamily="Consolas"/>
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <WrapPanel>
+                                            <Button Content="⚡ Configurer automatiquement ce Poste Principal (PostgreSQL + Tailscale + Tables)"
+                                                    Command="{Binding ProvisionPrincipalServerCommand}"
+                                                    Background="#1565C0" Foreground="White" FontWeight="Bold" FontSize="13" Padding="14,9" Margin="0,0,10,6" Cursor="Hand">
+                                                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                                            </Button>
+                                            <Button Content="🔍 Tester le serveur local"
+                                                    Command="{Binding TestPostgresConnectionCommand}"
+                                                    Background="#FF9800" Foreground="White" FontWeight="SemiBold" FontSize="12.5" Padding="12,9" Margin="0,0,0,6" Cursor="Hand">
+                                                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                                            </Button>
+                                        </WrapPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Panneau POSTE SECONDAIRE -->
+                                <Border Background="#F1F8E9" BorderBrush="#A5D6A7" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,0,10">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsSecondairePostgresMode}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel>
+                                        <TextBlock Text="💻 Connexion d'un Poste Secondaire au Poste Principal (via Tailscale)" FontWeight="Bold" FontSize="14" Foreground="#1B5E20" Margin="0,0,0,6"/>
+                                        <TextBlock Text="Saisissez l'adresse IP Tailscale du Poste Principal (ex: 100.x.y.z affichée sur le Poste Principal). Les ventes, stocks, commandes et photos produits sont synchronisés en temps réel. En cas de coupure réseau, la caisse continue d'encaisser et synchronise automatiquement dès le retour de la connexion."
+                                                   TextWrapping="Wrap" FontSize="12" Foreground="#444" Margin="0,0,0,12"/>
+
+                                        <Grid Margin="0,0,0,10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="2*"/>
+                                                <ColumnDefinition Width="100"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                                <TextBlock Text="Adresse IP Tailscale (ou LAN) du Poste Principal *" FontWeight="SemiBold" FontSize="12" Foreground="#1B5E20" Margin="0,0,0,3"/>
+                                                <TextBox Text="{Binding PgHost, UpdateSourceTrigger=PropertyChanged}" Padding="7,6" FontFamily="Consolas" FontSize="14" FontWeight="Bold"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock Text="Port TCP" FontWeight="SemiBold" FontSize="12" Foreground="#555" Margin="0,0,0,3"/>
+                                                <TextBox Text="{Binding PgPort, UpdateSourceTrigger=PropertyChanged}" Padding="7,6" FontFamily="Consolas" FontSize="14"/>
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <Grid Margin="0,0,0,12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                                <TextBlock Text="Nom de la Base" FontSize="11.5" Foreground="#555" Margin="0,0,0,2"/>
+                                                <TextBox Text="{Binding PgDatabase, UpdateSourceTrigger=PropertyChanged}" Padding="5" FontFamily="Consolas"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                                                <TextBlock Text="Utilisateur" FontSize="11.5" Foreground="#555" Margin="0,0,0,2"/>
+                                                <TextBox Text="{Binding PgUsername, UpdateSourceTrigger=PropertyChanged}" Padding="5" FontFamily="Consolas"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2">
+                                                <TextBlock Text="Mot de passe" FontSize="11.5" Foreground="#555" Margin="0,0,0,2"/>
+                                                <TextBox Text="{Binding PgPassword, UpdateSourceTrigger=PropertyChanged}" Padding="5" FontFamily="Consolas"/>
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <WrapPanel>
+                                            <Button Content="🔍 Tester la connexion au Poste Principal"
+                                                    Command="{Binding TestPostgresConnectionCommand}"
+                                                    Background="#FF9800" Foreground="White" FontWeight="Bold" FontSize="13" Padding="14,9" Margin="0,0,10,6" Cursor="Hand">
+                                                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                                            </Button>
+                                            <Button Content="💾 Enregistrer et Connecter ce Poste Secondaire"
+                                                    Command="{Binding SavePostgresSettingsCommand}"
+                                                    Background="#2E7D32" Foreground="White" FontWeight="Bold" FontSize="13" Padding="14,9" Margin="0,0,0,6" Cursor="Hand">
+                                                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                                            </Button>
+                                        </WrapPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Panneau SQLITE LOCAL -->
+                                <Border Background="#FAFAFA" BorderBrush="#E0E0E0" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,0,10">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsLocalSqliteMode}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel>
+                                        <TextBlock Text="📁 Mode SQLite Local (Poste unique autonome)" FontWeight="Bold" FontSize="13.5" Foreground="#444" Margin="0,0,0,6"/>
+                                        <TextBlock Text="Utilise un fichier SQLite local sur cet ordinateur uniquement. Pour travailler à plusieurs postes, sélectionnez Poste Principal ou Poste Secondaire PostgreSQL ci-dessus."
+                                                   TextWrapping="Wrap" FontSize="12" Foreground="#666" Margin="0,0,0,10"/>
+                                        <Button Content="💾 Activer le mode SQLite Local"
+                                                Command="{Binding SwitchToLocalSqliteCommand}"
+                                                Background="#607D8B" Foreground="White" FontWeight="SemiBold" Padding="12,7" HorizontalAlignment="Left" Cursor="Hand">
+                                            <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="5"/></Style></Button.Resources>
+                                        </Button>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Journal / Statut de connexion PostgreSQL -->
+                                <TextBlock Text="{Binding PgProvisioningStatus}" FontSize="12.5" FontWeight="SemiBold" Foreground="#0D47A1" TextWrapping="Wrap" Margin="2,4,0,0"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <!-- Training Mode -->
+                        <GroupBox Header="Mode Formation" Padding="15" Margin="0,0,0,15" BorderBrush="#FF9500">
                             <StackPanel>
                                 <CheckBox IsChecked="{Binding IsTrainingMode}" Content="Activer le mode formation" FontSize="14" FontWeight="SemiBold"/>
                                 <TextBlock Text="⚠️ Les ventes ne seront PAS enregistrées." Foreground="#FF9500" Margin="24,5,0,0" FontStyle="Italic"/>
                             </StackPanel>
                         </GroupBox>
 
-                        <GroupBox Header="Maintenance de la Base de Données" Padding="15">
+                        <GroupBox Header="Maintenance &amp; Sauvegarde de la Base de Données" Padding="15">
                             <StackPanel>
-                                <TextBlock Text="Sauvegardez vos données régulièrement pour éviter toute perte." TextWrapping="Wrap" Margin="0,0,0,15" Foreground="#666"/>
-                                <Button Command="{Binding BackupDatabaseCommand}" Content="📦 Créer une Sauvegarde (Backup)" Width="250" Height="40" HorizontalAlignment="Left" Background="#007AFF" Foreground="White"/>
-                                <Button Command="{Binding RestoreDatabaseCommand}" Content="📥 Restaurer une Sauvegarde" Width="250" Height="40" HorizontalAlignment="Left" Background="#FF9500" Foreground="White" Margin="0,10,0,0"/>
+                                <TextBlock Text="Sauvegardez et restaurez vos données (compatible PostgreSQL .caisse-backup et SQLite .db)." TextWrapping="Wrap" Margin="0,0,0,15" Foreground="#666"/>
+                                <Button Command="{Binding BackupDatabaseCommand}" Content="📦 Créer une Sauvegarde (Backup)" Width="260" Height="40" HorizontalAlignment="Left" Background="#007AFF" Foreground="White"/>
+                                <Button Command="{Binding RestoreDatabaseCommand}" Content="📥 Restaurer une Sauvegarde" Width="260" Height="40" HorizontalAlignment="Left" Background="#FF9500" Foreground="White" Margin="0,10,0,0"/>
                                 
                                 <TextBlock Text="Migration depuis l'ancienne version (Python)" FontWeight="SemiBold" Margin="0,15,0,5"/>
-                                <Button Command="{Binding ImportDataCommand}" Content="📥 Importer depuis database.db" Width="250" Height="40" HorizontalAlignment="Left" Background="#5856D6" Foreground="White" Margin="0,5,0,0"/>
+                                <Button Command="{Binding ImportDataCommand}" Content="📥 Importer depuis database.db" Width="260" Height="40" HorizontalAlignment="Left" Background="#5856D6" Foreground="White" Margin="0,5,0,0"/>
 
                                 <Separator Margin="0,20"/>
                                 <TextBlock Text="Actions Irréversibles" FontWeight="Bold" Foreground="#FF3B30" Margin="0,0,0,5"/>
-                                <Button Command="{Binding ResetDatabaseCommand}" Content="🗑️ Réinitialiser la Base de Données" Width="250" Height="40" HorizontalAlignment="Left" Background="#FF3B30" Foreground="White"/>
-                            </StackPanel>
-                        </GroupBox>
-
-                        <!-- Network Database Section -->
-                        <GroupBox Header="🌐 Base de Données Réseau (Multi-Postes)" Padding="15" Margin="0,20,0,0" BorderBrush="#1565C0">
-                            <StackPanel>
-                                <!-- Current mode display -->
-                                <Border Background="#E8F5E9" Padding="10" CornerRadius="5" Margin="0,0,0,15">
-                                    <TextBlock Text="{Binding CurrentDbModeDisplay}" FontWeight="SemiBold" FontSize="13" TextWrapping="Wrap"/>
-                                </Border>
-
-                                <TextBlock Text="Connectez plusieurs ordinateurs à la même base de données via Tailscale ou un réseau local. L'ordinateur principal n'a pas besoin d'activer cette option." 
-                                           TextWrapping="Wrap" Margin="0,0,0,15" Foreground="#666" FontSize="11"/>
-
-                                <CheckBox Content="Activer le mode réseau" IsChecked="{Binding IsNetworkDbEnabled}" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,15"/>
-                                
-                                <StackPanel IsEnabled="{Binding IsNetworkDbEnabled}">
-                                    <Label Content="Chemin réseau de la base de données"/>
-                                    <Grid Margin="0,0,0,10">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBox Text="{Binding NetworkDbPath, UpdateSourceTrigger=PropertyChanged}" Padding="5" FontFamily="Consolas" FontSize="12"/>
-                                        <Button Grid.Column="1" Content="📂" Command="{Binding BrowseNetworkDbCommand}" Width="35" Height="30" Margin="5,0,0,0" ToolTip="Parcourir"/>
-                                    </Grid>
-
-                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                                        <Button Content="🔍 Tester la connexion" Command="{Binding TestNetworkDbCommand}" 
-                                                Background="#FF9800" Foreground="White" Padding="10,5" Margin="0,0,10,0">
-                                            <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="5"/></Style></Button.Resources>
-                                        </Button>
-                                        <Button Content="💾 Sauvegarder et Redémarrer" Command="{Binding SaveNetworkDbCommand}" 
-                                                Background="#1565C0" Foreground="White" Padding="10,5">
-                                            <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="5"/></Style></Button.Resources>
-                                        </Button>
-                                    </StackPanel>
-
-                                    <TextBlock Text="{Binding NetworkDbTestStatus}" FontSize="12" Foreground="#666" FontStyle="Italic" TextWrapping="Wrap" Margin="0,0,0,5"/>
-                                </StackPanel>
-
-                                <Separator Margin="0,10"/>
-                                <TextBlock Text="ℹ️ Le dossier Images sera aussi partagé automatiquement depuis l'emplacement réseau. Après modification, un redémarrage est nécessaire." 
-                                           FontSize="11" Foreground="#888" TextWrapping="Wrap" FontStyle="Italic"/>
+                                <Button Command="{Binding ResetDatabaseCommand}" Content="🗑️ Réinitialiser la Base de Données" Width="260" Height="40" HorizontalAlignment="Left" Background="#FF3B30" Foreground="White"/>
                             </StackPanel>
                         </GroupBox>
                     </StackPanel>

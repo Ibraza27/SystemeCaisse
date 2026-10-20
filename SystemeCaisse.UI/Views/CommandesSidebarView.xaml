@@ -47,10 +47,16 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <TextBlock Text="Détail de la Commande" FontSize="18" FontWeight="Bold" Margin="0,0,0,10" Foreground="#1565C0"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                        <TextBlock Text="Détail de la Commande" FontSize="18" FontWeight="Bold" Foreground="#1565C0"/>
+                        <Border Background="#EDE7F6" CornerRadius="4" Padding="6,2" Margin="10,0,0,0"
+                                Visibility="{Binding SelectedCommande.IsGroupedCommande, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="👥 Regroupée" FontSize="11" FontWeight="Bold" Foreground="#5E35B1"/>
+                        </Border>
+                    </StackPanel>
 
                     <!-- Client Info -->
-                    <StackPanel Grid.Row="1" Margin="0,0,0,15">
+                    <StackPanel Grid.Row="1" Margin="0,0,0,12">
                         <TextBlock Text="{Binding SelectedCommande.NumeroCommande}" FontSize="22" FontWeight="Bold" Foreground="#1565C0"/>
                         <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
                             <TextBlock Text="{Binding SelectedCommande.Prenom}" FontWeight="Bold" FontSize="17"/>
@@ -61,9 +67,39 @@
                         <TextBlock Text="{Binding SelectedCommande.Adresse}" Foreground="#666"
                                    Visibility="{Binding SelectedCommande.Adresse, Converter={StaticResource StringToVisibilityConverter}}"/>
                         <TextBlock Text="{Binding SelectedCommande.VilleCodePostal}" Foreground="#666"/>
+
+                        <!-- Commentaire client -->
+                        <Border Background="#FFF8E1" BorderBrush="#FFE082" BorderThickness="1" CornerRadius="4" Padding="8,5" Margin="0,6,0,0"
+                                Visibility="{Binding SelectedCommande.Commentaire, Converter={StaticResource StringToVisibilityConverter}}">
+                            <StackPanel>
+                                <TextBlock Text="💬 Commentaire :" FontSize="11" FontWeight="Bold" Foreground="#F57F17"/>
+                                <TextBlock Text="{Binding SelectedCommande.Commentaire}" FontSize="12.5" Foreground="#333" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+
                         <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                             <TextBlock Text="Statut : " Foreground="#666" FontSize="14"/>
-                            <TextBlock Text="{Binding SelectedCommande.StatutDisplay}" FontWeight="Bold" FontSize="14"/>
+                            <TextBlock Text="{Binding SelectedCommande.StatutDisplay}" FontWeight="Bold" FontSize="14">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="#F57F17"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedCommande.Statut}" Value="validee">
+                                                <Setter Property="Foreground" Value="#1565C0"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding SelectedCommande.Statut}" Value="traitee">
+                                                <Setter Property="Foreground" Value="#2E7D32"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding SelectedCommande.Statut}" Value="annulee">
+                                                <Setter Property="Foreground" Value="#C62828"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding SelectedCommande.Statut}" Value="supprimee">
+                                                <Setter Property="Foreground" Value="#757575"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
                             <TextBlock Text=" | " Foreground="#CCC" Margin="5,0" FontSize="14"/>
                             <TextBlock Text="{Binding SelectedCommande.StatutPaiementDisplay}" FontWeight="Bold" FontSize="15">
                                 <TextBlock.Style>
@@ -84,16 +120,36 @@
                     <DataGrid Grid.Row="2" ItemsSource="{Binding SelectedCommande.Lignes}" AutoGenerateColumns="False" IsReadOnly="True"
                               Background="White" BorderThickness="0" GridLinesVisibility="Horizontal" HeadersVisibility="Column">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Produit" Binding="{Binding ProduitNom}" Width="*"/>
-                            <DataGridTextColumn Header="Qté" Binding="{Binding Quantite, StringFormat=N2}" Width="50"/>
+                            <DataGridTextColumn Header="Produit" Binding="{Binding ProduitNomWithClient}" Width="*"/>
+                            <DataGridTextColumn Header="Qté" Binding="{Binding QuantiteDisplay}" Width="65"/>
                             <DataGridTextColumn Header="Total" Binding="{Binding TotalLigne, StringFormat='{}{0:0.00} €'}" Width="70"/>
                         </DataGrid.Columns>
                     </DataGrid>
 
                     <!-- Totals -->
-                    <StackPanel Grid.Row="3" Margin="0,15,0,0">
-                        <Border BorderBrush="#DDD" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+                    <StackPanel Grid.Row="3" Margin="0,12,0,0">
+                        <Border BorderBrush="#DDD" BorderThickness="0,1,0,0" Padding="0,8,0,0">
                             <StackPanel>
+                                <!-- Sous-totaux par client pour une commande regroupée -->
+                                <Border Background="#F3E5F5" CornerRadius="4" Padding="8,5" Margin="0,0,0,8"
+                                        Visibility="{Binding SelectedCommande.IsGroupedCommande, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel>
+                                        <TextBlock Text="👥 Détail par client (Commande regroupée) :" FontSize="11.5" FontWeight="Bold" Foreground="#5E35B1" Margin="0,0,0,3"/>
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="40" PanningMode="VerticalOnly" Padding="0,0,4,0">
+                                            <ItemsControl ItemsSource="{Binding SelectedCommande.SubClientTotals}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <DockPanel Margin="0,1" Height="18">
+                                                            <TextBlock Text="{Binding ClientNom}" FontWeight="SemiBold" Foreground="#333" FontSize="12" VerticalAlignment="Center"/>
+                                                            <TextBlock Text="{Binding SousTotal, StringFormat='{}{0:0.00} €'}" FontWeight="Bold" Foreground="#5E35B1" HorizontalAlignment="Right" FontSize="12" VerticalAlignment="Center"/>
+                                                        </DockPanel>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </StackPanel>
+                                </Border>
+
                                 <DockPanel Margin="0,0,0,5">
                                     <TextBlock Text="{Binding SelectedCommande.NbArticles, StringFormat='Nb Articles : {0}'}" Foreground="#666"/>
                                 </DockPanel>
@@ -146,23 +202,41 @@
                                     Background="#4CAF50" Foreground="White" Padding="10,8" 
                                     Style="{StaticResource BaseButtonStyle}" Margin="3,0,0,0"/>
                         </UniformGrid>
-                        <UniformGrid Columns="2" Margin="0,0,0,5">
-                            <Button Content="✏ Modifier" Command="{Binding EditCommandeCommand}" 
-                                    Background="#FF9800" Foreground="White" Padding="10,8" 
-                                    Style="{StaticResource BaseButtonStyle}" Margin="0,0,3,0"/>
-                            <Button Content="💰 Ajouter Paiement" Command="{Binding AddPaymentCommand}" 
-                                    Background="#7B1FA2" Foreground="White" Padding="10,8" 
-                                    Style="{StaticResource BaseButtonStyle}" Margin="3,0,0,0"/>
-                        </UniformGrid>
-                        <UniformGrid Columns="3">
-                            <Button Content="✅ Traitée" Command="{Binding ChangeStatusCommand}" CommandParameter="traitee"
-                                    Background="#E8F5E9" Foreground="#2E7D32" Padding="10,8" 
+
+                        <!-- Boutons en mode normal -->
+                        <StackPanel Visibility="{Binding IsNormalListMode, Converter={StaticResource BoolToVis}}">
+                            <UniformGrid Columns="2" Margin="0,0,0,5">
+                                <Button Content="✏ Modifier" Command="{Binding EditCommandeCommand}" 
+                                        Background="#FF9800" Foreground="White" Padding="10,8" 
+                                        Style="{StaticResource BaseButtonStyle}" Margin="0,0,3,0"/>
+                                <Button Content="💰 Ajouter Paiement" Command="{Binding AddPaymentCommand}" 
+                                        Background="#7B1FA2" Foreground="White" Padding="10,8" 
+                                        Style="{StaticResource BaseButtonStyle}" Margin="3,0,0,0"/>
+                            </UniformGrid>
+                            <UniformGrid Columns="4">
+                                <Button Content="✔️ Validé" Command="{Binding QuickValidateCommand}"
+                                        Background="#E3F2FD" Foreground="#1565C0" Padding="6,8"
+                                        Style="{StaticResource BaseButtonStyle}" Margin="0,0,2,0" FontWeight="Bold"
+                                        ToolTip="Validation rapide en 1 clic"/>
+                                <Button Content="✅ Traitée" Command="{Binding ChangeStatusCommand}" CommandParameter="traitee"
+                                        Background="#E8F5E9" Foreground="#2E7D32" Padding="6,8" 
+                                        Style="{StaticResource BaseButtonStyle}" Margin="2,0,2,0" FontWeight="Bold"/>
+                                <Button Content="❌ Annuler" Command="{Binding ChangeStatusCommand}" CommandParameter="annulee"
+                                        Background="#FFEBEE" Foreground="#C62828" Padding="6,8" 
+                                        Style="{StaticResource BaseButtonStyle}" Margin="2,0,2,0" FontWeight="Bold"/>
+                                <Button Content="🗑 Corbeille" Command="{Binding DeleteCommandeCommand}"
+                                        Background="#FFCDD2" Foreground="#B71C1C" Padding="6,8" 
+                                        Style="{StaticResource BaseButtonStyle}" Margin="2,0,0,0" FontWeight="Bold"/>
+                            </UniformGrid>
+                        </StackPanel>
+
+                        <!-- Boutons en mode Corbeille -->
+                        <UniformGrid Columns="2" Visibility="{Binding IsTrashMode, Converter={StaticResource BoolToVis}}">
+                            <Button Content="♻️ Restaurer" Command="{Binding RestoreCommandeCommand}"
+                                    Background="#2E7D32" Foreground="White" Padding="10,8"
                                     Style="{StaticResource BaseButtonStyle}" Margin="0,0,3,0" FontWeight="Bold"/>
-                            <Button Content="❌ Annuler" Command="{Binding ChangeStatusCommand}" CommandParameter="annulee"
-                                    Background="#FFEBEE" Foreground="#C62828" Padding="10,8" 
-                                    Style="{StaticResource BaseButtonStyle}" Margin="3,0,3,0" FontWeight="Bold"/>
-                            <Button Content="🗑 Supprimer" Command="{Binding DeleteCommandeCommand}"
-                                    Background="#FFCDD2" Foreground="#B71C1C" Padding="10,8" 
+                            <Button Content="🗑️ Suppr. définitivement" Command="{Binding PermanentDeleteCommandeCommand}"
+                                    Background="#C62828" Foreground="White" Padding="10,8"
                                     Style="{StaticResource BaseButtonStyle}" Margin="3,0,0,0" FontWeight="Bold"/>
                         </UniformGrid>
                     </StackPanel>
@@ -177,24 +251,30 @@
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <!-- Header -->
-                <Grid Margin="20,20,20,10">
+                <!-- Header (compact) -->
+                <Grid Margin="20,8,20,4">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <StackPanel Grid.Column="0">
-                        <TextBlock Text="Panier Commande" FontSize="24" FontWeight="Bold" Foreground="#1565C0"/>
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="Panier Commande" FontSize="20" FontWeight="Bold" Foreground="#1565C0"/>
+                        <Button Content="👥 Regrouper clients" Command="{Binding EnableGroupedModeCommand}"
+                                Margin="10,0,0,0" Padding="8,3" FontSize="11.5" FontWeight="SemiBold"
+                                Background="#EDE7F6" Foreground="#5E35B1" Style="{StaticResource BaseButtonStyle}"
+                                Visibility="{Binding IsClassicCommandeMode, Converter={StaticResource BoolToVis}}"
+                                ToolTip="Ajouter plusieurs clients dans cette même commande"/>
                     </StackPanel>
 
                     <!-- Suspended Commandes Resume Section -->
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                         <StackPanel.Style>
                             <Style TargetType="StackPanel">
                                 <Setter Property="Visibility" Value="Visible"/>
@@ -206,8 +286,8 @@
                             </Style>
                         </StackPanel.Style>
 
-                        <ComboBox x:Name="cbSuspendedCmd" ItemsSource="{Binding SuspendedCommandes}" Width="180" Margin="0,0,5,0"
-                                  Height="30" VerticalContentAlignment="Center">
+                        <ComboBox x:Name="cbSuspendedCmd" ItemsSource="{Binding SuspendedCommandes}" Width="150" Margin="0,0,5,0"
+                                  Height="28" VerticalContentAlignment="Center">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate>
                                     <TextBlock Text="{Binding Label}"/>
@@ -215,7 +295,7 @@
                             </ComboBox.ItemTemplate>
                         </ComboBox>
                         <Button Content="📂" Command="{Binding ResumeCommandeCommand}" CommandParameter="{Binding ElementName=cbSuspendedCmd, Path=SelectedItem}"
-                                Background="#FFF8E1" Foreground="#F57F17" BorderThickness="0" Width="30" Height="30">
+                                Background="#FFF8E1" Foreground="#F57F17" BorderThickness="0" Width="28" Height="28">
                             <Button.Resources>
                                 <Style TargetType="Border">
                                     <Setter Property="CornerRadius" Value="5"/>
@@ -225,10 +305,91 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- Cart DataGrid -->
-                <DataGrid Grid.Row="1" ItemsSource="{Binding CommandePanier}" AutoGenerateColumns="False" CanUserAddRows="False"
+                <!-- Multi-Client Selector Bar (compact, visible in Grouped Commande Mode) -->
+                <Border Grid.Row="1" Background="#F3E5F5" BorderBrush="#CE93D8" BorderThickness="1" CornerRadius="6"
+                        Margin="20,0,20,4" Padding="8,5"
+                        Visibility="{Binding IsGroupedCommandeMode, Converter={StaticResource BoolToVis}}">
+                    <StackPanel>
+                        <DockPanel Margin="0,0,0,4">
+                            <TextBlock Text="👥 Clients :" FontWeight="Bold" Foreground="#5E35B1" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBlock Text="Panier actif :" FontSize="11.5" Foreground="#5E35B1" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBox Text="{Binding SelectedSubClient.Nom, UpdateSourceTrigger=PropertyChanged}"
+                                     FontSize="12" FontWeight="Bold" Padding="4,1" Width="150" HorizontalAlignment="Left" VerticalContentAlignment="Center"
+                                     ToolTip="Vous pouvez renommer ce sous-client (ex: Client 1 - Karim)"/>
+                            <Button Content="+ Ajouter Client" Command="{Binding AddSubClientCommand}"
+                                    DockPanel.Dock="Right" HorizontalAlignment="Right" Padding="8,2"
+                                    Background="#5E35B1" Foreground="White" FontWeight="Bold" FontSize="11.5"
+                                    Style="{StaticResource BaseButtonStyle}"/>
+                        </DockPanel>
+
+                        <!-- Onglets/Pills des sous-clients -->
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="54" PanningMode="VerticalOnly">
+                            <ItemsControl ItemsSource="{Binding SubClients}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,0,4,3" CornerRadius="4" BorderThickness="1">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="White"/>
+                                                    <Setter Property="BorderBrush" Value="#CE93D8"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                            <Setter Property="Background" Value="#5E35B1"/>
+                                                            <Setter Property="BorderBrush" Value="#4527A0"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <StackPanel Orientation="Horizontal">
+                                                <Button Command="{Binding DataContext.SelectSubClientCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        Background="Transparent" BorderThickness="0" Padding="6,2" Cursor="Hand">
+                                                    <TextBlock Text="{Binding DisplayBadge}" FontWeight="SemiBold" FontSize="11.5">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Foreground" Value="#5E35B1"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                                        <Setter Property="Foreground" Value="White"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </Button>
+                                                <Button Content="✕" Command="{Binding DataContext.RemoveSubClientCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        Background="Transparent" BorderThickness="0" Padding="3,1" Margin="0,0,2,0"
+                                                        FontSize="10" Cursor="Hand" ToolTip="Supprimer ce sous-client">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button">
+                                                            <Setter Property="Foreground" Value="#999"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                                    <Setter Property="Foreground" Value="#E1BEE7"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Border>
+
+                <!-- Cart DataGrid (Maximized space) -->
+                <DataGrid Grid.Row="2" ItemsSource="{Binding CommandePanier}" AutoGenerateColumns="False" CanUserAddRows="False"
                           GridLinesVisibility="Horizontal" HeadersVisibility="Column" Background="Transparent" BorderThickness="0"
-                          SelectionMode="Single" RowHeight="50" Margin="20,0">
+                          SelectionMode="Single" RowHeight="48" Margin="20,0">
                     <DataGrid.Columns>
                         <DataGridTemplateColumn Width="50">
                             <DataGridTemplateColumn.CellTemplate>
@@ -246,7 +407,11 @@
                         <DataGridTemplateColumn Header="Produit" Width="*">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <StackPanel Margin="5">
+                                    <StackPanel Margin="5,2" VerticalAlignment="Center">
+                                        <Border Background="#EDE7F6" CornerRadius="3" Padding="5,1" HorizontalAlignment="Left" Margin="0,0,0,2"
+                                                Visibility="{Binding HasClientNom, Converter={StaticResource BoolToVis}}">
+                                            <TextBlock Text="{Binding ClientNom}" FontSize="10" FontWeight="Bold" Foreground="#5E35B1"/>
+                                        </Border>
                                         <TextBlock Text="{Binding ProduitNom}" FontWeight="SemiBold" TextWrapping="Wrap"/>
                                         <TextBlock Text="{Binding PromotionAppliquee}" Foreground="#2E7D32" FontSize="11" FontStyle="Italic"
                                                    Visibility="{Binding PromotionAppliquee, Converter={StaticResource StringToVisibilityConverter}}"/>
@@ -316,100 +481,126 @@
                     </DataGrid.Columns>
                 </DataGrid>
 
-                <!-- Totals & Options -->
-                <StackPanel Grid.Row="2" Margin="20,10,20,0">
-                    <Separator Background="#EEE" Margin="0,0,0,10"/>
+                <!-- Totals & Options (compact to give more space to cart products) -->
+                <StackPanel Grid.Row="3" Margin="20,4,20,0">
+                    <Separator Background="#EEE" Margin="0,0,0,4"/>
 
-                    <!-- Livraison -->
-                    <StackPanel Margin="0,0,0,10">
-                        <CheckBox Content="🚚 Avec livraison" IsChecked="{Binding AvecLivraison}" FontWeight="SemiBold" FontSize="13"/>
-                        <Grid Margin="25,5,0,0" Visibility="{Binding AvecLivraison, Converter={StaticResource BoolToVis}}">
-                            <TextBlock Text="Montant livraison :" VerticalAlignment="Center"/>
+                    <!-- Récapitulatif par sous-client déroulant (2 lignes visibles max) -->
+                    <Border Background="#F3E5F5" CornerRadius="6" Padding="8,4" Margin="0,0,0,4"
+                            Visibility="{Binding IsGroupedCommandeMode, Converter={StaticResource BoolToVis}}">
+                        <StackPanel>
+                            <TextBlock Text="👥 Prix du panier par client :" FontSize="11.5" FontWeight="Bold" Foreground="#5E35B1" Margin="0,0,0,2"/>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="40" PanningMode="VerticalOnly" Padding="0,0,4,0">
+                                <ItemsControl ItemsSource="{Binding SubClients}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <DockPanel Margin="0,1" Height="18">
+                                                <TextBlock Text="{Binding Nom}" FontSize="12" FontWeight="SemiBold" Foreground="#333" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{Binding Total, StringFormat='{}{0:0.00} €'}" FontSize="12" FontWeight="Bold" Foreground="#5E35B1" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Livraison sur une seule ligne -->
+                    <DockPanel Margin="0,0,0,4">
+                        <CheckBox Content="🚚 Avec livraison" IsChecked="{Binding AvecLivraison}" FontWeight="SemiBold" FontSize="12.5" VerticalAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Visibility="{Binding AvecLivraison, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="Montant :" VerticalAlignment="Center" FontSize="12" Margin="0,0,6,0"/>
                             <TextBox Text="{Binding MontantLivraison, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}"
-                                     Width="100" FontWeight="Bold" HorizontalAlignment="Right" VerticalContentAlignment="Center"/>
-                        </Grid>
-                    </StackPanel>
+                                     Width="80" FontWeight="Bold" HorizontalAlignment="Right" VerticalContentAlignment="Center"/>
+                        </StackPanel>
+                    </DockPanel>
 
                     <!-- Remise display -->
-                    <DockPanel Margin="0,0,0,3" Visibility="{Binding CommandeTotalRemise, Converter={StaticResource StringToVisibilityConverter}}">
-                        <TextBlock Text="Total hors remise" FontSize="14" Foreground="Gray"/>
-                        <TextBlock Text="{Binding CommandeTotalSansRemise, StringFormat={}{0:C}}" FontSize="14" FontWeight="Bold" Foreground="Gray" HorizontalAlignment="Right"/>
+                    <DockPanel Margin="0,0,0,2" Visibility="{Binding CommandeTotalRemise, Converter={StaticResource StringToVisibilityConverter}}">
+                        <TextBlock Text="Total hors remise" FontSize="12.5" Foreground="Gray"/>
+                        <TextBlock Text="{Binding CommandeTotalSansRemise, StringFormat={}{0:C}}" FontSize="12.5" FontWeight="Bold" Foreground="Gray" HorizontalAlignment="Right"/>
                     </DockPanel>
-                    <DockPanel Margin="0,0,0,3" Visibility="{Binding CommandeTotalRemise, Converter={StaticResource StringToVisibilityConverter}}">
-                        <TextBlock Text="Total Remise" FontSize="14" Foreground="#C62828"/>
-                        <TextBlock Text="{Binding CommandeTotalRemise, StringFormat={}-{0:C}}" FontSize="14" FontWeight="Bold" Foreground="#C62828" HorizontalAlignment="Right"/>
+                    <DockPanel Margin="0,0,0,2" Visibility="{Binding CommandeTotalRemise, Converter={StaticResource StringToVisibilityConverter}}">
+                        <TextBlock Text="Total Remise" FontSize="12.5" Foreground="#C62828"/>
+                        <TextBlock Text="{Binding CommandeTotalRemise, StringFormat={}-{0:C}}" FontSize="12.5" FontWeight="Bold" Foreground="#C62828" HorizontalAlignment="Right"/>
                     </DockPanel>
 
-                    <Border Background="#E3F2FD" CornerRadius="8" Padding="15" Margin="0,5,0,10">
+                    <!-- Total à payer + Payé + Restant -->
+                    <Border Background="#E3F2FD" CornerRadius="6" Padding="10,6" Margin="0,2,0,4">
                         <Grid>
-                            <TextBlock Text="Total à payer" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="#1565C0"/>
-                            <TextBlock Text="{Binding CommandeTotalAvecLivraison, StringFormat={}{0:C}}" FontSize="32" FontWeight="Bold" Foreground="#1565C0" HorizontalAlignment="Right"/>
+                            <TextBlock Text="Total à payer" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="#1565C0"/>
+                            <TextBlock Text="{Binding CommandeTotalAvecLivraison, StringFormat={}{0:C}}" FontSize="24" FontWeight="Bold" Foreground="#1565C0" HorizontalAlignment="Right"/>
                         </Grid>
                     </Border>
 
-                    <!-- Montant payé -->
-                    <Grid Margin="0,0,0,5">
+                    <!-- Montant payé & Restant sur la même ligne -->
+                    <Grid Margin="0,0,0,4">
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Payé :" VerticalAlignment="Center" FontSize="14"/>
-                        <TextBox Grid.Column="2" Text="{Binding MontantPaye, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}" 
-                                 Width="100" FontSize="20" FontWeight="Bold" VerticalContentAlignment="Center"/>
-                        <Button Grid.Column="3" Content="= Exact" Command="{Binding FillExactAmountCommand}" 
-                                Margin="5,0,0,0" Padding="8,4" FontSize="12" FontWeight="SemiBold"
+                        <TextBlock Grid.Column="0" Text="Payé :" VerticalAlignment="Center" FontSize="13.5" FontWeight="SemiBold" Margin="0,0,6,0"/>
+                        <TextBox Grid.Column="1" Text="{Binding MontantPaye, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}" 
+                                 Width="95" FontSize="17" FontWeight="Bold" VerticalContentAlignment="Center"/>
+                        <Button Grid.Column="2" Content="= Exact" Command="{Binding FillExactAmountCommand}" 
+                                Margin="5,0,0,0" Padding="8,3" FontSize="11.5" FontWeight="SemiBold"
                                 Background="#E3F2FD" Foreground="#1565C0" BorderBrush="#1565C0" Cursor="Hand" VerticalAlignment="Center"/>
+
+                        <TextBlock Grid.Column="4" Text="Restant :" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" Margin="10,0,6,0"/>
+                        <TextBlock Grid.Column="5" Text="{Binding CommandeRestant, StringFormat={}{0:C}}" FontSize="19" FontWeight="Bold" Foreground="#C62828" VerticalAlignment="Center" HorizontalAlignment="Right"/>
                     </Grid>
 
-                    <!-- Mode de paiement -->
-                    <TextBlock Text="Mode de paiement :" FontSize="13" FontWeight="SemiBold" Margin="0,5,0,3"/>
-                    <UniformGrid Columns="5" Margin="0,0,0,8">
-                        <RadioButton Content="💵 Espèce" GroupName="CmdModePaiement2" 
-                                     IsChecked="{Binding CommandeModePaiement, Converter={StaticResource RadioButtonConverter}, ConverterParameter=espece}"
-                                     FontSize="11" FontWeight="SemiBold" Margin="0,0,3,0" Padding="2,2"/>
-                        <RadioButton Content="🏦 Virement" GroupName="CmdModePaiement2"
-                                     IsChecked="{Binding CommandeModePaiement, Converter={StaticResource RadioButtonConverter}, ConverterParameter=virement}"
-                                     FontSize="11" FontWeight="SemiBold" Margin="3,0,3,0" Padding="2,2"/>
-                        <RadioButton Content="📱 Wero" GroupName="CmdModePaiement2"
-                                     IsChecked="{Binding CommandeModePaiement, Converter={StaticResource RadioButtonConverter}, ConverterParameter=wero}"
-                                     FontSize="11" FontWeight="SemiBold" Margin="3,0,3,0" Padding="2,2"/>
-                        <RadioButton Content="💳 CB" GroupName="CmdModePaiement2"
-                                     IsChecked="{Binding CommandeModePaiement, Converter={StaticResource RadioButtonConverter}, ConverterParameter=cb}"
-                                     FontSize="11" FontWeight="SemiBold" Margin="3,0,3,0" Padding="2,2"/>
-                        <RadioButton Content="🌐 En ligne" GroupName="CmdModePaiement2"
-                                     IsChecked="{Binding CommandeModePaiement, Converter={StaticResource RadioButtonConverter}, ConverterParameter=en_ligne}"
-                                     FontSize="11" FontWeight="SemiBold" Margin="3,0,0,0" Padding="2,2"/>
-                    </UniformGrid>
-
-                    <Grid Margin="0,0,0,5">
-                        <TextBlock Text="Restant :" FontSize="16" FontWeight="Bold"/>
-                        <TextBlock Text="{Binding CommandeRestant, StringFormat={}{0:C}}" FontSize="24" FontWeight="Bold" Foreground="#C62828" HorizontalAlignment="Right"/>
-                    </Grid>
+                    <!-- Mode de paiement sur une seule ligne -->
+                    <DockPanel Margin="0,2,0,2">
+                        <TextBlock Text="Paiement :" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <UniformGrid Rows="1" Columns="6">
+                            <RadioButton Content="💵 Espèce" GroupName="CmdModePaiement2" 
+                                         IsChecked="{Binding CommandeModePaiement, Converter={StaticResource RadioButtonConverter}, ConverterParameter=espece}"
+                                         FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,2,0"/>
+                            <RadioButton Content="🏪 Sur place" GroupName="CmdModePaiement2"
+                                         IsChecked="{Binding CommandeModePaiement, Converter={StaticResource RadioButtonConverter}, ConverterParameter=sur_place}"
+                                         FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="2,0,2,0"/>
+                            <RadioButton Content="💳 CB" GroupName="CmdModePaiement2"
+                                         IsChecked="{Binding CommandeModePaiement, Converter={StaticResource RadioButtonConverter}, ConverterParameter=cb}"
+                                         FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="2,0,2,0"/>
+                            <RadioButton Content="🌐 En ligne" GroupName="CmdModePaiement2"
+                                         IsChecked="{Binding CommandeModePaiement, Converter={StaticResource RadioButtonConverter}, ConverterParameter=en_ligne}"
+                                         FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="2,0,2,0"/>
+                            <RadioButton Content="📱 Wero" GroupName="CmdModePaiement2"
+                                         IsChecked="{Binding CommandeModePaiement, Converter={StaticResource RadioButtonConverter}, ConverterParameter=wero}"
+                                         FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="2,0,2,0"/>
+                            <RadioButton Content="🏦 Virement" GroupName="CmdModePaiement2"
+                                         IsChecked="{Binding CommandeModePaiement, Converter={StaticResource RadioButtonConverter}, ConverterParameter=virement}"
+                                         FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="2,0,0,0"/>
+                        </UniformGrid>
+                    </DockPanel>
                 </StackPanel>
 
                 <!-- Actions -->
-                <Grid Grid.Row="3" Margin="20,10,20,20">
+                <Grid Grid.Row="4" Margin="20,4,20,10">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <UniformGrid Columns="3" Margin="0,0,0,10">
-                        <Button Content="🗑️ VIDER" Command="{Binding ViderCommandePanierCommand}" Height="45" Margin="0,0,5,0"
+                    <UniformGrid Columns="3" Margin="0,0,0,5">
+                        <Button Content="🗑️ VIDER" Command="{Binding ViderCommandePanierCommand}" Height="36" Margin="0,0,5,0"
                                 ToolTip="Vider le panier" Background="#FFEBEE" Foreground="#C62828" FontWeight="Bold"/>
-                        <Button Content="🏷️ REMISE" Command="{Binding OpenCommandeDiscountCommand}" Height="45" Margin="5,0,5,0"
+                        <Button Content="🏷️ REMISE" Command="{Binding OpenCommandeDiscountCommand}" Height="36" Margin="5,0,5,0"
                                 ToolTip="Remise"/>
-                        <Button Content="📂 ATTENTE" Command="{Binding SuspendCommandeCommand}" Height="45" Margin="5,0,0,0"
+                        <Button Content="📂 ATTENTE" Command="{Binding SuspendCommandeCommand}" Height="36" Margin="5,0,0,0"
                                 ToolTip="Mettre en attente" Background="#FFF3E0" Foreground="#E65100" FontWeight="Bold"/>
                     </UniformGrid>
 
-                    <Button Grid.Row="2" Content="VALIDER LA COMMANDE" Command="{Binding ValidateCommandeCommand}" Height="60"
-                            Background="#1565C0" Foreground="White" FontSize="22" FontWeight="Bold">
+                    <Button Grid.Row="1" Content="VALIDER LA COMMANDE" Command="{Binding ValidateCommandeCommand}" Height="46"
+                            Background="#1565C0" Foreground="White" FontSize="18" FontWeight="Bold">
                         <Button.Resources>
                             <Style TargetType="Border">
-                                <Setter Property="CornerRadius" Value="10"/>
+                                <Setter Property="CornerRadius" Value="8"/>
                             </Style>
                         </Button.Resources>
                     </Button>

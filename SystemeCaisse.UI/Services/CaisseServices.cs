@@ -87,6 +87,7 @@ namespace SystemeCaisse.UI.Services
         public OfflineSalesQueue OfflineQueue { get; }
         public ImageStoreService Images { get; }
         public DataTransferService Transfer { get; }
+        public PostgresProvisioningService Provisioning { get; }
         public CatalogCache Cache { get; } = new();
 
         /// <summary>True si l'application a démarré sans base joignable (mode Caisse seule).</summary>
@@ -105,6 +106,7 @@ namespace SystemeCaisse.UI.Services
             OfflineQueue = new OfflineSalesQueue();
             Images = new ImageStoreService(factory);
             Transfer = new DataTransferService(factory);
+            Provisioning = new PostgresProvisioningService(settings);
         }
 
         /// <summary>Réglages du poste (copie à jour).</summary>
@@ -116,14 +118,53 @@ namespace SystemeCaisse.UI.Services
         public void StartBackground(bool online)
         {
             Connectivity.StatusChanged += OnConnectivityChanged;
+            Versions.Changed += OnVersionsChanged;
             Connectivity.Start(online);
             Versions.Start();
-            if (online && OfflineQueue.Count > 0) _ = FlushOfflineAsync();
+            if (online)
+            {
+                if (OfflineQueue.Count > 0) _ = FlushOfflineAsync();
+                if (Factory.Provider == DatabaseProvider.PostgreSql)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        try { await Images.SyncCacheAsync(); } catch { }
+                    });
+                }
+                if (Poste.EstPostePrincipal)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        try { await Transfer.RunAutoBackupIfDueAsync(); } catch { }
+                    });
+                }
+            }
+        }
+
+        private void OnVersionsChanged(IReadOnlyCollection<string> domains)
+        {
+            if (domains.Contains(DataDomains.Images))
+            {
+                _ = Task.Run(async () =>
+                {
+                    try { await Images.SyncCacheAsync(); } catch { }
+                });
+            }
         }
 
         private void OnConnectivityChanged(bool online, string? error)
         {
-            if (online) _ = FlushOfflineAsync();
+            if (online)
+            {
+                _ = FlushOfflineAsync();
+                if (Factory.Provider == DatabaseProvider.PostgreSql)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        try { await Images.SyncCacheAsync(); } catch { }
+                    });
+                }
+            }
         }
 
         /// <summary>Renvoie les ventes en attente ; ne lève jamais d'exception.</summary>
@@ -171,6 +212,7 @@ namespace SystemeCaisse.UI.Services
         public void Dispose()
         {
             Connectivity.StatusChanged -= OnConnectivityChanged;
+            Versions.Changed -= OnVersionsChanged;
             Connectivity.Dispose();
             Versions.Dispose();
         }
