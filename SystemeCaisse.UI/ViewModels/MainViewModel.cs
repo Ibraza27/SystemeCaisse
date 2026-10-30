@@ -190,11 +190,18 @@ namespace SystemeCaisse.UI.ViewModels
                     OnPropertyChanged();
                     if (_selectedSearchProduct != null)
                     {
-                        AddToCart((object)_selectedSearchProduct);
-                        // Clear search after selection
+                        var prod = _selectedSearchProduct;
+                        // Fermer la liste déroulante et vider la recherche AVANT d'ouvrir la modale de poids (AddToCart)
                         _selectedSearchProduct = null;
                         OnPropertyChanged(nameof(SelectedSearchProduct));
                         SearchText = string.Empty;
+                        IsSearchDropDownOpen = false;
+                        if (SearchSuggestions.Count > 0)
+                        {
+                            SearchSuggestions = new List<Produit>();
+                            OnPropertyChanged(nameof(SearchSuggestions));
+                        }
+                        AddToCart((object)prod);
                     }
                 }
             }
@@ -1330,7 +1337,6 @@ namespace SystemeCaisse.UI.ViewModels
 
             if (product != null)
             {
-                AddToCart((object)product);
                 SearchText = string.Empty;
                 IsSearchDropDownOpen = false;
                 if (SearchSuggestions.Count > 0)
@@ -1338,9 +1344,11 @@ namespace SystemeCaisse.UI.ViewModels
                     SearchSuggestions = new List<Produit>();
                     OnPropertyChanged(nameof(SearchSuggestions));
                 }
+                AddToCart((object)product);
             }
             else
             {
+                IsSearchDropDownOpen = false;
                 var dialog = new SystemeCaisse.UI.Views.ProductNotFoundWindow(code);
                 SetupWindowOwner(dialog);
                 if (dialog.ShowDialog() == true && dialog.AddRequested)
@@ -1715,6 +1723,7 @@ namespace SystemeCaisse.UI.ViewModels
         {
             if (parameter is Produit produit)
             {
+                IsSearchDropDownOpen = false;
                 if (IsReturnMode)
                 {
                     var existing = Panier.FirstOrDefault(i => i.Produit.Id == produit.Id);

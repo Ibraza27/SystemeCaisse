@@ -39,10 +39,14 @@ namespace SystemeCaisse.UI.Views
                 if (vm.IsSearchDropDownOpen && suggestionsListBox.SelectedItem is Produit selectedProd)
                 {
                     suggestionsListBox.SelectedIndex = -1;
+                    searchPopup.IsOpen = false;
+                    vm.IsSearchDropDownOpen = false;
                     vm.SelectedSearchProduct = selectedProd;
                 }
                 else if (vm.ScanCommand.CanExecute(null))
                 {
+                    searchPopup.IsOpen = false;
+                    vm.IsSearchDropDownOpen = false;
                     vm.ScanCommand.Execute(null);
                 }
                 e.Handled = true;
@@ -50,6 +54,7 @@ namespace SystemeCaisse.UI.Views
             else if (e.Key == Key.Escape)
             {
                 suggestionsListBox.SelectedIndex = -1;
+                searchPopup.IsOpen = false;
                 vm.IsSearchDropDownOpen = false;
                 e.Handled = true;
             }
@@ -68,6 +73,8 @@ namespace SystemeCaisse.UI.Views
             if (dep is ListBoxItem item && item.DataContext is Produit prod)
             {
                 suggestionsListBox.SelectedIndex = -1;
+                searchPopup.IsOpen = false;
+                vm.IsSearchDropDownOpen = false;
                 vm.SelectedSearchProduct = prod;
                 searchTextBox.Focus();
                 e.Handled = true;
@@ -79,6 +86,7 @@ namespace SystemeCaisse.UI.Views
             if (DataContext is MainViewModel vm && !searchPopup.IsMouseOver)
             {
                 suggestionsListBox.SelectedIndex = -1;
+                searchPopup.IsOpen = false;
                 vm.IsSearchDropDownOpen = false;
             }
         }

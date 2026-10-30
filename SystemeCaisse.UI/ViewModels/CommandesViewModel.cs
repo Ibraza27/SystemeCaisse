@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -831,6 +831,7 @@ namespace SystemeCaisse.UI.ViewModels
 
         private void AddToCommandePanier(Produit produit)
         {
+            IsSearchDropDownOpen = false;
             bool isWeight = string.Equals(produit.TypeVente?.Trim(), "poids", StringComparison.OrdinalIgnoreCase);
             string? clientTag = IsGroupedCommandeMode ? (SelectedSubClient?.Nom ?? "Client 1") : null;
             string unite = isWeight ? "kg" : "pce";
@@ -904,7 +905,6 @@ namespace SystemeCaisse.UI.ViewModels
                 product = catalog.FirstOrDefault(p => p.Actif && p.Id == id);
             if (product != null)
             {
-                AddToCommandePanier(product);
                 NewCommandeSearchText = string.Empty;
                 IsSearchDropDownOpen = false;
                 if (SearchSuggestions.Count > 0)
@@ -912,6 +912,7 @@ namespace SystemeCaisse.UI.ViewModels
                     SearchSuggestions = new List<Produit>();
                     OnPropertyChanged(nameof(SearchSuggestions));
                 }
+                AddToCommandePanier(product);
             }
         }
 
