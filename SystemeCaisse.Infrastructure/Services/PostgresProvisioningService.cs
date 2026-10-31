@@ -38,7 +38,7 @@ namespace SystemeCaisse.Infrastructure.Services
     /// - Détection de l'adresse IP Tailscale (100.x.y.z) et du réseau local (LAN)
     /// - Maintien du service Tailscale et reconnexion automatique
     /// - Installation / Configuration autonome de PostgreSQL sur le Poste Principal
-    ///   (postgresql.conf, pg_hba.conf, pare-feu Windows, utilisateur/base 'caisse', tables EF Core, reprise SQLite + images)
+    ///   (postgresql.conf, pg_hba.conf sans BOM UTF-8, pare-feu Windows, utilisateur/base 'caisse', tables EF Core, reprise SQLite + images)
     /// - Diagnostic et connexion assistée pour les Postes Secondaires
     /// </summary>
     public sealed class PostgresProvisioningService
@@ -247,7 +247,7 @@ namespace SystemeCaisse.Infrastructure.Services
         /// Configure de manière 100% autonome le Poste Principal :
         /// 1. Démarrage et maintien du service Tailscale
         /// 2. Détection ou installation automatique de PostgreSQL (service Windows)
-        /// 3. Configuration de postgresql.conf (listen_addresses='*', keepalives) et pg_hba.conf (Tailscale 100.64.0.0/10 + LAN)
+        /// 3. Réparation/Configuration sans BOM de postgresql.conf (listen_addresses='*', keepalives) et pg_hba.conf (Tailscale 100.64.0.0/10 + LAN)
         /// 4. Ouverture des ports TCP 5432/5433 dans le Pare-feu Windows
         /// 5. Création du rôle 'caisse' et de la base 'caisse'
         /// 6. Création de toutes les tables/colonnes (DatabaseBootstrapper) et reprise automatique des données SQLite + images
@@ -371,7 +371,6 @@ namespace SystemeCaisse.Infrastructure.Services
                 catch { }
 
                 var netAfter = GetNetworkAndTailscaleStatus();
-                var ipToShare = netAfter.TailscaleIp ?? netAfter.LanIp ?? Environment.MachineName;
 
                 var msg = new StringBuilder();
                 msg.AppendLine($"✅ Poste Principal PostgreSQL opérationnel (Port {detectedPort}, Base « {databaseName} »).");
@@ -421,12 +420,21 @@ namespace SystemeCaisse.Infrastructure.Services
             CancellationToken ct)
         {
             // Essayer de se connecter en tant que superuser 'postgres' (trust local configuré par le script) ou directement avec 'username'
-            var candidateUsers = new[] { ("postgres", "postgres"), ("postgres", ""), ("postgres", password), (username, password), ("postgres", "caisse") };
+            var candidateUsers = new[]
+            {
+                ("postgres", "postgres"),
+                ("postgres", ""),
+                ("postgres", password),
+                (username, password),
+                ("postgres", "caisse"),
+                (Environment.UserName, "")
+            };
             NpgsqlConnection? openConn = null;
             Exception? lastEx = null;
 
             foreach (var (u, p) in candidateUsers)
             {
+                if (string.IsNullOrWhiteSpace(u)) continue;
                 try
                 {
                     var csb = new NpgsqlConnectionStringBuilder
@@ -522,6 +530,8 @@ $$;";
             if (File.Exists(resultPath)) File.Delete(resultPath);
 
             var scriptContent = BuildPowerShellProvisioningScript(resultPath);
+            // IMPORTANT : UTF-8 avec BOM pour le script .ps1 lui-même afin que PowerShell 5.1 lise correctement les accents,
+            // mais à l'intérieur du script nous utilisons UTF8Encoding($false) (SANS BOM) pour postgresql.conf et pg_hba.conf !
             await File.WriteAllTextAsync(scriptPath, scriptContent, new UTF8Encoding(true), ct);
 
             bool isAdmin = IsRunningAsAdministrator();
@@ -572,10 +582,42 @@ $$;";
             return $@"
 $ErrorActionPreference = 'Continue'
 $resultFile = '{escapedResultPath}'
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $logs = New-Object System.Collections.Generic.List[string]
+
 function Log-Step($msg) {{
     Write-Host $msg
     $logs.Add($msg)
+}}
+
+function Write-ResultAndExit($status, $portVal, $exitCode) {{
+    $logs.Insert(0, ""STATUS=$status"")
+    $logs.Insert(1, ""PORT=$portVal"")
+    [System.IO.File]::WriteAllLines($resultFile, $logs, $utf8NoBom)
+    exit $exitCode
+}}
+
+function Strip-BomAndLeadingGarbage([string]$text) {{
+    if ([string]::IsNullOrEmpty($text)) {{ return '' }}
+    # Supprimer tout caractère BOM UTF-8 (0xFEFF) ou séquences UTF-8 BOM mal décodées (ï»¿)
+    $clean = $text.Replace([string][char]0xFEFF, '').Replace('ï»¿', '')
+    # Supprimer tout octet non-ASCII éventuellement présent avant le premier commentaire '#' ou la première lettre
+    $clean = [regex]::Replace($clean, '^[^\x09\x0A\x0D\x20-\x7E]+', '')
+    return $clean
+}}
+
+function Test-LocalTcpPort([int]$testPort) {{
+    try {{
+        $client = New-Object System.Net.Sockets.TcpClient
+        $iar = $client.BeginConnect('127.0.0.1', $testPort, $null, $null)
+        $wait = $iar.AsyncWaitHandle.WaitOne(600, $false)
+        if ($wait -and $client.Connected) {{
+            $client.Close()
+            return $true
+        }}
+        $client.Close()
+    }} catch {{}}
+    return $false
 }}
 
 try {{
@@ -589,8 +631,9 @@ try {{
         }}
     }}
 
-    # 2. Rechercher une installation PostgreSQL existante
-    $pgSvc = Get-Service -Name 'postgresql*' -ErrorAction SilentlyContinue | Select-Object -First 1
+    # 2. Rechercher les services PostgreSQL existants (en privilégiant celui déjà en cours d'exécution)
+    $allPgSvcs = @(Get-Service -Name 'postgresql*' -ErrorAction SilentlyContinue | Sort-Object @{{Expression={{$_.Status -eq 'Running'}}; Descending=$true}}, Name -Descending)
+    $pgSvc = $allPgSvcs | Select-Object -First 1
     $pgBinDir = $null
     $pgDataDir = $null
 
@@ -615,7 +658,8 @@ try {{
             & winget.exe install --id PostgreSQL.PostgreSQL.16 --silent --accept-package-agreements --accept-source-agreements --override ""--unattendedmodeui minimal --mode unattended --superpassword postgres --servicename postgresql-x64-16 --serverport 5432""
         }}
 
-        $pgSvc = Get-Service -Name 'postgresql*' -ErrorAction SilentlyContinue | Select-Object -First 1
+        $allPgSvcs = @(Get-Service -Name 'postgresql*' -ErrorAction SilentlyContinue | Sort-Object @{{Expression={{$_.Status -eq 'Running'}}; Descending=$true}}, Name -Descending)
+        $pgSvc = $allPgSvcs | Select-Object -First 1
         if (-not $pgSvc -and -not (Test-Path 'C:\Program Files\PostgreSQL')) {{
             Log-Step 'Téléchargement de l installeur officiel PostgreSQL 16...'
             $installerUrl = 'https://get.enterprisedb.com/postgresql/postgresql-16.4-1-windows-x64.exe'
@@ -626,19 +670,34 @@ try {{
                 Start-Process -FilePath $installerPath -ArgumentList '--unattendedmodeui minimal --mode unattended --superpassword postgres --servicename postgresql-x64-16 --serverport 5432' -Wait
             }}
         }}
-        $pgSvc = Get-Service -Name 'postgresql*' -ErrorAction SilentlyContinue | Select-Object -First 1
+        $allPgSvcs = @(Get-Service -Name 'postgresql*' -ErrorAction SilentlyContinue | Sort-Object @{{Expression={{$_.Status -eq 'Running'}}; Descending=$true}}, Name -Descending)
+        $pgSvc = $allPgSvcs | Select-Object -First 1
     }}
 
-    # 4. Identifier le dossier bin et le dossier data de PostgreSQL
+    # 4. Identifier le dossier bin et le dossier data de PostgreSQL (via Registre Windows + WMI)
     if ($pgSvc) {{
-        $wmiSvc = Get-CimInstance Win32_Service -Filter ""Name='$($pgSvc.Name)'"" -ErrorAction SilentlyContinue
-        if ($wmiSvc -and $wmiSvc.PathName) {{
-            if ($wmiSvc.PathName -match '-D\s+""([^""]+)""') {{
+        $svcImagePath = $null
+        try {{
+            $regKey = ""HKLM:\SYSTEM\CurrentControlSet\Services\$($pgSvc.Name)""
+            if (Test-Path $regKey) {{
+                $svcImagePath = (Get-ItemProperty -Path $regKey -ErrorAction SilentlyContinue).ImagePath
+            }}
+        }} catch {{}}
+
+        if (-not $svcImagePath) {{
+            $wmiSvc = Get-CimInstance Win32_Service -Filter ""Name='$($pgSvc.Name)'"" -ErrorAction SilentlyContinue
+            if ($wmiSvc) {{ $svcImagePath = $wmiSvc.PathName }}
+        }}
+
+        if ($svcImagePath) {{
+            if ($svcImagePath -match '-D\s+""([^""]+)""') {{
                 $pgDataDir = $Matches[1]
-            }} elseif ($wmiSvc.PathName -match '-D\s+(\S+)') {{
+            }} elseif ($svcImagePath -match '-D\s+(\S+)') {{
                 $pgDataDir = $Matches[1]
             }}
-            if ($wmiSvc.PathName -match '^""([^""]+pg_ctl\.exe)""') {{
+            if ($svcImagePath -match '""([^""]+pg_ctl\.exe)""') {{
+                $pgBinDir = Split-Path $Matches[1] -Parent
+            }} elseif ($svcImagePath -match '(\S+pg_ctl\.exe)') {{
                 $pgBinDir = Split-Path $Matches[1] -Parent
             }}
         }}
@@ -658,6 +717,7 @@ try {{
             $pgDataDir = 'C:\ProgramData\SystemeCaisse\pgdata'
             if (-not (Test-Path (Join-Path $pgDataDir 'postgresql.conf'))) {{
                 New-Item -ItemType Directory -Force -Path $pgDataDir | Out-Null
+                & icacls.exe ""$pgDataDir"" /grant ""*S-1-5-20:(OI)(CI)F"" ""*S-1-5-18:(OI)(CI)F"" ""*S-1-5-32-544:(OI)(CI)F"" /T /C /Q | Out-Null
                 $initDb = Join-Path $pgBinDir 'initdb.exe'
                 & $initDb -D $pgDataDir -U postgres -E UTF8 --locale=C --auth-local=trust --auth-host=md5 | Out-Null
             }}
@@ -671,38 +731,51 @@ try {{
 
     if (-not $pgDataDir -or -not (Test-Path (Join-Path $pgDataDir 'postgresql.conf'))) {{
         $logs.Add('Impossible de localiser ou initialiser le dossier data de PostgreSQL.')
-        $logs.Insert(0, 'STATUS=ERROR')
-        $logs.Insert(1, 'PORT=5432')
-        Set-Content -Path $resultFile -Value $logs -Encoding UTF8
-        exit 1
+        Write-ResultAndExit 'ERROR' 5432 1
     }}
 
-    # 5. Configurer postgresql.conf (listen_addresses = '*', keepalives, lecture du port)
+    # 5. Nettoyer (réparer tout BOM UTF-8 éventuel) et configurer postgresql.conf SANS BOM
     $confPath = Join-Path $pgDataDir 'postgresql.conf'
-    $confText = Get-Content -Path $confPath -Raw -Encoding UTF8
+    $rawConf = [System.IO.File]::ReadAllText($confPath, [System.Text.Encoding]::UTF8)
+    $confText = Strip-BomAndLeadingGarbage $rawConf
+
+    # Supprimer tout ancien bloc SystemeCaisse pour éviter les doublons
+    $confText = [regex]::Replace($confText, '(?ms)# === SYSTEMECAISSE MULTI-POSTES ===.*?# === FIN SYSTEMECAISSE ===\r?\n?', '')
+    $confText = [regex]::Replace($confText, '(?m)^.*# SystemeCaisse Multi-Postes.*$\r?\n?', '')
+    $confText = [regex]::Replace($confText, '(?ms)# SystemeCaisse KeepAlive Tailscale.*?tcp_keepalives_count\s*=\s*\d+\r?\n?', '')
+
+    # Lire le port configuré dans postgresql.conf
     $port = 5432
     if ($confText -match '(?m)^\s*port\s*=\s*(\d+)') {{
         $port = [int]$Matches[1]
     }}
 
-    if ($confText -match '(?m)^\s*#?\s*listen_addresses\s*=') {{
-        $confText = [regex]::Replace($confText, '(?m)^\s*#?\s*listen_addresses\s*=.*$', ""listen_addresses = '*' # SystemeCaisse Multi-Postes"")
-    }} else {{
-        $confText += ""`r`nlisten_addresses = '*' # SystemeCaisse Multi-Postes`r`n""
-    }}
+    # Commenter les anciennes lignes listen_addresses actives pour éviter tout conflit
+    $confText = [regex]::Replace($confText, '(?m)^(\s*listen_addresses\s*=.*)$', '#$1')
 
-    if ($confText -notmatch 'SystemeCaisse KeepAlive') {{
-        $confText += ""`r`n# SystemeCaisse KeepAlive Tailscale`r`ntcp_keepalives_idle = 60`r`ntcp_keepalives_interval = 10`r`ntcp_keepalives_count = 6`r`n""
-    }}
-    Set-Content -Path $confPath -Value $confText -Encoding UTF8
+    $caisseConfBlock = @""
 
-    # 6. Configurer pg_hba.conf (trust local pour administration autonome + Tailscale 100.64.0.0/10 + LAN en md5)
+# === SYSTEMECAISSE MULTI-POSTES ===
+listen_addresses = '*'
+tcp_keepalives_idle = 60
+tcp_keepalives_interval = 10
+tcp_keepalives_count = 6
+# === FIN SYSTEMECAISSE ===
+""@
+    $confText = $confText.TrimEnd() + ""`r`n"" + $caisseConfBlock + ""`r`n""
+    [System.IO.File]::WriteAllText($confPath, $confText, $utf8NoBom)
+
+    # 6. Nettoyer (réparer tout BOM UTF-8 éventuel) et configurer pg_hba.conf SANS BOM
     $hbaPath = Join-Path $pgDataDir 'pg_hba.conf'
-    $hbaText = Get-Content -Path $hbaPath -Raw -Encoding UTF8
+    $rawHba = [System.IO.File]::ReadAllText($hbaPath, [System.Text.Encoding]::UTF8)
+    $hbaText = Strip-BomAndLeadingGarbage $rawHba
 
-    $caisseRulesHeader = '# === SYSTEMECAISSE MULTI-POSTES (TAILSCALE & LAN) ==='
-    $caisseRules = @""
-$caisseRulesHeader
+    # Supprimer l'ancien bloc SystemeCaisse s'il existe déjà avant de le réinsérer proprement en tête
+    $hbaText = [regex]::Replace($hbaText, '(?ms)# === SYSTEMECAISSE MULTI-POSTES \(TAILSCALE & LAN\) ===.*?# === FIN SYSTEMECAISSE ===\r?\n?', '')
+    $hbaText = Strip-BomAndLeadingGarbage $hbaText
+
+    $caisseHbaRules = @""
+# === SYSTEMECAISSE MULTI-POSTES (TAILSCALE & LAN) ===
 host    all             all             127.0.0.1/32            trust
 host    all             all             ::1/128                 trust
 host    all             all             100.64.0.0/10           md5
@@ -711,36 +784,117 @@ host    all             all             10.0.0.0/8              md5
 host    all             all             172.16.0.0/12           md5
 # === FIN SYSTEMECAISSE ===
 ""@
+    $hbaText = $caisseHbaRules + ""`r`n"" + $hbaText.TrimStart()
+    [System.IO.File]::WriteAllText($hbaPath, $hbaText, $utf8NoBom)
 
-    if ($hbaText -notmatch [regex]::Escape($caisseRulesHeader)) {{
-        # Placer les règles en haut du fichier pour que trust local et Tailscale soient prioritaires
-        $hbaText = $caisseRules + ""`r`n"" + $hbaText
-        Set-Content -Path $hbaPath -Value $hbaText -Encoding UTF8
-    }}
+    # 7. Garantir les permissions NTFS sur le dossier data et les fichiers .conf (NetworkService *S-1-5-20, SYSTEM *S-1-5-18, Admins *S-1-5-32-544)
+    & icacls.exe ""$pgDataDir"" /grant ""*S-1-5-20:(OI)(CI)F"" ""*S-1-5-18:(OI)(CI)F"" ""*S-1-5-32-544:(OI)(CI)F"" /C /Q | Out-Null
+    & icacls.exe ""$confPath"" /grant ""*S-1-5-20:F"" ""*S-1-5-18:F"" ""*S-1-5-32-544:F"" /C /Q | Out-Null
+    & icacls.exe ""$hbaPath"" /grant ""*S-1-5-20:F"" ""*S-1-5-18:F"" ""*S-1-5-32-544:F"" /C /Q | Out-Null
 
-    # 7. Configurer le service Windows PostgreSQL en démarrage automatique + reprise sur erreur et redémarrer
+    # 8. Démarrer / Redémarrer le service PostgreSQL avec auto-réparation en cas d'échec
+    $serviceStarted = $false
     if ($pgSvc) {{
         Set-Service -Name $pgSvc.Name -StartupType Automatic -ErrorAction SilentlyContinue
         & sc.exe failure $pgSvc.Name reset= 86400 actions= restart/5000/restart/5000/restart/5000 | Out-Null
-        Restart-Service -Name $pgSvc.Name -Force -ErrorAction Stop
-        Start-Sleep -Seconds 2
+
+        # Arrêter proprement si en cours d'exécution pour prendre en compte listen_addresses = '*'
+        $pgSvc.Refresh()
+        if ($pgSvc.Status -eq 'Running') {{
+            Stop-Service -Name $pgSvc.Name -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 2
+        }}
+
+        # Si aucun processus postgres.exe ne tourne depuis ce dossier data, supprimer un éventuel postmaster.pid orphelin
+        $pidFile = Join-Path $pgDataDir 'postmaster.pid'
+        if (Test-Path $pidFile) {{
+            $runningPg = Get-Process -Name 'postgres' -ErrorAction SilentlyContinue
+            if (-not $runningPg) {{
+                Remove-Item -Path $pidFile -Force -ErrorAction SilentlyContinue
+            }}
+        }}
+
+        # Si le port configuré est déjà occupé par un autre processus alors que notre service est arrêté, basculer sur le port alternatif (5432 <-> 5433)
+        if (Test-LocalTcpPort $port) {{
+            $altPort = if ($port -eq 5432) {{ 5433 }} else {{ 5432 }}
+            if (-not (Test-LocalTcpPort $altPort)) {{
+                Log-Step ""Le port $port est déjà utilisé par un autre service : basculement de $($pgSvc.Name) sur le port $altPort.""
+                $port = $altPort
+                $confText = [regex]::Replace($confText, '(?m)^\s*port\s*=\s*\d+', ""port = $port"")
+                if ($confText -notmatch '(?m)^\s*port\s*=') {{
+                    $confText += ""`r`nport = $port`r`n""
+                }}
+                [System.IO.File]::WriteAllText($confPath, $confText, $utf8NoBom)
+            }}
+        }}
+
+        # Tentative 1 : Démarrage normal du service Windows
+        try {{
+            Start-Service -Name $pgSvc.Name -ErrorAction Stop
+            Start-Sleep -Seconds 2
+            $pgSvc.Refresh()
+            if ($pgSvc.Status -eq 'Running') {{ $serviceStarted = $true }}
+        }} catch {{
+            Log-Step ""Tentative 1 de démarrage de $($pgSvc.Name) échouée : $($_.Exception.Message). Auto-réparation du compte de service...""
+        }}
+
+        # Tentative 2 : Réparation du compte de service Windows (NT AUTHORITY\NetworkService) + permissions récursives sur data
+        if (-not $serviceStarted) {{
+            & sc.exe config $pgSvc.Name obj= ""NT AUTHORITY\NetworkService"" password= """" | Out-Null
+            & icacls.exe ""$pgDataDir"" /grant ""*S-1-5-20:(OI)(CI)F"" ""*S-1-5-18:(OI)(CI)F"" ""*S-1-5-32-544:(OI)(CI)F"" /T /C /Q | Out-Null
+            if (Test-Path $pidFile) {{ Remove-Item -Path $pidFile -Force -ErrorAction SilentlyContinue }}
+            try {{
+                Start-Service -Name $pgSvc.Name -ErrorAction Stop
+                Start-Sleep -Seconds 2
+                $pgSvc.Refresh()
+                if ($pgSvc.Status -eq 'Running') {{ $serviceStarted = $true }}
+            }} catch {{
+                Log-Step ""Tentative 2 échouée : $($_.Exception.Message).""
+            }}
+        }}
+
+        # Tentative 3 : Démarrage direct via pg_ctl.exe si le gestionnaire de services Windows bloque
+        if (-not $serviceStarted -and $pgBinDir) {{
+            $pgCtlExe = Join-Path $pgBinDir 'pg_ctl.exe'
+            if (Test-Path $pgCtlExe) {{
+                if (Test-Path $pidFile) {{ Remove-Item -Path $pidFile -Force -ErrorAction SilentlyContinue }}
+                $pgLogFile = Join-Path $env:TEMP 'systemecaisse_pgctl.log'
+                & $pgCtlExe start -D ""$pgDataDir"" -l ""$pgLogFile"" -w | Out-Null
+                Start-Sleep -Seconds 2
+                if (Test-LocalTcpPort $port) {{
+                    $serviceStarted = $true
+                    Log-Step ""Serveur PostgreSQL démarré avec succès via pg_ctl sur le port $port.""
+                }}
+            }}
+        }}
+
+        if (-not $serviceStarted) {{
+            # Lire la dernière erreur du journal PostgreSQL pour un diagnostic précis
+            $pgErrDetail = ''
+            $logDir = Join-Path $pgDataDir 'log'
+            if (-not (Test-Path $logDir)) {{ $logDir = Join-Path $pgDataDir 'pg_log' }}
+            if (Test-Path $logDir) {{
+                $latestLog = Get-ChildItem -Path $logDir -Filter '*.log' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+                if ($latestLog) {{
+                    $lastLines = Get-Content -Path $latestLog.FullName -Tail 8 -ErrorAction SilentlyContinue
+                    if ($lastLines) {{ $pgErrDetail = "" | Détail log PostgreSQL : "" + ($lastLines -join ' / ') }}
+                }}
+            }}
+            $logs.Add(""Impossible de démarrer le service « $($pgSvc.Name) » sur le port $port.$pgErrDetail"")
+            Write-ResultAndExit 'ERROR' $port 1
+        }}
     }}
 
-    # 8. Ouvrir les ports PostgreSQL dans le Pare-feu Windows (Tailscale + Réseau Local)
+    # 9. Ouvrir les ports PostgreSQL dans le Pare-feu Windows (Tailscale + Réseau Local)
     & netsh advfirewall firewall delete rule name=""SystemeCaisse PostgreSQL Multi-Postes"" | Out-Null
     & netsh advfirewall firewall add rule name=""SystemeCaisse PostgreSQL Multi-Postes"" dir=in action=allow protocol=TCP localport=""$port,5432,5433"" profile=any | Out-Null
 
-    $logs.Insert(0, 'STATUS=OK')
-    $logs.Insert(1, ""PORT=$port"")
-    $logs.Add(""Service PostgreSQL ($($pgSvc.Name)) actif sur le port $port et Pare-feu configuré."")
-    Set-Content -Path $resultFile -Value $logs -Encoding UTF8
-    exit 0
+    $svcLabel = if ($pgSvc) {{ $pgSvc.Name }} else {{ 'pg_ctl' }}
+    $logs.Add(""Service PostgreSQL ($svcLabel) actif sur le port $port et Pare-feu configuré."")
+    Write-ResultAndExit 'OK' $port 0
 }} catch {{
-    $logs.Insert(0, 'STATUS=ERROR')
-    $logs.Insert(1, 'PORT=5432')
     $logs.Add(""Erreur script système : $($_.Exception.Message)"")
-    Set-Content -Path $resultFile -Value $logs -Encoding UTF8
-    exit 1
+    Write-ResultAndExit 'ERROR' 5432 1
 }}
 ";
         }
