@@ -82,11 +82,7 @@ namespace SystemeCaisse.UI.Views
             {
                 double width = _printService.GetTicketWidth();
                 var doc = GenerateRecapDocument(width);
-                var pd = new PrintDialog();
-                doc.PageWidth = width;
-                doc.PageHeight = double.NaN;
-                IDocumentPaginatorSource idp = doc;
-                pd.PrintDocument(idp.DocumentPaginator, "Récap Clients");
+                _printService.PrintFlowDocument(doc, "Récap Clients");
             }
             catch (Exception ex)
             {
@@ -99,66 +95,73 @@ namespace SystemeCaisse.UI.Views
             var doc = new FlowDocument
             {
                 PageWidth = width,
-                PagePadding = new Thickness(5),
+                ColumnWidth = width,
+                PagePadding = new Thickness(4, 4, 8, 4),
                 FontFamily = new FontFamily("Consolas, Courier New, Monospace"),
-                FontSize = 11,
+                FontSize = 10.5,
                 Background = Brushes.White
             };
 
             // Header
-            var headerPara = new Paragraph { TextAlignment = TextAlignment.Center };
+            var headerPara = new Paragraph { TextAlignment = TextAlignment.Center, Margin = new Thickness(0, 0, 0, 4) };
             var bwLogo = PrintService.LoadBlackAndWhiteLogo(_entreprise.LogoPath);
             if (bwLogo != null)
             {
-                var image = new Image { Source = bwLogo, Width = 80, Height = 80, Stretch = Stretch.Uniform };
+                var image = new Image
+                {
+                    Source = bwLogo,
+                    Width = 75,
+                    Height = 75,
+                    Stretch = Stretch.Uniform,
+                    SnapsToDevicePixels = true
+                };
+                RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
                 headerPara.Inlines.Add(new InlineUIContainer(image));
                 headerPara.Inlines.Add(new LineBreak());
             }
-            headerPara.Inlines.Add(new Bold(new Run(_entreprise.Nom ?? "Magasin")) { FontSize = 14 });
+            headerPara.Inlines.Add(new Bold(new Run(_entreprise.Nom ?? "Magasin")) { FontSize = 13 });
             headerPara.Inlines.Add(new LineBreak());
-            headerPara.Inlines.Add(new LineBreak());
-            headerPara.Inlines.Add(new Bold(new Run("═══ RÉCAP CLIENTS ═══")) { FontSize = 14 });
+            headerPara.Inlines.Add(new Bold(new Run("══ RÉCAP CLIENTS ══")) { FontSize = 12.5 });
             headerPara.Inlines.Add(new LineBreak());
             headerPara.Inlines.Add(new Run($"{_nbCommandes} commande(s) — {_lines.Count} client(s)"));
             headerPara.Inlines.Add(new LineBreak());
             headerPara.Inlines.Add(new Run(DateTime.Now.ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture)));
-            headerPara.Inlines.Add(new LineBreak());
             doc.Blocks.Add(headerPara);
 
-            doc.Blocks.Add(new Paragraph(new Run(new string('-', 35))) { Margin = new Thickness(0, 5, 0, 5) });
+            doc.Blocks.Add(PrintService.CreateSeparatorBlock());
 
             // Group by Ville and print
             var villeGroups = _lines.GroupBy(l => l.Ville).OrderBy(g => g.Key);
             foreach (var villeGroup in villeGroups)
             {
                 // Ville header
-                var villePara = new Paragraph { Margin = new Thickness(0, 8, 0, 3) };
-                villePara.Inlines.Add(new Bold(new Run($"📍 {villeGroup.Key.ToUpper()}")) { FontSize = 12 });
+                var villePara = new Paragraph { Margin = new Thickness(0, 6, 0, 2) };
+                villePara.Inlines.Add(new Bold(new Run($"📍 {villeGroup.Key.ToUpper()}")) { FontSize = 11.5 });
                 doc.Blocks.Add(villePara);
 
-                doc.Blocks.Add(new Paragraph(new Run(new string('·', 30))) { Margin = new Thickness(0, 0, 0, 2), Foreground = Brushes.Gray });
+                doc.Blocks.Add(PrintService.CreateSeparatorBlock());
 
                 foreach (var line in villeGroup)
                 {
                     var clientPara = new Paragraph { Margin = new Thickness(0, 2, 0, 2) };
                     clientPara.Inlines.Add(new Bold(new Run(line.ClientDisplay)));
                     clientPara.Inlines.Add(new LineBreak());
-                    clientPara.Inlines.Add(new Run($"  Tél: {line.Telephone}") { FontSize = 10 });
+                    clientPara.Inlines.Add(new Run($"Tél: {line.Telephone}") { FontSize = 10 });
                     clientPara.Inlines.Add(new LineBreak());
-                    clientPara.Inlines.Add(new Run($"  {line.NbCommandes} cmd — Total: {line.Total:0.00}€ — Payé: {line.Paye:0.00}€") { FontSize = 10 });
+                    clientPara.Inlines.Add(new Run($"{line.NbCommandes} cmd | Total: {line.Total:0.00}€ | Payé: {line.Paye:0.00}€") { FontSize = 10 });
                     if (line.Restant > 0)
                     {
                         clientPara.Inlines.Add(new LineBreak());
-                        clientPara.Inlines.Add(new Bold(new Run($"  RESTANT: {line.Restant:0.00}€")) { FontSize = 10, Foreground = Brushes.Red });
+                        clientPara.Inlines.Add(new Bold(new Run($"RESTANT: {line.Restant:0.00}€")) { FontSize = 10 });
                     }
                     doc.Blocks.Add(clientPara);
                 }
             }
 
-            doc.Blocks.Add(new Paragraph(new Run(new string('-', 35))) { Margin = new Thickness(0, 5, 0, 5) });
+            doc.Blocks.Add(PrintService.CreateSeparatorBlock());
 
             // Total
-            var totalPara = new Paragraph { TextAlignment = TextAlignment.Center };
+            var totalPara = new Paragraph { TextAlignment = TextAlignment.Center, Margin = new Thickness(0, 4, 0, 4) };
             totalPara.Inlines.Add(new Bold(new Run($"Total : {_lines.Sum(l => l.Total):C}")));
             totalPara.Inlines.Add(new LineBreak());
             totalPara.Inlines.Add(new Bold(new Run($"Payé : {_lines.Sum(l => l.Paye):C}")));
@@ -166,7 +169,7 @@ namespace SystemeCaisse.UI.Views
             if (totalRestant > 0)
             {
                 totalPara.Inlines.Add(new LineBreak());
-                totalPara.Inlines.Add(new Bold(new Run($"Restant : {totalRestant:C}")) { Foreground = Brushes.Red });
+                totalPara.Inlines.Add(new Bold(new Run($"Restant : {totalRestant:C}")));
             }
             doc.Blocks.Add(totalPara);
 

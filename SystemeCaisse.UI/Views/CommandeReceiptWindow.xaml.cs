@@ -20,6 +20,7 @@ namespace SystemeCaisse.UI.Views
             double width = _printService.GetTicketWidth();
             var doc = _printService.GenerateCommandeTicketDocument(commande, entreprise, width);
             doc.PageWidth = width;
+            doc.ColumnWidth = width;
             DocReader.Document = doc;
         }
 

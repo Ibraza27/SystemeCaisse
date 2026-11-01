@@ -84,11 +84,7 @@ namespace SystemeCaisse.UI.Views
             {
                 double width = _printService.GetTicketWidth();
                 var doc = GenerateRecapDocument(width);
-                var pd = new PrintDialog();
-                doc.PageWidth = width;
-                doc.PageHeight = double.NaN;
-                IDocumentPaginatorSource idp = doc;
-                pd.PrintDocument(idp.DocumentPaginator, "Récap Commandes");
+                _printService.PrintFlowDocument(doc, "Récap Commandes");
             }
             catch (Exception ex)
             {
@@ -98,51 +94,61 @@ namespace SystemeCaisse.UI.Views
 
         private FlowDocument GenerateRecapDocument(double width)
         {
+            double innerWidth = Math.Max(140, width - 14);
             var doc = new FlowDocument
             {
                 PageWidth = width,
-                PagePadding = new Thickness(5),
+                ColumnWidth = width,
+                PagePadding = new Thickness(4, 4, 8, 4),
                 FontFamily = new FontFamily("Consolas, Courier New, Monospace"),
-                FontSize = 11,
+                FontSize = 10.5,
                 Background = Brushes.White
             };
 
             // Header
-            var headerPara = new Paragraph { TextAlignment = TextAlignment.Center };
+            var headerPara = new Paragraph { TextAlignment = TextAlignment.Center, Margin = new Thickness(0, 0, 0, 4) };
             var bwLogo = PrintService.LoadBlackAndWhiteLogo(_entreprise.LogoPath);
             if (bwLogo != null)
             {
-                var image = new Image { Source = bwLogo, Width = 80, Height = 80, Stretch = Stretch.Uniform };
+                var image = new Image
+                {
+                    Source = bwLogo,
+                    Width = 75,
+                    Height = 75,
+                    Stretch = Stretch.Uniform,
+                    SnapsToDevicePixels = true
+                };
+                RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
                 headerPara.Inlines.Add(new InlineUIContainer(image));
                 headerPara.Inlines.Add(new LineBreak());
             }
-            headerPara.Inlines.Add(new Bold(new Run(_entreprise.Nom ?? "Magasin")) { FontSize = 14 });
+            headerPara.Inlines.Add(new Bold(new Run(_entreprise.Nom ?? "Magasin")) { FontSize = 13 });
             headerPara.Inlines.Add(new LineBreak());
-            headerPara.Inlines.Add(new LineBreak());
-            headerPara.Inlines.Add(new Bold(new Run("═══ RÉCAPITULATIF ═══")) { FontSize = 14 });
+            headerPara.Inlines.Add(new Bold(new Run("══ RÉCAPITULATIF ══")) { FontSize = 12.5 });
             headerPara.Inlines.Add(new LineBreak());
             headerPara.Inlines.Add(new Run($"{_nbCommandes} commande(s)"));
             headerPara.Inlines.Add(new LineBreak());
             headerPara.Inlines.Add(new Run(DateTime.Now.ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture)));
-            headerPara.Inlines.Add(new LineBreak());
             doc.Blocks.Add(headerPara);
 
-            doc.Blocks.Add(new Paragraph(new Run(new string('-', 35))) { Margin = new Thickness(0, 5, 0, 5) });
+            doc.Blocks.Add(PrintService.CreateSeparatorBlock());
 
             // Products table
-            var table = new Table { CellSpacing = 0 };
+            var table = new Table { CellSpacing = 0, Margin = new Thickness(0) };
             table.Columns.Add(new TableColumn { Width = new GridLength(1, GridUnitType.Star) });
             var rowGroup = new TableRowGroup();
 
             // Header row
             var headerRow = new TableRow();
-            var headerCell = new TableCell();
-            var headerGrid = new DockPanel();
-            var hProduit = new TextBlock { Text = "PRODUIT", FontWeight = FontWeights.Bold, FontSize = 11 };
-            DockPanel.SetDock(hProduit, Dock.Left);
+            var headerCell = new TableCell { Padding = new Thickness(0, 1, 0, 2) };
+            var headerGrid = new Grid();
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var hProduit = new TextBlock { Text = "PRODUIT", FontWeight = FontWeights.Bold, FontSize = 10.5 };
+            Grid.SetColumn(hProduit, 0);
             headerGrid.Children.Add(hProduit);
-            var hQte = new TextBlock { Text = "QTÉ", FontWeight = FontWeights.Bold, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Right };
-            DockPanel.SetDock(hQte, Dock.Right);
+            var hQte = new TextBlock { Text = "QTÉ", FontWeight = FontWeights.Bold, FontSize = 10.5, HorizontalAlignment = HorizontalAlignment.Right };
+            Grid.SetColumn(hQte, 1);
             headerGrid.Children.Add(hQte);
             headerCell.Blocks.Add(new BlockUIContainer(headerGrid));
             headerRow.Cells.Add(headerCell);
@@ -151,41 +157,41 @@ namespace SystemeCaisse.UI.Views
             foreach (var line in _lines)
             {
                 var row = new TableRow();
-                var cell = new TableCell();
+                var cell = new TableCell { Padding = new Thickness(0, 1, 0, 1) };
 
-                var lineGrid = new Grid { Margin = new Thickness(0, 2, 0, 2) };
+                var lineGrid = new Grid { Margin = new Thickness(0, 1, 0, 1) };
                 lineGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                lineGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                lineGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 8 });
                 lineGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
                 var nameText = new TextBlock
                 {
                     Text = line.ProduitNom,
-                    FontSize = 11,
-                    MaxWidth = Math.Max(120, width - 115),
+                    FontSize = 10.5,
+                    MaxWidth = Math.Max(95, innerWidth - 65),
                     TextTrimming = TextTrimming.CharacterEllipsis
                 };
                 Grid.SetColumn(nameText, 0);
                 lineGrid.Children.Add(nameText);
 
-                var dotsText = new TextBlock
+                var dotsLine = new System.Windows.Shapes.Rectangle
                 {
-                    Text = new string('.', 120),
-                    FontSize = 10,
-                    Foreground = Brushes.DimGray,
-                    Margin = new Thickness(3, 0, 3, 1),
+                    Height = 1,
+                    Stroke = Brushes.DimGray,
+                    StrokeThickness = 1,
+                    StrokeDashArray = new DoubleCollection { 1, 2 },
                     VerticalAlignment = VerticalAlignment.Bottom,
-                    TextWrapping = TextWrapping.NoWrap,
-                    ClipToBounds = true
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    Margin = new Thickness(3, 0, 3, 3)
                 };
-                Grid.SetColumn(dotsText, 1);
-                lineGrid.Children.Add(dotsText);
+                Grid.SetColumn(dotsLine, 1);
+                lineGrid.Children.Add(dotsLine);
 
                 var qtyText = new TextBlock
                 {
                     Text = line.QuantiteDisplay,
                     FontWeight = FontWeights.Bold,
-                    FontSize = 11,
+                    FontSize = 10.5,
                     HorizontalAlignment = HorizontalAlignment.Right
                 };
                 Grid.SetColumn(qtyText, 2);
@@ -199,10 +205,10 @@ namespace SystemeCaisse.UI.Views
             table.RowGroups.Add(rowGroup);
             doc.Blocks.Add(table);
 
-            doc.Blocks.Add(new Paragraph(new Run(new string('-', 35))) { Margin = new Thickness(0, 5, 0, 5) });
+            doc.Blocks.Add(PrintService.CreateSeparatorBlock());
 
             // Total
-            var totalPara = new Paragraph { TextAlignment = TextAlignment.Center };
+            var totalPara = new Paragraph { TextAlignment = TextAlignment.Center, Margin = new Thickness(0, 4, 0, 4) };
             int nbPce = (int)_lines.Where(l => l.Unite == "pce").Sum(l => l.QuantiteTotale);
             decimal totalKg = _lines.Where(l => l.Unite == "kg").Sum(l => l.QuantiteTotale);
             string summaryStr = totalKg > 0

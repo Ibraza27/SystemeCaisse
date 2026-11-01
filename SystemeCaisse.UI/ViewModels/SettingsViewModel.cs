@@ -561,10 +561,26 @@ namespace SystemeCaisse.UI.ViewModels
                 }
 
                 var widthConfig = context.Configuration.Find("ticket_width");
-                if (widthConfig != null && int.TryParse(widthConfig.Valeur, out int w)) TicketWidth = w;
+                if (widthConfig != null && int.TryParse(widthConfig.Valeur, out int w))
+                {
+                    TicketWidth = w;
+                    _localStore.Update(s => s.Peripheriques.LargeurTicketMm = w);
+                }
+                else if (_localStore.Current.Peripheriques.LargeurTicketMm > 0)
+                {
+                    TicketWidth = _localStore.Current.Peripheriques.LargeurTicketMm;
+                }
 
                 var printerConfig = context.Configuration.Find("imprimante_defaut");
-                if (printerConfig != null) SelectedPrinter = printerConfig.Valeur;
+                if (printerConfig != null && !string.IsNullOrWhiteSpace(printerConfig.Valeur))
+                {
+                    SelectedPrinter = printerConfig.Valeur;
+                    _localStore.Update(s => s.Peripheriques.Imprimante = printerConfig.Valeur);
+                }
+                else if (!string.IsNullOrWhiteSpace(_localStore.Current.Peripheriques.Imprimante))
+                {
+                    SelectedPrinter = _localStore.Current.Peripheriques.Imprimante!;
+                }
 
                 var trainingConfig = context.Configuration.Find("training_mode");
                 if (trainingConfig != null && bool.TryParse(trainingConfig.Valeur, out bool mode)) IsTrainingMode = mode;
